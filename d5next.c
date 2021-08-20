@@ -16,16 +16,16 @@
 #include <linux/jiffies.h>
 #include <linux/module.h>
 
-#define DRIVER_NAME						"aquacomputer-d5next"
+#define DRIVER_NAME				"aquacomputer-d5next"
 
 #define D5NEXT_STATUS_REPORT_ID			0x01
-#define STATUS_VALIDITY					1 /* in seconds */
+#define STATUS_VALIDITY				1 /* in seconds */
 
 /* Register offsets for the D5 Next pump */
 
 #define D5NEXT_SERIAL_START_OFFSET		3 /* First part of the serial number */
 #define D5NEXT_SERIAL_PART_OFFSET		5 /* Second part of the serial number */
-#define D5NEXT_FIRMWARE_VERSION_OFFSET	13
+#define D5NEXT_FIRMWARE_VERSION_OFFSET		13
 #define D5NEXT_POWER_CYCLES_OFFSET		24
 
 #define D5NEXT_COOLANT_TEMP_OFFSET		87
@@ -47,15 +47,15 @@
 
 #define D5NEXT_L_COOLANT_TEMP			"Coolant temp"
 
-#define D5NEXT_L_PUMP_SPEED				"Pump speed"
-#define D5NEXT_L_FAN_SPEED				"Fan speed"
+#define D5NEXT_L_PUMP_SPEED			"Pump speed"
+#define D5NEXT_L_FAN_SPEED			"Fan speed"
 
-#define D5NEXT_L_PUMP_POWER				"Pump power"
-#define D5NEXT_L_FAN_POWER				"Fan power"
+#define D5NEXT_L_PUMP_POWER			"Pump power"
+#define D5NEXT_L_FAN_POWER			"Fan power"
 
 #define D5NEXT_L_PUMP_VOLTAGE			"Pump voltage"
 #define D5NEXT_L_FAN_VOLTAGE			"Fan voltage"
-#define D5NEXT_L_5V_VOLTAGE				"+5V voltage"
+#define D5NEXT_L_5V_VOLTAGE			"+5V voltage"
 
 #define D5NEXT_L_PUMP_CURRENT			"Pump current"
 #define D5NEXT_L_FAN_CURRENT			"Fan current"
