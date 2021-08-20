@@ -3,8 +3,8 @@
  * hwmon driver for Aquacomputer D5 Next watercooling pump
  *
  * The D5 Next asynchronously sends HID reports (with ID 0x01) every second to report sensor
- * values (coolant temperature, pump and fan speed, voltage, current and power).
- * It responds to Get_Report requests, but returns a dummy value of no use.
+ * values (coolant temperature, pump and fan speed, voltage, current and power). It responds to
+ * Get_Report requests, but returns a dummy value of no use.
  *
  * Copyright 2021 Aleksa Savic
  */
@@ -16,73 +16,73 @@
 #include <linux/jiffies.h>
 #include <linux/module.h>
 
-#define DRIVER_NAME				"aquacomputer-d5next"
+#define DRIVER_NAME		       "aquacomputer-d5next"
 
-#define D5NEXT_STATUS_REPORT_ID			0x01
-#define STATUS_VALIDITY				1 /* in seconds */
+#define D5NEXT_STATUS_REPORT_ID	       0x01
+#define STATUS_VALIDITY		       1 /* in seconds */
 
 /* Register offsets for the D5 Next pump */
 
-#define D5NEXT_SERIAL_START_OFFSET		3 /* First part of the serial number */
-#define D5NEXT_SERIAL_PART_OFFSET		5 /* Second part of the serial number */
-#define D5NEXT_FIRMWARE_VERSION_OFFSET		13
-#define D5NEXT_POWER_CYCLES_OFFSET		24
+#define D5NEXT_SERIAL_START_OFFSET     3 /* First part of the serial number */
+#define D5NEXT_SERIAL_PART_OFFSET      5 /* Second part of the serial number */
+#define D5NEXT_FIRMWARE_VERSION_OFFSET 13
+#define D5NEXT_POWER_CYCLES_OFFSET     24
 
-#define D5NEXT_COOLANT_TEMP_OFFSET		87
+#define D5NEXT_COOLANT_TEMP_OFFSET     87
 
-#define D5NEXT_PUMP_SPEED_OFFSET		116
-#define D5NEXT_FAN_SPEED_OFFSET			103
+#define D5NEXT_PUMP_SPEED_OFFSET       116
+#define D5NEXT_FAN_SPEED_OFFSET	       103
 
-#define D5NEXT_PUMP_POWER_OFFSET		114
-#define D5NEXT_FAN_POWER_OFFSET			101
+#define D5NEXT_PUMP_POWER_OFFSET       114
+#define D5NEXT_FAN_POWER_OFFSET	       101
 
-#define D5NEXT_PUMP_VOLTAGE_OFFSET		110
-#define D5NEXT_FAN_VOLTAGE_OFFSET		97
-#define D5NEXT_5V_VOLTAGE_OFFSET		57
+#define D5NEXT_PUMP_VOLTAGE_OFFSET     110
+#define D5NEXT_FAN_VOLTAGE_OFFSET      97
+#define D5NEXT_5V_VOLTAGE_OFFSET       57
 
-#define D5NEXT_PUMP_CURRENT_OFFSET		112
-#define D5NEXT_FAN_CURRENT_OFFSET		99
+#define D5NEXT_PUMP_CURRENT_OFFSET     112
+#define D5NEXT_FAN_CURRENT_OFFSET      99
 
 /* Labels for provided values */
 
-#define D5NEXT_L_COOLANT_TEMP			"Coolant temp"
+#define D5NEXT_L_COOLANT_TEMP	       "Coolant temp"
 
-#define D5NEXT_L_PUMP_SPEED			"Pump speed"
-#define D5NEXT_L_FAN_SPEED			"Fan speed"
+#define D5NEXT_L_PUMP_SPEED	       "Pump speed"
+#define D5NEXT_L_FAN_SPEED	       "Fan speed"
 
-#define D5NEXT_L_PUMP_POWER			"Pump power"
-#define D5NEXT_L_FAN_POWER			"Fan power"
+#define D5NEXT_L_PUMP_POWER	       "Pump power"
+#define D5NEXT_L_FAN_POWER	       "Fan power"
 
-#define D5NEXT_L_PUMP_VOLTAGE			"Pump voltage"
-#define D5NEXT_L_FAN_VOLTAGE			"Fan voltage"
-#define D5NEXT_L_5V_VOLTAGE			"+5V voltage"
+#define D5NEXT_L_PUMP_VOLTAGE	       "Pump voltage"
+#define D5NEXT_L_FAN_VOLTAGE	       "Fan voltage"
+#define D5NEXT_L_5V_VOLTAGE	       "+5V voltage"
 
-#define D5NEXT_L_PUMP_CURRENT			"Pump current"
-#define D5NEXT_L_FAN_CURRENT			"Fan current"
+#define D5NEXT_L_PUMP_CURRENT	       "Pump current"
+#define D5NEXT_L_FAN_CURRENT	       "Fan current"
 
 static const char *const label_temp[] = {
-	D5NEXT_L_COOLANT_TEMP
+	D5NEXT_L_COOLANT_TEMP,
 };
 
 static const char *const label_speeds[] = {
 	D5NEXT_L_PUMP_SPEED,
-	D5NEXT_L_FAN_SPEED
+	D5NEXT_L_FAN_SPEED,
 };
 
 static const char *const label_power[] = {
 	D5NEXT_L_PUMP_POWER,
-	D5NEXT_L_FAN_POWER
+	D5NEXT_L_FAN_POWER,
 };
 
 static const char *const label_voltages[] = {
 	D5NEXT_L_PUMP_VOLTAGE,
 	D5NEXT_L_FAN_VOLTAGE,
-	D5NEXT_L_5V_VOLTAGE
+	D5NEXT_L_5V_VOLTAGE,
 };
 
 static const char *const label_current[] = {
 	D5NEXT_L_PUMP_CURRENT,
-	D5NEXT_L_FAN_CURRENT
+	D5NEXT_L_FAN_CURRENT,
 };
 
 struct d5next_data {
@@ -96,18 +96,19 @@ struct d5next_data {
 	u16 current_input[2];
 	u16 serial_number[2];
 	u16 firmware_version;
-	u32 power_cycles; /* How many times the device was turned on */
+	u32 power_cycles; /* how many times the device was turned on */
+	char test[1];
 	unsigned long updated;
 };
 
 static umode_t d5next_is_visible(const void *data, enum hwmon_sensor_types type, u32 attr,
-								int channel)
+				 int channel)
 {
 	return 0444;
 }
 
 static int d5next_read(struct device *dev, enum hwmon_sensor_types type, u32 attr, int channel,
-					   long *val)
+		       long *val)
 {
 	struct d5next_data *priv = dev_get_drvdata(dev);
 
@@ -137,8 +138,8 @@ static int d5next_read(struct device *dev, enum hwmon_sensor_types type, u32 att
 	return 0;
 }
 
-static int d5next_read_string(struct device *dev, enum hwmon_sensor_types type,
-			       			  u32 attr, int channel, const char **str)
+static int d5next_read_string(struct device *dev, enum hwmon_sensor_types type, u32 attr,
+			      int channel, const char **str)
 {
 	switch (type) {
 	case hwmon_temp:
@@ -170,21 +171,13 @@ static const struct hwmon_ops d5next_hwmon_ops = {
 };
 
 static const struct hwmon_channel_info *d5next_info[] = {
-	HWMON_CHANNEL_INFO(temp,
-			   HWMON_T_INPUT | HWMON_T_LABEL),
-	HWMON_CHANNEL_INFO(fan,
-			   HWMON_F_INPUT | HWMON_F_LABEL,
-			   HWMON_F_INPUT | HWMON_F_LABEL),
-	HWMON_CHANNEL_INFO(power,
-			   HWMON_P_INPUT | HWMON_P_LABEL,
+	HWMON_CHANNEL_INFO(temp, HWMON_T_INPUT | HWMON_T_LABEL),
+	HWMON_CHANNEL_INFO(fan, HWMON_F_INPUT | HWMON_F_LABEL, HWMON_F_INPUT | HWMON_F_LABEL),
+	HWMON_CHANNEL_INFO(power, HWMON_P_INPUT | HWMON_P_LABEL,
 			   HWMON_P_INPUT | HWMON_P_LABEL),
-	HWMON_CHANNEL_INFO(in,
-			   HWMON_I_INPUT | HWMON_I_LABEL,
-			   HWMON_I_INPUT | HWMON_I_LABEL,
+	HWMON_CHANNEL_INFO(in, HWMON_I_INPUT | HWMON_I_LABEL, HWMON_I_INPUT | HWMON_I_LABEL,
 			   HWMON_I_INPUT | HWMON_I_LABEL),
-	HWMON_CHANNEL_INFO(curr,
-			   HWMON_C_INPUT | HWMON_C_LABEL,
-			   HWMON_C_INPUT | HWMON_C_LABEL),
+	HWMON_CHANNEL_INFO(curr, HWMON_C_INPUT | HWMON_C_LABEL, HWMON_C_INPUT | HWMON_C_LABEL),
 	NULL
 };
 
@@ -194,7 +187,7 @@ static const struct hwmon_chip_info d5next_chip_info = {
 };
 
 static int d5next_raw_event(struct hid_device *hdev, struct hid_report *report, u8 *data,
-							int size)
+			    int size)
 {
 	struct d5next_data *priv;
 
@@ -228,10 +221,42 @@ static int d5next_raw_event(struct hid_device *hdev, struct hid_report *report, 
 	priv->voltage_input[1] = get_unaligned_be16(data + D5NEXT_PUMP_VOLTAGE_OFFSET) * 10;
 	priv->voltage_input[2] = get_unaligned_be16(data + D5NEXT_5V_VOLTAGE_OFFSET) * 10;
 
+	priv->test[0] = 't';
+
 	priv->updated = jiffies;
 
 	return 0;
 }
+
+#ifdef CONFIG_DEBUG_FS
+
+static int firmware_version_show(struct seq_file *seqf, void *unused)
+{
+	struct d5next_data *priv = seqf->private;
+
+	seq_printf(seqf, "%s\n", priv->test);
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(firmware_version);
+
+static void d5next_debugfs_init(struct d5next_data *priv)
+{
+	char name[32];
+
+	scnprintf(name, sizeof(name), "%s-%s", DRIVER_NAME, dev_name(&priv->hdev->dev));
+
+	priv->debugfs = debugfs_create_dir(name, NULL);
+	debugfs_create_file("firmware_version", 0444, priv->debugfs, priv, &firmware_version_fops);
+}
+
+#else
+
+static void d5next_debugfs_init(struct d5next_data *priv)
+{
+}
+
+#endif
 
 static int d5next_probe(struct hid_device *hdev, const struct hid_device_id *id)
 {
@@ -259,8 +284,8 @@ static int d5next_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	if (ret)
 		goto fail_and_stop;
 
-	priv->hwmon_dev = hwmon_device_register_with_info(&hdev->dev, "d5next", priv, 
-													  &d5next_chip_info, NULL);
+	priv->hwmon_dev = hwmon_device_register_with_info(&hdev->dev, "d5next", priv,
+							  &d5next_chip_info, NULL);
 
 	if (IS_ERR(priv->hwmon_dev)) {
 		ret = PTR_ERR(priv->hwmon_dev);
@@ -291,7 +316,7 @@ static void d5next_remove(struct hid_device *hdev)
 
 static const struct hid_device_id d5next_table[] = {
 	{ HID_USB_DEVICE(0x0c70, 0xf00e) }, /* Aquacomputer D5 Next */
-	{ }
+	{},
 };
 
 MODULE_DEVICE_TABLE(hid, d5next_table);
