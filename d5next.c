@@ -97,7 +97,6 @@ struct d5next_data {
 	u16 serial_number[2];
 	u16 firmware_version;
 	u32 power_cycles; /* how many times the device was turned on */
-	char test[1];
 	unsigned long updated;
 };
 
@@ -213,15 +212,13 @@ static int d5next_raw_event(struct hid_device *hdev, struct hid_report *report, 
 
 	priv->power_input[0] = get_unaligned_be16(data + D5NEXT_PUMP_POWER_OFFSET) * 10000;
 	priv->power_input[1] = get_unaligned_be16(data + D5NEXT_FAN_POWER_OFFSET) * 10000;
+	
+	priv->voltage_input[0] = get_unaligned_be16(data + D5NEXT_PUMP_VOLTAGE_OFFSET) * 10;
+	priv->voltage_input[1] = get_unaligned_be16(data + D5NEXT_FAN_VOLTAGE_OFFSET) * 10;
+	priv->voltage_input[2] = get_unaligned_be16(data + D5NEXT_5V_VOLTAGE_OFFSET) * 10;
 
 	priv->current_input[0] = get_unaligned_be16(data + D5NEXT_PUMP_CURRENT_OFFSET);
 	priv->current_input[1] = get_unaligned_be16(data + D5NEXT_FAN_CURRENT_OFFSET);
-
-	priv->voltage_input[0] = get_unaligned_be16(data + D5NEXT_FAN_VOLTAGE_OFFSET) * 10;
-	priv->voltage_input[1] = get_unaligned_be16(data + D5NEXT_PUMP_VOLTAGE_OFFSET) * 10;
-	priv->voltage_input[2] = get_unaligned_be16(data + D5NEXT_5V_VOLTAGE_OFFSET) * 10;
-
-	priv->test[0] = 't';
 
 	priv->updated = jiffies;
 
@@ -230,15 +227,35 @@ static int d5next_raw_event(struct hid_device *hdev, struct hid_report *report, 
 
 #ifdef CONFIG_DEBUG_FS
 
+static int serial_number_show(struct seq_file *seqf, void *unused)
+{
+	struct d5next_data *priv = seqf->private;
+
+	seq_printf(seqf, "%05d-%05d\n", priv->serial_number[0], priv->serial_number[1]);
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(serial_number);
+
 static int firmware_version_show(struct seq_file *seqf, void *unused)
 {
 	struct d5next_data *priv = seqf->private;
 
-	seq_printf(seqf, "%s\n", priv->test);
+	seq_printf(seqf, "%d\n", priv->firmware_version);
 
 	return 0;
 }
 DEFINE_SHOW_ATTRIBUTE(firmware_version);
+
+static int power_cycles_show(struct seq_file *seqf, void *unused)
+{
+	struct d5next_data *priv = seqf->private;
+
+	seq_printf(seqf, "%d\n", priv->power_cycles);
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(power_cycles);
 
 static void d5next_debugfs_init(struct d5next_data *priv)
 {
@@ -247,7 +264,9 @@ static void d5next_debugfs_init(struct d5next_data *priv)
 	scnprintf(name, sizeof(name), "%s-%s", DRIVER_NAME, dev_name(&priv->hdev->dev));
 
 	priv->debugfs = debugfs_create_dir(name, NULL);
+	debugfs_create_file("serial_number", 0444, priv->debugfs, priv, &serial_number_fops);
 	debugfs_create_file("firmware_version", 0444, priv->debugfs, priv, &firmware_version_fops);
+	debugfs_create_file("power_cycles", 0444, priv->debugfs, priv, &power_cycles_fops);
 }
 
 #else
@@ -322,10 +341,10 @@ static const struct hid_device_id d5next_table[] = {
 MODULE_DEVICE_TABLE(hid, d5next_table);
 
 static struct hid_driver d5next_driver = {
-	.name = DRIVER_NAME,
-	.id_table = d5next_table,
-	.probe = d5next_probe,
-	.remove = d5next_remove,
+	.name      = DRIVER_NAME,
+	.id_table  = d5next_table,
+	.probe     = d5next_probe,
+	.remove    = d5next_remove,
 	.raw_event = d5next_raw_event,
 };
 
