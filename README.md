@@ -2,7 +2,7 @@
 
 *A hwmon Linux kernel driver for exposing sensors of the Aquacomputer D5 Next watercooling pump.*
 
-Supports reading coolant temperature, as well as speed, current and power of the pump and optionally attached fan. Being a standard `hwmon` driver, it provides readings via `sysfs`, which are easily accessible through `lm-sensors` as usual:
+Supports reading coolant temperature, as well as speed, power, voltage and current of the pump and optionally attached fan. Being a standard `hwmon` driver, it provides readings via `sysfs`, which are easily accessible through `lm-sensors` as usual:
 
 ```shell
 [aleksa@fedora linux]$ sensors
