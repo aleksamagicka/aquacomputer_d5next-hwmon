@@ -1,1 +1,1 @@
-obj-m := d5next.o
+obj-m := aquacomputer_d5next.o
