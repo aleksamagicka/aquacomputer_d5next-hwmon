@@ -15,54 +15,51 @@
 #include <linux/hwmon.h>
 #include <linux/jiffies.h>
 #include <linux/module.h>
+#include <linux/seq_file.h>
 
-#define DRIVER_NAME		      "aquacomputer-d5next"
+#define DRIVER_NAME			"aquacomputer-d5next"
 
-#define D5NEXT_STATUS_REPORT_ID	      0x01
-#define D5NEXT_STATUS_UPDATE_INTERVAL 1 /* In seconds */
+#define D5NEXT_STATUS_REPORT_ID	0x01
+#define D5NEXT_STATUS_UPDATE_INTERVAL	(2 * HZ) /* In seconds */
 
 /* Register offsets for the D5 Next pump */
 
-#define D5NEXT_SERIAL_FIRST_PART      3
-#define D5NEXT_SERIAL_SECOND_PART     5
-#define D5NEXT_FIRMWARE_VERSION	      13
-#define D5NEXT_POWER_CYCLES	      24
+#define D5NEXT_SERIAL_FIRST_PART	3
+#define D5NEXT_SERIAL_SECOND_PART	5
+#define D5NEXT_FIRMWARE_VERSION	13
+#define D5NEXT_POWER_CYCLES		24
 
-#define D5NEXT_COOLANT_TEMP	      87
+#define D5NEXT_COOLANT_TEMP		87
 
-#define D5NEXT_PUMP_SPEED	      116
-#define D5NEXT_FAN_SPEED	      103
+#define D5NEXT_PUMP_SPEED		116
+#define D5NEXT_FAN_SPEED		103
 
-#define D5NEXT_PUMP_POWER	      114
-#define D5NEXT_FAN_POWER	      101
+#define D5NEXT_PUMP_POWER		114
+#define D5NEXT_FAN_POWER		101
 
-#define D5NEXT_PUMP_VOLTAGE	      110
-#define D5NEXT_FAN_VOLTAGE	      97
-#define D5NEXT_5V_VOLTAGE	      57
+#define D5NEXT_PUMP_VOLTAGE		110
+#define D5NEXT_FAN_VOLTAGE		97
+#define D5NEXT_5V_VOLTAGE		57
 
-#define D5NEXT_PUMP_CURRENT	      112
-#define D5NEXT_FAN_CURRENT	      99
+#define D5NEXT_PUMP_CURRENT		112
+#define D5NEXT_FAN_CURRENT		99
 
 /* Labels for provided values */
 
-#define L_COOLANT_TEMP		      "Coolant temp"
+#define L_COOLANT_TEMP			"Coolant temp"
 
-#define L_PUMP_SPEED		      "Pump speed"
-#define L_FAN_SPEED		      "Fan speed"
+#define L_PUMP_SPEED			"Pump speed"
+#define L_FAN_SPEED			"Fan speed"
 
-#define L_PUMP_POWER		      "Pump power"
-#define L_FAN_POWER		      "Fan power"
+#define L_PUMP_POWER			"Pump power"
+#define L_FAN_POWER			"Fan power"
 
-#define L_PUMP_VOLTAGE		      "Pump voltage"
-#define L_FAN_VOLTAGE		      "Fan voltage"
-#define L_5V_VOLTAGE		      "+5V voltage"
+#define L_PUMP_VOLTAGE			"Pump voltage"
+#define L_FAN_VOLTAGE			"Fan voltage"
+#define L_5V_VOLTAGE			"+5V voltage"
 
-#define L_PUMP_CURRENT		      "Pump current"
-#define L_FAN_CURRENT		      "Fan current"
-
-static const char *const label_temp[] = {
-	L_COOLANT_TEMP,
-};
+#define L_PUMP_CURRENT			"Pump current"
+#define L_FAN_CURRENT			"Fan current"
 
 static const char *const label_speeds[] = {
 	L_PUMP_SPEED,
@@ -89,7 +86,7 @@ struct d5next_data {
 	struct hid_device *hdev;
 	struct device *hwmon_dev;
 	struct dentry *debugfs;
-	s32 temp_input[1];
+	s32 temp_input;
 	u16 speed_input[2];
 	u32 power_input[2];
 	u16 voltage_input[3];
@@ -111,12 +108,12 @@ static int d5next_read(struct device *dev, enum hwmon_sensor_types type, u32 att
 {
 	struct d5next_data *priv = dev_get_drvdata(dev);
 
-	if (time_after(jiffies, priv->updated + D5NEXT_STATUS_UPDATE_INTERVAL * HZ))
+	if (time_after(jiffies, priv->updated + D5NEXT_STATUS_UPDATE_INTERVAL))
 		return -ENODATA;
 
 	switch (type) {
 	case hwmon_temp:
-		*val = priv->temp_input[channel];
+		*val = priv->temp_input;
 		break;
 	case hwmon_fan:
 		*val = priv->speed_input[channel];
@@ -142,7 +139,7 @@ static int d5next_read_string(struct device *dev, enum hwmon_sensor_types type, 
 {
 	switch (type) {
 	case hwmon_temp:
-		*str = label_temp[channel];
+		*str = L_COOLANT_TEMP;
 		break;
 	case hwmon_fan:
 		*str = label_speeds[channel];
@@ -203,7 +200,7 @@ static int d5next_raw_event(struct hid_device *hdev, struct hid_report *report, 
 
 	/* Sensor readings */
 
-	priv->temp_input[0] = get_unaligned_be16(data + D5NEXT_COOLANT_TEMP) * 10;
+	priv->temp_input = get_unaligned_be16(data + D5NEXT_COOLANT_TEMP) * 10;
 
 	priv->speed_input[0] = get_unaligned_be16(data + D5NEXT_PUMP_SPEED);
 	priv->speed_input[1] = get_unaligned_be16(data + D5NEXT_FAN_SPEED);
@@ -239,7 +236,7 @@ static int firmware_version_show(struct seq_file *seqf, void *unused)
 {
 	struct d5next_data *priv = seqf->private;
 
-	seq_printf(seqf, "%hu\n", priv->firmware_version);
+	seq_printf(seqf, "%u\n", priv->firmware_version);
 
 	return 0;
 }
@@ -287,7 +284,7 @@ static int d5next_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	priv->hdev = hdev;
 	hid_set_drvdata(hdev, priv);
 
-	priv->updated = jiffies - D5NEXT_STATUS_UPDATE_INTERVAL * HZ;
+	priv->updated = jiffies - D5NEXT_STATUS_UPDATE_INTERVAL;
 
 	ret = hid_parse(hdev);
 	if (ret)
