@@ -1,4 +1,4 @@
-# d5next-hwmon
+# aquacomputer_d5next
 
 *A hwmon Linux kernel driver for exposing sensors of the Aquacomputer D5 Next watercooling pump.*
 
