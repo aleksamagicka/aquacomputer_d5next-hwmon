@@ -19,7 +19,7 @@
 #include <linux/mutex.h>
 #include <linux/seq_file.h>
 
-#define DRIVER_NAME			"aquacomputer_d5next"
+#define DRIVER_NAME		"aquacomputer-d5next"
 
 #define SENSOR_REPORT_ID		0x01
 #define STATUS_REPORT_ID		0x03
