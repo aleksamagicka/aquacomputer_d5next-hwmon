@@ -23,11 +23,3 @@ Fan current:   35.00 mA
 ```
 
 Macro alignment using tabs does not always display correctly, such as here on Github. It's fine in my kernel Git repo, though.
-
-## PWM work branch
-
-This branch contains WIP regarding writing fan and pump PWM values to the pump. TODO tasks:
-
-* Implement and document checksum algorithm
-* Fix PWM value placement in `dev->buffer`
-* Send second report after the first one
