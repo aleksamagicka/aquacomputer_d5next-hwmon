@@ -1,6 +1,6 @@
 .. SPDX-License-Identifier: GPL-2.0-or-later
 
-Kernel driver aquacomputer-d5next
+Kernel driver aquacomputer_d5next
 =================================
 
 Supported devices:
@@ -18,10 +18,12 @@ well as coolant temperature. Also available through debugfs are the serial
 number, firmware version and power-on count. Attaching a fan to the pump is
 optional, so the entries regarding the fan port may report zero values.
 
-The pump can be configured either through software or via its physical
-interface. Configuring the pump through this driver is not implemented, as it
-seems to require sending it a complete configuration. That includes addressable
-RGB LEDs, for which there is no standard sysfs interface.
+Pump and fan speed can be controlled using PWM, or via the physical interface
+of the pump. Configuring other aspects of the pump, such as RGB LEDs or RPM
+curves is not supported as there is no standard sysfs interface for them (in 
+a manner that the pump requires). The pump also requires sending it a complete
+configuration for every change, so speed control is implemented in a way that
+should preserve all other current settings.
 
 Usage Notes
 -----------
@@ -43,6 +45,8 @@ in1_input    Fan voltage (in milli Volts)
 in2_input    +5V rail voltage (in milli Volts)
 curr1_input  Pump current (in milli Amperes)
 curr2_input  Fan current (in milli Amperes)
+pwm1         Pump speed (PWM)
+pwm2         Fan speed (PWM)
 ============ =============================================
 
 Debugfs entries
