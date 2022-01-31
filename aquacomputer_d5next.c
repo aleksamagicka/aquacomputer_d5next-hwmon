@@ -59,6 +59,9 @@
 
 #define OUTPUT_PUMP_SPEED	0x97
 #define OUTPUT_FAN_SPEED	0x42
+#define OUTPUT_PUMP_SPEED_MODE	0x96
+#define OUTPUT_FAN_SPEED_MODE	0x41
+
 
 /* Labels for provided values */
 #define L_COOLANT_TEMP		"Coolant temp"
@@ -221,7 +224,6 @@ static int d5next_set_pwm(struct d5next_data *dev, int channel, long val)
 	mutex_lock(&dev->mutex);
 
 	/* Convert to 0-100 range, then multiply by 100, since that's what the pump expects */
-
 	val = DIV_ROUND_CLOSEST(val * 100 * 100, 255);
 
 	/*
@@ -230,22 +232,20 @@ static int d5next_set_pwm(struct d5next_data *dev, int channel, long val)
 	*/
 	memset(dev->buffer, 0x00, STATUS_REPORT_SIZE);
 	ret = hid_hw_raw_request(dev->hdev, STATUS_REPORT_ID, dev->buffer, STATUS_REPORT_SIZE, HID_FEATURE_REPORT, HID_REQ_GET_REPORT);
-
 	if (ret < 0)
 		goto unlock_and_return;
 
 	/*
-	 * Set pump or fan PWM values, accordingly. We only modify those values so that any other
-	 * settings, such as RGB lights, stay untouched
+	 * Set pump or fan PWM value and mode accordingly. We only modify those values so that any
+	 * other settings, such as RGB lights, stay untouched
 	 */
-
-	// TODO: Ensure that the pump is configured to follow a single value, which is set below, so reset it from any other 'curve' modes!
-
 	switch (channel) {
 	case 0:
+		dev->buffer[OUTPUT_PUMP_SPEED_MODE] = 0;
 		put_unaligned_be16(val, dev->buffer + OUTPUT_PUMP_SPEED);
 		break;
 	case 1:
+		dev->buffer[OUTPUT_FAN_SPEED_MODE] = 0;
 		put_unaligned_be16(val, dev->buffer + OUTPUT_FAN_SPEED);
 		break;
 	default:
@@ -389,23 +389,6 @@ static int power_cycles_show(struct seq_file *seqf, void *unused)
 }
 DEFINE_SHOW_ATTRIBUTE(power_cycles);
 
-static int raw_buffer_show(struct seq_file *seqf, void *unused)
-{
-	struct d5next_data *priv = seqf->private;
-
-	int i;
-
-	for (i = 0; i < STATUS_REPORT_SIZE; i++)
-	{
-		seq_printf(seqf, "%02x ", priv->buffer[i]);
-	}
-
-	seq_printf(seqf, "\n");
-
-	return 0;
-}
-DEFINE_SHOW_ATTRIBUTE(raw_buffer);
-
 static void d5next_debugfs_init(struct d5next_data *priv)
 {
 	char name[32];
@@ -416,7 +399,6 @@ static void d5next_debugfs_init(struct d5next_data *priv)
 	debugfs_create_file("serial_number", 0444, priv->debugfs, priv, &serial_number_fops);
 	debugfs_create_file("firmware_version", 0444, priv->debugfs, priv, &firmware_version_fops);
 	debugfs_create_file("power_cycles", 0444, priv->debugfs, priv, &power_cycles_fops);
-	debugfs_create_file("raw_buffer", 0444, priv->debugfs, priv, &raw_buffer_fops);
 }
 
 #else
