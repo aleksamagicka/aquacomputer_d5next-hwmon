@@ -26,45 +26,41 @@
 #define SECONDARY_STATUS_REPORT_ID	0x02
 #define STATUS_UPDATE_INTERVAL		(2 * HZ) /* In seconds */
 
-#define STATUS_REPORT_SIZE		809
-#define SECONDARY_STATUS_REPORT_SIZE	11
+#define STATUS_REPORT_SIZE		0x329
+#define SECONDARY_STATUS_REPORT_SIZE	0xB
 
 /* Start index and length of the part of the report that gets checksummed */
-
 #define STATUS_REPORT_CHECKSUM_START	0x01
 #define STATUS_REPORT_CHECKSUM_LENGTH	0x326
 
 /* Offset of the checksum in the status report */
-
-#define STATUS_REPORT_CHECKSUM		807
+#define STATUS_REPORT_CHECKSUM		0x327
 
 /* Register offsets for the D5 Next pump sensor report */
+#define SERIAL_FIRST_PART	0x3
+#define SERIAL_SECOND_PART	0x5
+#define FIRMWARE_VERSION	0xD
+#define POWER_CYCLES		0x18
 
-#define SERIAL_FIRST_PART	3
-#define SERIAL_SECOND_PART	5
-#define FIRMWARE_VERSION	13
-#define POWER_CYCLES		24
+#define COOLANT_TEMP		0x57
 
-#define COOLANT_TEMP		87
+#define PUMP_SPEED		0x74
+#define FAN_SPEED		0x67
 
-#define PUMP_SPEED		116
-#define FAN_SPEED		103
+#define PUMP_POWER		0x72
+#define FAN_POWER		0x65
 
-#define PUMP_POWER		114
-#define FAN_POWER		101
+#define PUMP_VOLTAGE		0x6E
+#define FAN_VOLTAGE		0x61
+#define PLUS_5V_VOLTAGE		0x39
 
-#define PUMP_VOLTAGE		110
-#define FAN_VOLTAGE		97
-#define PLUS_5V_VOLTAGE		57
-
-#define PUMP_CURRENT		112
-#define FAN_CURRENT		99
+#define PUMP_CURRENT		0x70
+#define FAN_CURRENT		0x63
 
 #define OUTPUT_PUMP_SPEED	0x97
 #define OUTPUT_FAN_SPEED	0x42
 
 /* Labels for provided values */
-
 #define L_COOLANT_TEMP		"Coolant temp"
 
 #define L_PUMP_SPEED		"Pump speed"
@@ -102,7 +98,6 @@ static const char *const label_current[] = {
 };
 
 /* Contents of the HID report that the official software always sends after writing values */
-
 static u8 secondary_status_report[] = {
 	0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x34, 0xC6
 };
@@ -150,8 +145,7 @@ static int d5next_read(struct device *dev, enum hwmon_sensor_types type, u32 att
 		*val = priv->power_input[channel];
 		break;
 	case hwmon_pwm:
-		/* Request the status report and extract curent PWM values */
-
+		/* Request the status report and extract current PWM values */
 		mutex_lock(&priv->mutex);
 
 		memset(priv->buffer, 0x00, STATUS_REPORT_SIZE);
@@ -324,7 +318,6 @@ static const struct hwmon_chip_info d5next_chip_info = {
 };
 
 /* Parses sensor reports which the pump automatically sends every second */
-
 static int d5next_raw_event(struct hid_device *hdev, struct hid_report *report, u8 *data, int size)
 {
 	struct d5next_data *priv;
