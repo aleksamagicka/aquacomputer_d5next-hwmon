@@ -49,7 +49,7 @@ Since the speeds are expressed from 0 to 100 (percent), the driver converts them
 
 The checksum value is a bit peculiar, and it's calculated by taking the CRC (CRC-16/USB variant, to be precise) of the whole report - from `0x01` to `0x326`. To update the configuration of the pump, you always need to recalculate the checksum and place it into the last two bytes of the report. Otherwise, obviously, the pump will reject the new settings.
 
-The `Pump speed control type` in the table above refers to the mode that dictates how the pump will determine its speed - either via direct value (`0x00`), temperature curve (`0x01`), a curve based on a parameter (`0x02`) or based on flow (`0x03`). As I said above, the only viable option for a kernel driver is the first one, since the other ones may require additional sensor values that only userspace can provide in a mannered way. Besides, there are more settings in aquasuite that are pertinent to this that I haven't looked at yet, and there isn't really a way to provide them via sysfs.
+The `Pump speed control mode` in the table above refers to the mode that dictates how the pump will determine its speed - either via direct value (`0x00`), temperature curve (`0x01`), a curve based on a parameter (`0x02`) or based on flow (`0x03`). As I said above, the only viable option for a kernel driver is the first one, since the other ones may require additional sensor values that only userspace can provide in a mannered way. Besides, there are more settings in aquasuite that are pertinent to this that I haven't looked at yet, and there isn't really a way to provide them via sysfs.
 
 `Fan speed control mode` works similarly - `0x00` for direct value, `0x01` for temperature curve and `0x02` for a custom curve.
 
