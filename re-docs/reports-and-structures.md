@@ -17,7 +17,7 @@ As you can clearly see, its ID is `0x01`. Here is what can be extracted from it:
 | Serial number (first part)  |      0x03      |
 | Serial number (second part) |      0x05      |
 |      Firmware version       |      0xD       |
-|   Number of power cycles    |      0x18      |
+| Number of power cycles (4b) |      0x18      |
 | Coolant (water) temperature |      0x57      |
 |     Pump speed (0-100)      |      0x74      |
 |      Fan speed (0-100)      |      0x67      |
@@ -33,7 +33,7 @@ From the example above, you can infer that the serial number is `3000-20000`.
 
 ## Status report
 
-The status report is bigger so I won't list it here. It's ID is `0x03`. It contains the (as I'm led to believe) complete configuration of the pump. What's of interest to this driver is setting the pump and fan speeds directly, since that's what hwmon supports. The pump _can_ store curves and use them autonomously, but this most likely won't be implemented in this driver.
+The status report is bigger so I won't list it here. It's ID is `0x03`. It contains the (as I'm led to believe) complete configuration of the pump. What's of interest to this driver is setting the pump and fan speeds directly, since that's what hwmon supports.
 
 Here are the interesting bits of this report:
 
@@ -49,11 +49,10 @@ Since the speeds are expressed from 0 to 100 (percent), the driver converts them
 
 The checksum value is a bit peculiar, and it's calculated by taking the CRC (CRC-16/USB variant, to be precise) of the whole report - from `0x01` to `0x326`. To update the configuration of the pump, you always need to recalculate the checksum and place it into the last two bytes of the report. Otherwise, obviously, the pump will reject the new settings.
 
-The `Pump speed control mode` in the table above refers to the mode that dictates how the pump will determine its speed - either via direct value (`0x00`), temperature curve (`0x01`), a curve based on a parameter (`0x02`) or based on flow (`0x03`). As I said above, the only viable option for a kernel driver is the first one, since the other ones may require additional sensor values that only userspace can provide in a mannered way. Besides, there are more settings in aquasuite that are pertinent to this that I haven't looked at yet, and there isn't really a way to provide them via sysfs.
+The `Pump speed control mode` in the table above refers to the mode that dictates how the pump will determine its speed - either via direct value (`0x00`), temperature curve (`0x01`), a curve based on a parameter (`0x02`) or based on flow (`0x03`).
 
 `Fan speed control mode` works similarly - `0x00` for direct value, `0x01` for temperature curve and `0x02` for a custom curve.
 
 ## Save report
 
 The official software sends a report with an ID `0x02` after every status report. It's value is always constant as far as I've observed. This drivers imitates the official software and sends it as well. I'm not completely sure _what_ it does, but we need to stay consistent.
-
