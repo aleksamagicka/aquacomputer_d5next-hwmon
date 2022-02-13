@@ -29,15 +29,11 @@
 #define SECONDARY_STATUS_REPORT_ID	0x02
 #define STATUS_UPDATE_INTERVAL		(2 * HZ) /* In seconds */
 
-#define STATUS_REPORT_SIZE		0x329
 #define SECONDARY_STATUS_REPORT_SIZE	0xB
 
 /* Start index and length of the part of the report that gets checksummed */
 #define STATUS_REPORT_CHECKSUM_START	0x01
 #define STATUS_REPORT_CHECKSUM_LENGTH	0x326
-
-/* Offset of the checksum in the status report */
-#define STATUS_REPORT_CHECKSUM		0x327
 
 /* Register offsets for the D5 Next pump sensor report */
 #define SERIAL_FIRST_PART	0x3
@@ -57,13 +53,9 @@
 #define PUMP_POWER		0x72
 #define PUMP_SPEED		0x74
 
-#define FAN_SETPOINT    119
-#define PUMP_SETPOINT   121
+#define FAN_SETPOINT    0x77
+#define PUMP_SETPOINT   0x79
 
-#define OUTPUT_FAN_SPEED_MODE	0x41
-#define OUTPUT_PUMP_SPEED_MODE	0x96
-#define OUTPUT_PUMP_SPEED	0x97
-#define OUTPUT_FAN_SPEED	0x42
 
 enum fan_event_flags {
     FAN_EVENT_NO_SOURCE = 0x1,
@@ -181,7 +173,6 @@ struct fan_ctrl {
     struct fan_control_curve_data curve;
 } __attribute__((packed)); /* size = 45 */
 
-
 enum d5next_ctrl_channel {
     FAN_CONTROL_CHANNEL_FAN = 0x00,
     FAN_CONTROL_CHANNEL_PUMP = 0x01,
@@ -224,7 +215,8 @@ struct d5next_data {
     struct d5next_control_data *buffer;
     const struct attribute_group *groups[1];
 	s32 temp_input;
-	u16 speed_input[2];
+	u16 speed_input[USERSPACE_NUM_CHANNELS];
+    u16 speed_setpoint[USERSPACE_NUM_CHANNELS];
 	u32 power_input[2];
 	u16 voltage_input[3];
 	u16 current_input[2];
@@ -656,7 +648,14 @@ static int d5next_read_pwm(struct device *dev, u32 attr, int channel, long *val)
     fan_control_data = &(priv->buffer->fan_ctrl[channel]);
     switch(attr) {
         case hwmon_pwm_input:
-            *val = d5next_percent_to_pwm(fan_control_data->manual_setpoint);
+            switch(fan_control_data->mode) {
+                case FAN_CONTROL_MANUAL:
+                    *val = fan_control_data->manual_setpoint;
+                    break;
+                default:
+                    *val = priv->speed_setpoint[channel];
+                    break;
+            }
             break;
         case hwmon_pwm_enable:
             *val = fan_control_data->mode;
@@ -889,6 +888,9 @@ static int d5next_raw_event(struct hid_device *hdev, struct hid_report *report, 
 	priv->speed_input[FAN_CONTROL_CHANNEL_PUMP] = get_unaligned_be16(data + PUMP_SPEED);
 	priv->speed_input[FAN_CONTROL_CHANNEL_FAN] = get_unaligned_be16(data + FAN_SPEED);
 
+    priv->speed_setpoint[FAN_CONTROL_CHANNEL_PUMP] = d5next_percent_to_pwm(*(data + PUMP_SETPOINT));
+    priv->speed_setpoint[FAN_CONTROL_CHANNEL_FAN] = d5next_percent_to_pwm(*(data + FAN_SETPOINT));
+
 	priv->power_input[0] = get_unaligned_be16(data + PUMP_POWER) * 10000;
 	priv->power_input[1] = get_unaligned_be16(data + FAN_POWER) * 10000;
 
@@ -944,7 +946,7 @@ static int raw_buffer_show(struct seq_file *seqf, void *unused)
     int temp;
     int power;
 
-	for (i = 0; i < STATUS_REPORT_SIZE; i++)
+	for (i = 0; i < sizeof(struct d5next_control_data); i++)
 	{
 		seq_printf(seqf, "%02x ", ((u8*)(priv->buffer))[i]);
         if((i+1) % 16 == 0)
