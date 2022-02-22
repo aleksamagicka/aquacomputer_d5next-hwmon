@@ -20,13 +20,14 @@
 #include <linux/jiffies.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/stddef.h>
 #include <linux/seq_file.h>
 
 #define DRIVER_NAME "aquacomputer-d5next"
 
-#define SENSOR_REPORT_ID		0x01
-#define STATUS_REPORT_ID		0x03
-#define SECONDARY_STATUS_REPORT_ID	0x02
+#define INTERRUPT_STATUS_REPORT_ID	0x01
+#define CMD_WRITE_SETTINGS		0x03
+#define CMD_SAVE_SETTINGS		0x02
 #define STATUS_UPDATE_INTERVAL		(2 * HZ) /* In seconds */
 
 #define SECONDARY_STATUS_REPORT_SIZE 0xB
@@ -34,27 +35,6 @@
 /* Start index and length of the part of the report that gets checksummed */
 #define STATUS_REPORT_CHECKSUM_START	0x01
 #define STATUS_REPORT_CHECKSUM_LENGTH	0x326
-
-/* Register offsets for the D5 Next pump sensor report */
-#define SERIAL_FIRST_PART	0x3
-#define SERIAL_SECOND_PART	0x5
-#define FIRMWARE_VERSION	0xD
-#define POWER_CYCLES		0x18
-#define PLUS_5V_VOLTAGE		0x39
-#define COOLANT_TEMP		0x57
-
-#define FAN_VOLTAGE		0x61
-#define FAN_CURRENT		0x63
-#define FAN_POWER		0x65
-#define FAN_SPEED		0x67
-
-#define PUMP_VOLTAGE		0x6E
-#define PUMP_CURRENT		0x70
-#define PUMP_POWER		0x72
-#define PUMP_SPEED		0x74
-
-#define FAN_SETPOINT	0x77
-#define PUMP_SETPOINT   0x79
 
 enum fan_event_flags {
 	FAN_EVENT_NO_SOURCE = 0x1,
@@ -70,14 +50,23 @@ enum fan_event_flags {
 };
 
 struct fan_event_data {
-	u16 pwm; /* per-thousand, setpoint */
+	u16 pwm; /* per-thousand, setpoint? */
 	u16 voltage;
 	u16 current_ma;
 	u16 watts;
 	u16 speed; /* rpm, measurement */
 	u16 torque; /* Ncm */
-	u8 flags;
-};
+	u8  flags; //enum fan_event_flags
+} __attribute__((packed));
+
+struct pump_event_data {
+	u16 pwm; /* per-thousand, setpoint? */
+	u16 voltage;
+	u16 current_ma;
+	u16 watts;
+	u16 speed; /* rpm, measurement */
+	u8  flags; //enum fan_event_flags
+} __attribute__((packed));
 
 struct d5next_raw_event_data {
 	u16 report_id;
@@ -85,10 +74,27 @@ struct d5next_raw_event_data {
 	u16 serial_number[2];
 	/* starts at 7 */
 	u8 pad2[6];
-	u16 firmware_version; /* 13 */
+	u16 firmware_version; // 0x0d
+	u8 pad3[11];
+	u32 power_cycles; // 0x18
+	u8 pad4[25];
+	u16 vcc_12;
+	u16 vbus; //0x39
+	u16 vcc_aquabus;
+	u8 pad5[26];
+	s16 coolant_temp; //0x57
+	s16 flow_data[3];
+	struct fan_event_data fan;
+	struct pump_event_data pump;
+	struct {
+		u16 fan;	//0x77
+		u16 pump;	//0x79
+	} setpoints;
+	u8 pad6[14];
+	u16 flow_cal_progress;
+	u32 alarms[2];
 
 } __attribute__((packed));
-
 
 /* Labels for provided values */
 #define L_COOLANT_TEMP		"Coolant temp"
@@ -151,14 +157,19 @@ struct fan_control_pid_data {
 	u16 invert_and_flags;
 } __attribute__((__packed__)); /* size = 7 */
 
-#define NUM_CTRL_CURVE_POINTS 16
-#define IDX_MIN_PWM (NUM_CTRL_CURVE_POINTS+2)
-#define IDX_MAX_PWM (NUM_CTRL_CURVE_POINTS+3)
+enum curve_control_point {
+	CURVE_CONTROL_POINT_MIN = 0x00u,
+	CURVE_CONTROL_POINT_MAX = 0x0fu,
+	CURVE_CONTROL_POINT_AMOUNT = 0x10u,
+	CURVE_CONTROL_STARTING_TEMPERATURE = 0x11u,
+	CURVE_CONTROL_MIN_PWM = 0x12u,
+	CURVE_CONTROL_MAX_PWM = 0x13u,
+};
 
 struct fan_control_curve_data {
 	u16 start_temp;
-	u16 temps[NUM_CTRL_CURVE_POINTS];
-	u16 powers[NUM_CTRL_CURVE_POINTS];
+	u16 temps[CURVE_CONTROL_POINT_AMOUNT];
+	u16 powers[CURVE_CONTROL_POINT_AMOUNT];
 } __attribute__((__packed__)); /* size = 33 */
 
 struct fan_ctrl {
@@ -198,14 +209,50 @@ static enum d5next_ctrl_channel d5next_userspace_to_internal_channel(enum d5next
 
 struct d5next_control_data {
 	u8 version;
-	u8 padding[46];
+	u8 padding[44];
+	s16 temp_sensor_offset;
 	struct fan_properties fan_properties[FAN_CONTROL_NUM_CHANNELS];
 	struct fan_ctrl fan_ctrl[FAN_CONTROL_NUM_CHANNELS];
-	u8 padding2[572];
+	u8 padding2[565];
+	u16 alarm_flags;
+	u16 flow_limit;
+	u16 water_temp_alarm_limit;
+	u8 profile_id;
 	u16 crc;
 } __attribute__((packed));
 
 #define STATUS_REPORT_SIZE	sizeof(struct d5next_control_data)  /* 809 */
+
+struct d5next_alarms {
+	/*
+	public bool VCC12 => (_alarms & 1L) != 0L;
+	public bool VCC5 => (_alarms & 2L) != 0L;
+	public bool FanShortCircuit => (_alarms & 4L) != 0L;
+	public bool FanOverCurrent => (_alarms & 8L) != 0L;
+	public bool PumpSpeed => (_alarms & 0x10L) != 0L;
+	public bool Flow => (_alarms & 0x100L) != 0L;
+	public bool TemperatureWater => (_alarms & 0x200L) != 0L;
+	public bool FanSpeed => (_alarms & 0x400L) != 0L;
+	*/
+	bool vcc12;
+	bool vcc5;
+	bool fan_short_circuit;
+	bool fan_over_current;
+	bool pump_speed;
+	bool water_temperature;
+	bool fan_speed;
+};
+
+static void update_alarms(struct d5next_alarms* alarms, u32 data) {
+	pr_warn("alarms: %x", data);
+	alarms->vcc12 = (data & BIT(0)) != 0;
+	alarms->vcc5 = (data & BIT(1)) != 0;
+	alarms->fan_short_circuit = (data & BIT(2)) != 0;
+	alarms->fan_over_current = (data & BIT(3)) != 0;
+	alarms->pump_speed = (data & BIT(4)) != 0;
+	alarms->water_temperature = (data & BIT(5)) != 0;
+	alarms->fan_speed = (data & BIT(6)) != 0;
+}
 
 struct d5next_data {
 	struct hid_device *hdev;
@@ -223,13 +270,57 @@ struct d5next_data {
 	u32 serial_number[2];
 	u16 firmware_version;
 	u32 power_cycles; /* How many times the device was powered on */
+	struct d5next_alarms alarms;
 	unsigned long updated;
 };
 
-/* Contents of the HID report that the official software always sends after writing values */
-static u8 secondary_status_report[] = {
-	0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x34, 0xC6
-};
+
+static bool fan_channel_is_valid(enum d5next_ctrl_channel channel)
+{
+	return (channel >= 0 && channel < FAN_CONTROL_NUM_CHANNELS);
+}
+
+static bool curve_point_is_valid(u8 idx)
+{
+	if (idx >= CURVE_CONTROL_POINT_MIN && idx <= CURVE_CONTROL_POINT_MAX) {
+		return true;
+	}
+
+	switch (idx) {
+		case CURVE_CONTROL_STARTING_TEMPERATURE:
+		case CURVE_CONTROL_MIN_PWM:
+		case CURVE_CONTROL_MAX_PWM:
+			return true;
+		default:
+			return false;
+	}
+
+	return false;
+}
+
+	static int d5next_percent_to_pwm(u16 x)
+{
+	/*
+	 * hwmon expresses PWM settings as a u8.
+	 * The D5 Next expresses them as fixed-point big-endian u16 values, like this:
+	 * 0x0000 = 0.00% = 0
+	 * 0x0a1a = 25.86% = 66
+	 * 0x2710 = 100.00% = 255
+	 *
+	 * So, to go from the pump's representation to hwmon's, we multiply by 255, then divide by (100*100)
+	 * We could call it per-ten-thousand, but that's sort of unwieldy. Let's just think of it as fixed-point percent.
+	 */
+	return DIV_ROUND_CLOSEST(ntohs(x) * 255, 100 * 100);
+}
+
+static u16 d5next_pwm_to_percent(u8 x)
+{
+	/*
+	 * Convert to 0-100 range, then multiply by 100, since that's what the pump expects
+	 * Also see the explanation in d5next_percent_to_pwm
+	 */
+	return DIV_ROUND_CLOSEST(x * 100 * 100, 255);
+}
 
 /* Note: Expects the mutex to be locked! */
 static int d5next_get_ctrl_data(struct device *dev)
@@ -238,11 +329,20 @@ static int d5next_get_ctrl_data(struct device *dev)
 	struct d5next_data *priv = dev_get_drvdata(dev);
 	/* Request the status report */
 	memset(priv->buffer, 0x00, STATUS_REPORT_SIZE);
-	ret = hid_hw_raw_request(priv->hdev, STATUS_REPORT_ID, (u8 *) (priv->buffer), STATUS_REPORT_SIZE, HID_FEATURE_REPORT, HID_REQ_GET_REPORT);
+	ret = hid_hw_raw_request(priv->hdev, CMD_WRITE_SETTINGS, (u8 *) (priv->buffer), STATUS_REPORT_SIZE, HID_FEATURE_REPORT, HID_REQ_GET_REPORT);
 	if (ret < 0)
 		ret = -ENODATA;
 	return ret;
 }
+
+/*
+ * Contents of the HID report that the official software always sends after
+ * writing values. Appears to be used to make setting changes persist after a
+ * power-cycle
+ */
+static u8 cmd_save_settings_to_flash[] = {
+	0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x34, 0xC6
+};
 
 /* Note: Expects the mutex to be locked! */
 static int d5next_send_ctrl_data(struct d5next_data *priv)
@@ -256,12 +356,12 @@ static int d5next_send_ctrl_data(struct d5next_data *priv)
 	put_unaligned_be16(checksum, &(priv->buffer->crc));
 
 	/* Send the patched up report back to the pump */
-	ret = hid_hw_raw_request(priv->hdev, STATUS_REPORT_ID, (u8 *) (priv->buffer), STATUS_REPORT_SIZE, HID_FEATURE_REPORT, HID_REQ_SET_REPORT);
+	ret = hid_hw_raw_request(priv->hdev, CMD_WRITE_SETTINGS, (u8 *) (priv->buffer), STATUS_REPORT_SIZE, HID_FEATURE_REPORT, HID_REQ_SET_REPORT);
 	if (ret < 0)
 		goto exit;
 
 	/* The official software sends this report after every change, so do it here as well */
-	ret = hid_hw_raw_request(priv->hdev, SECONDARY_STATUS_REPORT_ID, secondary_status_report, SECONDARY_STATUS_REPORT_SIZE, HID_FEATURE_REPORT, HID_REQ_SET_REPORT);
+	ret = hid_hw_raw_request(priv->hdev, CMD_SAVE_SETTINGS, cmd_save_settings_to_flash, SECONDARY_STATUS_REPORT_SIZE, HID_FEATURE_REPORT, HID_REQ_SET_REPORT);
 
 exit:
 	return ret;
@@ -349,35 +449,6 @@ static int d5next_set_u8_val(struct device *dev, u8 *to_set, long val)
 	return d5next_set_val(dev, to_set, val, 8);
 }
 
-static bool fan_channel_is_valid(enum d5next_ctrl_channel channel)
-{
-	return (channel >= 0 && channel < FAN_CONTROL_NUM_CHANNELS);
-}
-
-static int d5next_percent_to_pwm(u16 x)
-{
-	/*
-	 * hwmon expresses PWM settings as a u8.
-	 * The D5 Next expresses them as fixed-point big-endian u16 values, like this:
-	 * 0x0000 = 0.00% = 0
-	 * 0x0a1a = 25.86% = 66
-	 * 0x2710 = 100.00% = 255
-	 *
-	 * So, to go from the pump's representation to hwmon's, we multiply by 255, then divide by (100*100)
-	 * We could call it per-ten-thousand, but that's sort of unwieldy. Let's just think of it as fixed-point percent.
-	 */
-	return DIV_ROUND_CLOSEST(ntohs(x) * 255, 100 * 100);
-}
-
-static u16 d5next_pwm_to_percent(u8 x)
-{
-	/*
-	 * Convert to 0-100 range, then multiply by 100, since that's what the pump expects
-	 * Also see the explanation in d5next_percent_to_pwm
-	 */
-	return DIV_ROUND_CLOSEST(x * 100 * 100, 255);
-}
-
 static ssize_t d5next_get_pwm_setting(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct sensor_device_attribute_2 *sensor_attr = to_sensor_dev_attr_2(attr);
@@ -389,11 +460,13 @@ static ssize_t d5next_get_pwm_setting(struct device *dev, struct device_attribut
 	u16 val = 0;
 
 	if (!fan_channel_is_valid(channel))
-		return -ENODATA;
+		return -ENOENT;
+	if (!curve_point_is_valid(idx))
+		return -ENOENT;
 
-	if (idx == IDX_MIN_PWM)
+	if (idx == CURVE_CONTROL_MIN_PWM)
 		to_get = &priv->buffer->fan_properties[channel].min_pwm;
-	else if (idx == IDX_MAX_PWM)
+	else if (idx == CURVE_CONTROL_MAX_PWM)
 		to_get = &priv->buffer->fan_properties[channel].max_pwm;
 	else
 		to_get = &priv->buffer->fan_ctrl[channel].curve.powers[idx];
@@ -418,8 +491,10 @@ static ssize_t d5next_get_auto_temp(struct device *dev, struct device_attribute 
 	u16 val = 0;
 
 	if (!fan_channel_is_valid(channel))
-		return -ENODATA;
-	if (idx == NUM_CTRL_CURVE_POINTS + 1) /* todo this is kinda ugly */
+		return -ENOENT;
+	if (!curve_point_is_valid(idx))
+		return -ENOENT;
+	if (idx == CURVE_CONTROL_STARTING_TEMPERATURE)
 		to_get = &priv->buffer->fan_ctrl[channel].curve.start_temp;
 	else
 		to_get = &priv->buffer->fan_ctrl[channel].curve.temps[idx];
@@ -438,18 +513,24 @@ static ssize_t d5next_set_auto_temp(struct device *dev, struct device_attribute 
 	int channel = d5next_userspace_to_internal_channel(sensor_attr->nr);
 	int idx = sensor_attr->index;
 	struct d5next_data *priv = dev_get_drvdata(dev);
-	u16 * to_set = &(priv->buffer->fan_ctrl[channel].curve.temps[idx]);
+	u16 * to_set;
 	int ret;
 	long val;
 
-	if (kstrtol(buf, 10, &val) < 0 || !fan_channel_is_valid(channel))
+	if (!fan_channel_is_valid(channel))
+		return -ENOENT;
+	if (!curve_point_is_valid(idx))
+		return -ENOENT;
+	if (kstrtol(buf, 10, &val) < 0)
 		return -EINVAL;
 
 	/* pump wants values in centi-degrees Celsius, hwmon uses mdegC */
 	val = DIV_ROUND_CLOSEST(val, 10);
 
-	if (idx == NUM_CTRL_CURVE_POINTS + 1)
+	if (idx == CURVE_CONTROL_STARTING_TEMPERATURE)
 		to_set = &(priv->buffer->fan_ctrl[channel].curve.start_temp);
+	else
+		to_set = &(priv->buffer->fan_ctrl[channel].curve.temps[idx]);
 
 	ret = d5next_set_u16_val(dev, to_set, val);
 	return ret;
@@ -463,13 +544,15 @@ static ssize_t d5next_set_auto_pwm(struct device *dev, struct device_attribute *
 	struct d5next_data *priv = dev_get_drvdata(dev);
 	int ret;
 	long val;
+
 	if (!fan_channel_is_valid(channel))
 		return -ENOENT;
-	else if (kstrtol(buf, 10, &val) < 0)
+	if (!curve_point_is_valid(idx))
+		return -ENOENT;
+	if (kstrtol(buf, 10, &val) < 0)
 		return -EINVAL;
-	if (val < 0 || val > 255) {
+	if (val < 0 || val > 255)
 		return -EINVAL;
-	}
 
 	val = d5next_pwm_to_percent(val);
 
@@ -497,10 +580,9 @@ AUTO_POINT(1, 13);
 AUTO_POINT(1, 14);
 AUTO_POINT(1, 15);
 AUTO_POINT(1, 16);
-static SENSOR_DEVICE_ATTR_2(pwm1_auto_start_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp, 0,
-				NUM_CTRL_CURVE_POINTS + 1);
-static SENSOR_DEVICE_ATTR_2(pwm1_min, 0644, d5next_get_pwm_setting, d5next_set_auto_temp, 0, IDX_MIN_PWM);
-static SENSOR_DEVICE_ATTR_2(pwm1_max, 0644, d5next_get_pwm_setting, d5next_set_auto_temp, 0, IDX_MAX_PWM);
+static SENSOR_DEVICE_ATTR_2(pwm1_auto_start_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp, 0, CURVE_CONTROL_STARTING_TEMPERATURE);
+static SENSOR_DEVICE_ATTR_2(pwm1_min, 0644, d5next_get_pwm_setting, d5next_set_auto_temp, 0, CURVE_CONTROL_MIN_PWM);
+static SENSOR_DEVICE_ATTR_2(pwm1_max, 0644, d5next_get_pwm_setting, d5next_set_auto_temp, 0, CURVE_CONTROL_MAX_PWM);
 
 AUTO_POINT(2, 1);
 AUTO_POINT(2, 2);
@@ -518,10 +600,9 @@ AUTO_POINT(2, 13);
 AUTO_POINT(2, 14);
 AUTO_POINT(2, 15);
 AUTO_POINT(2, 16);
-static SENSOR_DEVICE_ATTR_2(pwm2_auto_start_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp, 1,
-				NUM_CTRL_CURVE_POINTS + 1);
-static SENSOR_DEVICE_ATTR_2(pwm2_min, 0644, d5next_get_pwm_setting, d5next_set_auto_temp, 1, IDX_MIN_PWM);
-static SENSOR_DEVICE_ATTR_2(pwm2_max, 0644, d5next_get_pwm_setting, d5next_set_auto_temp, 1, IDX_MAX_PWM);
+static SENSOR_DEVICE_ATTR_2(pwm2_auto_start_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp, 1, CURVE_CONTROL_STARTING_TEMPERATURE);
+static SENSOR_DEVICE_ATTR_2(pwm2_min, 0644, d5next_get_pwm_setting, d5next_set_auto_temp, 1, CURVE_CONTROL_MIN_PWM);
+static SENSOR_DEVICE_ATTR_2(pwm2_max, 0644, d5next_get_pwm_setting, d5next_set_auto_temp, 1, CURVE_CONTROL_MAX_PWM);
 
 static struct attribute *d5next_attributes_auto_pwm[] = {
 	&sensor_dev_attr_pwm1_auto_point1_pwm.dev_attr.attr,
@@ -710,6 +791,38 @@ unlock_and_return:
 	return ret;
 }
 
+
+static int d5next_read_temp(struct device *dev, u32 attr, long *val)
+{
+	/* Request the status report and extract current temp sensor values */
+	int ret;
+	struct d5next_data *priv = dev_get_drvdata(dev);
+	mutex_lock(&priv->mutex);
+	ret = d5next_get_ctrl_data(dev);
+
+	switch (attr) {
+		case hwmon_temp_input:
+			*val = priv->temp_input;
+			break;
+		case hwmon_temp_offset:
+			*val = ntohs(priv->buffer->temp_sensor_offset) * 10;
+			break;
+		case hwmon_temp_max_alarm:
+			*val = ntohs(priv->alarms.water_temperature);
+			break;
+		case hwmon_temp_max:
+			*val = ntohs(priv->buffer->water_temp_alarm_limit) * 10;
+			break;
+		default:
+			ret = -ENODATA;
+			goto unlock_and_return;
+	}
+
+unlock_and_return:
+	mutex_unlock(&priv->mutex);
+	return ret;
+}
+
 /* todo pull the curve data functions into this somehow */
 static int d5next_read(struct device *dev, enum hwmon_sensor_types type, u32 attr, int channel, long *val)
 {
@@ -725,7 +838,7 @@ static int d5next_read(struct device *dev, enum hwmon_sensor_types type, u32 att
 
 	switch (type) {
 		case hwmon_temp:
-			*val = priv->temp_input;
+			ret = d5next_read_temp(dev, attr, val);
 			break;
 		case hwmon_fan:
 			ret = d5next_read_fan(dev, attr, channel, val);
@@ -778,8 +891,9 @@ static int d5next_set_pwm_setpoint(struct device *dev, enum d5next_ctrl_channel 
 {
 	int ret;
 	struct d5next_data *priv = dev_get_drvdata(dev);
-
-	if (val < 0 || val > 255 || !fan_channel_is_valid(channel))
+	if (!fan_channel_is_valid(channel))
+		return -ENOENT;
+	if (val < 0 || val > 255)
 		return -EINVAL;
 
 	val = d5next_pwm_to_percent(val);
@@ -793,8 +907,9 @@ static int d5next_set_pwm_enable(struct device *dev, enum d5next_ctrl_channel ch
 {
 	int ret;
 	struct d5next_data *priv = dev_get_drvdata(dev);
-
-	if (val < FAN_CONTROL_MANUAL || val > FAN_CONTROL_CURVE || !fan_channel_is_valid(channel))
+	if (!fan_channel_is_valid(channel))
+		return -ENOENT;
+	if (val < FAN_CONTROL_MANUAL || val > FAN_CONTROL_CURVE)
 		return -EINVAL;
 
 	ret = d5next_set_u8_val(dev, &(priv->buffer->fan_ctrl[channel].mode), val);
@@ -822,11 +937,16 @@ static int d5next_write(struct device *dev, enum hwmon_sensor_types type, u32 at
 	return -EOPNOTSUPP;
 }
 
-static const struct hwmon_ops d5next_hwmon_ops = {.is_visible = d5next_is_visible, .read = d5next_read, .read_string = d5next_read_string, .write = d5next_write};
+static const struct hwmon_ops d5next_hwmon_ops = {
+	.is_visible = d5next_is_visible,
+	.read = d5next_read,
+	.read_string = d5next_read_string,
+	.write = d5next_write
+};
 
 static const struct hwmon_channel_info *d5next_info[] = {
 	HWMON_CHANNEL_INFO(temp,
-			HWMON_T_INPUT | HWMON_T_LABEL
+			HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_MAX_ALARM | HWMON_T_MAX | HWMON_T_OFFSET
 			),
 	HWMON_CHANNEL_INFO(fan,
 			HWMON_F_INPUT | HWMON_F_LABEL | HWMON_F_MAX,
@@ -862,23 +982,24 @@ static int d5next_raw_event(struct hid_device *hdev, struct hid_report *report, 
 {
 	struct d5next_data *priv;
 
-	if (report->id != SENSOR_REPORT_ID)
+	if(report->id != INTERRUPT_STATUS_REPORT_ID)
+		return 0;
+	if(size < sizeof(struct d5next_raw_event_data))
 		return 0;
 
 	priv = hid_get_drvdata(hdev);
 
 	/* Info provided with every sensor report */
+	struct d5next_raw_event_data *event_data = (struct d5next_raw_event_data *)data;
 
-	priv->serial_number[0] = get_unaligned_be16(data + SERIAL_FIRST_PART);
-	priv->serial_number[1] = get_unaligned_be16(data + SERIAL_SECOND_PART);
+	priv->serial_number[0] = ntohs(event_data->serial_number[0]);
+	priv->serial_number[1] = ntohs(event_data->serial_number[1]);
 
-	priv->firmware_version = get_unaligned_be16(data + FIRMWARE_VERSION);
-	priv->power_cycles = get_unaligned_be32(data + POWER_CYCLES);
-
+	priv->firmware_version = ntohs(event_data->firmware_version);
+	priv->power_cycles = ntohs(event_data->power_cycles);
 	/* Sensor readings */
 
-	priv->temp_input = get_unaligned_be16(data + COOLANT_TEMP) * 10;
-
+	priv->temp_input = ntohs(event_data->coolant_temp) * 10;
 	/*
 	 * NOTE! The driver uses fan = index 0 / pump = index 1 internally.
 	 * However, we report the pump as [pwm|fan]_1 and the fan as [pwm|fan]_2 to userspace.
@@ -888,21 +1009,23 @@ static int d5next_raw_event(struct hid_device *hdev, struct hid_report *report, 
 	 * Functions that take an already converted channel as input shall use an
 	 * `enum d5next_ctrl_channel` as their channel argument.
 	 */
-	priv->speed_input[FAN_CONTROL_CHANNEL_PUMP] = get_unaligned_be16(data + PUMP_SPEED);
-	priv->speed_input[FAN_CONTROL_CHANNEL_FAN] = get_unaligned_be16(data + FAN_SPEED);
+	priv->speed_input[FAN_CONTROL_CHANNEL_PUMP] = ntohs(event_data->pump.speed);
+	priv->speed_input[FAN_CONTROL_CHANNEL_FAN] = ntohs(event_data->fan.speed);
 
-	priv->speed_setpoint[FAN_CONTROL_CHANNEL_PUMP] = d5next_percent_to_pwm(*(data + PUMP_SETPOINT));
-	priv->speed_setpoint[FAN_CONTROL_CHANNEL_FAN] = d5next_percent_to_pwm(*(data + FAN_SETPOINT));
+	priv->speed_setpoint[FAN_CONTROL_CHANNEL_PUMP] = d5next_percent_to_pwm(event_data->setpoints.pump);
+	priv->speed_setpoint[FAN_CONTROL_CHANNEL_FAN] = d5next_percent_to_pwm(event_data->setpoints.fan);
 
-	priv->power_input[0] = get_unaligned_be16(data + PUMP_POWER) * 10000;
-	priv->power_input[1] = get_unaligned_be16(data + FAN_POWER) * 10000;
+	priv->power_input[0] = ntohs(event_data->pump.watts) * 10000;
+	priv->power_input[1] = ntohs(event_data->fan.watts) * 10000;
 
-	priv->voltage_input[0] = get_unaligned_be16(data + PUMP_VOLTAGE) * 10;
-	priv->voltage_input[1] = get_unaligned_be16(data + FAN_VOLTAGE) * 10;
-	priv->voltage_input[2] = get_unaligned_be16(data + PLUS_5V_VOLTAGE) * 10;
+	priv->voltage_input[0] = ntohs(event_data->pump.voltage) * 10;
+	priv->voltage_input[1] = ntohs(event_data->fan.voltage) * 10;
+	priv->voltage_input[2] = ntohs(event_data->vbus) * 10;
 
-	priv->current_input[0] = get_unaligned_be16(data + PUMP_CURRENT);
-	priv->current_input[1] = get_unaligned_be16(data + FAN_CURRENT);
+	priv->current_input[0] = ntohs(event_data->pump.current_ma);
+	priv->current_input[1] = ntohs(event_data->fan.current_ma);
+
+	update_alarms(&(priv->alarms), ntohs(event_data->alarms[0]));
 
 	priv->updated = jiffies;
 
@@ -959,7 +1082,7 @@ static int raw_buffer_show(struct seq_file *seqf, void *unused)
 	seq_printf(seqf, "fan1 setpt: %d\n", ntohs(((struct d5next_control_data *) priv->buffer)->fan_ctrl[0].manual_setpoint));
 	seq_printf(seqf, "pump setpt: %d\n", ntohs(((struct d5next_control_data *) priv->buffer)->fan_ctrl[1].manual_setpoint));
 	seq_printf(seqf, "crc: %x\n", ntohs(((struct d5next_control_data *) priv->buffer)->crc));
-	for (i = 0; i < NUM_CTRL_CURVE_POINTS; i++) {
+	for (i = 0; i < CURVE_CONTROL_POINT_AMOUNT; i++) {
 		temp = ntohs(((struct d5next_control_data *) priv->buffer)->fan_ctrl[0].curve.temps[i]);
 		power = ntohs(((struct d5next_control_data *) priv->buffer)->fan_ctrl[0].curve.powers[i]);
 		seq_printf(seqf, "fan1 curve: temp %x power %x\n", temp, power);
@@ -1029,7 +1152,7 @@ static int d5next_probe(struct hid_device *hdev, const struct hid_device_id *id)
 							  &d5next_chip_info, priv->groups);
 
 	if (IS_ERR(priv->hwmon_dev)) {
-		ret = PTR_ERR(priv->hwmon_dev);
+		ret = (int)PTR_ERR(priv->hwmon_dev);
 		goto fail_and_close;
 	}
 
