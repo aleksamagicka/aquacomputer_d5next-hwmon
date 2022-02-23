@@ -2,6 +2,8 @@
 /*
  * hwmon driver for Aquacomputer Octo fan controller
  *
+ * The Octo sends HID reports (with ID 0x01) every second to report sensor values
+ * of up to four connected temperature sensors and up to eight connected fans.
  *
  * Copyright 2022 Aleksa Savic <savicaleksa83@gmail.com>
  */
@@ -19,14 +21,20 @@
 #define DRIVER_NAME		"aquacomputer_octo"
 
 #define SENSOR_REPORT_ID	0x01
-#define SENSOR_UPDATE_INTERVAL	(2 * HZ) /* In seconds */
+#define STATUS_UPDATE_INTERVAL	(2 * HZ) /* In seconds */
 
-/* Register offsets for debug info */
+/* Register offsets */
 #define SERIAL_FIRST_PART	0x03
 #define SERIAL_SECOND_PART	0x05
 #define FIRMWARE_VERSION	0x0D
 
-/* Register offsets for fans */
+/* Register offsets for temperature sensors */
+#define NUM_SENSORS		4
+#define SENSORS_START		0x3D
+#define SENSOR_SIZE		0x02
+#define SENSOR_DISCONNECTED	0x7FFF
+
+/* Fan info in sensor report */
 #define NUM_FANS		8
 #define FAN_PERCENT_OFFSET	0x00
 #define FAN_VOLTAGE_OFFSET	0x02
@@ -46,8 +54,14 @@ static u8 sensor_fan_offsets[] = {
 	0xD8
 };
 
-/* Registers for writing fan speeds (0-100%)*/
-/* static u16 input_fan_offsets[] = {
+#define CTRL_REPORT_ID			0x03
+#define CTRL_REPORT_SIZE		0x65F
+#define CTRL_REPORT_CHECKSUM_OFFSET	0x65D
+#define CTRL_REPORT_CHECKSUM_START	0x01
+#define CTRL_REPORT_CHECKSUM_LENGTH	0x65C
+
+/* Fan speed registers in control report (from 0-100%) */
+static u16 ctrl_fan_offsets[] = {
 	0x5B,
 	0xB0,
 	0x105,
@@ -56,83 +70,21 @@ static u8 sensor_fan_offsets[] = {
 	0x204,
 	0x259,
 	0x2AE
-};*/
-
-/* Register offsets for temperature sensors */
-#define NUM_SENSORS		4
-#define SENSORS_START		0x3D
-#define SENSOR_SIZE		0x02
-#define SENSOR_DISCONNECTED	0x7FFF
-
-#define STATUS_REPORT_ID		0x03
-#define STATUS_REPORT_SIZE		0x65F /* TODO */
-#define STATUS_REPORT_CHECKSUM_OFFSET	0x65D /* gde je checksum */
-#define STATUS_REPORT_CHECKSUM_START	0x01
-#define STATUS_REPORT_CHECKSUM_LENGTH	0x65C /* pred pocetak checksum */
+};
 
 /* The HID report that the official software always sends after writing values */
-#define SECONDARY_STATUS_REPORT_ID	0x02
-#define SECONDARY_STATUS_REPORT_SIZE	0x0B
+#define SECONDARY_CTRL_REPORT_ID	0x02
+#define SECONDARY_CTRL_REPORT_SIZE	0x0B
 
-static u8 secondary_status_report[] = {
+static u8 secondary_ctrl_report[] = {
 	0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x34, 0xC6
-};
-
-static const char *const label_temps[] = {
-	"Sensor 1",
-	"Sensor 2",
-	"Sensor 3",
-	"Sensor 4"
-};
-
-static const char *const label_speeds[] = {
-	"Fan 1 speed",
-	"Fan 2 speed",
-	"Fan 3 speed",
-	"Fan 4 speed",
-	"Fan 5 speed",
-	"Fan 6 speed",
-	"Fan 7 speed",
-	"Fan 8 speed"
-};
-
-static const char *const label_power[] = {
-	"Fan 1 power",
-	"Fan 2 power",
-	"Fan 3 power",
-	"Fan 4 power",
-	"Fan 5 power",
-	"Fan 6 power",
-	"Fan 7 power",
-	"Fan 8 power"
-};
-
-static const char *const label_voltages[] = {
-	"Fan 1 voltage",
-	"Fan 2 voltage",
-	"Fan 3 voltage",
-	"Fan 4 voltage",
-	"Fan 5 voltage",
-	"Fan 6 voltage",
-	"Fan 7 voltage",
-	"Fan 8 voltage"
-};
-
-static const char *const label_current[] = {
-	"Fan 1 current",
-	"Fan 2 current",
-	"Fan 3 current",
-	"Fan 4 current",
-	"Fan 5 current",
-	"Fan 6 current",
-	"Fan 7 current",
-	"Fan 8 current"
 };
 
 struct octo_data {
 	struct hid_device *hdev;
 	struct device *hwmon_dev;
 	struct dentry *debugfs;
+	struct mutex mutex;
 	s32 temp_input[4];
 	u16 speed_input[8];
 	u32 power_input[8];
@@ -140,13 +92,84 @@ struct octo_data {
 	u16 current_input[8];
 	u32 serial_number[2];
 	u16 firmware_version;
+	u8 *buffer;
 	unsigned long updated;
 };
+
+static int octo_percent_to_pwm(u16 val)
+{
+	return DIV_ROUND_CLOSEST(val * 255, 100 * 100);
+}
+
+static u16 octo_pwm_to_percent(u8 val)
+{
+	return DIV_ROUND_CLOSEST(val * 100 * 100, 255);
+}
+
+/* Expects the mutex to be locked */
+static int octo_get_ctrl_data(struct octo_data *priv)
+{
+	int ret;
+	memset(priv->buffer, 0x00, CTRL_REPORT_SIZE);
+	ret = hid_hw_raw_request(priv->hdev, CTRL_REPORT_ID, priv->buffer,
+				       CTRL_REPORT_SIZE, HID_FEATURE_REPORT, HID_REQ_GET_REPORT);
+	if (ret < 0)
+		ret = -ENODATA;
+
+	return ret;
+}
+
+/* Expects the mutex to be locked */
+static int octo_send_ctrl_data(struct octo_data *priv)
+{
+	int ret;
+	u16 checksum = 0xffff; /* Init value for CRC-16/USB */
+	checksum = crc16(checksum, priv->buffer + CTRL_REPORT_CHECKSUM_START, CTRL_REPORT_CHECKSUM_LENGTH);
+	checksum ^= 0xffff; /* Xorout value for CRC-16/USB */
+
+	/* Place the new checksum at the end of the report */
+	put_unaligned_be16(checksum, priv->buffer + CTRL_REPORT_CHECKSUM_OFFSET);
+
+	/* Send the patched up report back to the pump */
+	ret = hid_hw_raw_request(priv->hdev, CTRL_REPORT_ID, priv->buffer, CTRL_REPORT_SIZE,
+				 HID_FEATURE_REPORT, HID_REQ_SET_REPORT);
+	if (ret < 0)
+		goto exit;
+
+	/* The official software sends this report after every change, so do it here as well */
+	ret = hid_hw_raw_request(priv->hdev, SECONDARY_CTRL_REPORT_ID, secondary_ctrl_report, SECONDARY_CTRL_REPORT_SIZE, HID_FEATURE_REPORT, HID_REQ_SET_REPORT);
+
+exit:
+	return ret;
+}
 
 static umode_t octo_is_visible(const void *data, enum hwmon_sensor_types type, u32 attr,
 				 int channel)
 {
-	return 0444;
+	switch (type) {
+	case hwmon_temp:
+		return 0444;
+	case hwmon_fan:
+		return 0444;
+	case hwmon_power:
+		return 0444;
+ 	case hwmon_pwm:
+ 		switch (attr) {
+ 		case hwmon_pwm_input:
+ 			return 0644;
+ 		default:
+ 			break;
+ 		}
+ 		break;
+	case hwmon_in:
+		return 0444;
+	case hwmon_curr:
+		return 0444;
+	default:
+		break;
+	}
+
+	return 0;
 }
 
 static int octo_read(struct device *dev, enum hwmon_sensor_types type, u32 attr, int channel,
@@ -155,7 +178,7 @@ static int octo_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 	int ret;
 	struct octo_data *priv = dev_get_drvdata(dev);
 
-	if (time_after(jiffies, priv->updated + SENSOR_UPDATE_INTERVAL))
+	if (time_after(jiffies, priv->updated + STATUS_UPDATE_INTERVAL))
 		return -ENODATA;
 
 	switch (type) {
@@ -168,6 +191,17 @@ static int octo_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 	case hwmon_power:
 		*val = priv->power_input[channel];
 		break;
+	case hwmon_pwm:
+		mutex_lock(&priv->mutex);
+
+		ret = octo_get_ctrl_data(priv);
+		if (ret < 0)
+			goto unlock;
+
+		*val = octo_percent_to_pwm(get_unaligned_be16(priv->buffer + ctrl_fan_offsets[channel]));
+unlock:
+		mutex_unlock(&priv->mutex);
+		break;
 	case hwmon_in:
 		*val = priv->voltage_input[channel];
 		break;
@@ -178,30 +212,43 @@ static int octo_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		return -EOPNOTSUPP;
 	}
 
-	return ret;
+	return 0;
 }
 
 static int octo_read_string(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			      int channel, const char **str)
 {
+	return -EOPNOTSUPP;
+}
+
+static int octo_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
+			      int channel, long val)
+{
+	int ret;
+	struct octo_data *priv = dev_get_drvdata(dev);
+
 	switch (type) {
-	case hwmon_temp:
-		*str = label_temps[channel];
-		break;
-	case hwmon_fan:
-		*str = label_speeds[channel];
-		break;
-	case hwmon_power:
-		*str = label_power[channel];
-		break;
-	case hwmon_in:
-		*str = label_voltages[channel];
-		break;
-	case hwmon_curr:
-		*str = label_current[channel];
+	case hwmon_pwm:
+		switch (attr) {
+		case hwmon_pwm_input:
+			mutex_lock(&priv->mutex);
+
+			ret = octo_get_ctrl_data(priv);
+			if (ret < 0)
+				goto unlock_and_return;
+
+			put_unaligned_be16(octo_pwm_to_percent(val), priv->buffer + ctrl_fan_offsets[channel]);
+
+			ret = octo_send_ctrl_data(priv);
+unlock_and_return:
+			mutex_unlock(&priv->mutex);
+			return ret;
+		default:
+			break;
+		}
 		break;
 	default:
-		return -EOPNOTSUPP;
+		break;
 	}
 
 	return 0;
@@ -210,7 +257,8 @@ static int octo_read_string(struct device *dev, enum hwmon_sensor_types type, u3
 static const struct hwmon_ops octo_hwmon_ops = {
 	.is_visible = octo_is_visible,
 	.read = octo_read,
-	.read_string = octo_read_string
+	.read_string = octo_read_string,
+	.write = octo_write
 };
 
 static const struct hwmon_channel_info *octo_info[] = {
@@ -218,8 +266,7 @@ static const struct hwmon_channel_info *octo_info[] = {
 			   HWMON_T_INPUT | HWMON_T_LABEL,
 			   HWMON_T_INPUT | HWMON_T_LABEL,
 			   HWMON_T_INPUT | HWMON_T_LABEL,
-			   HWMON_T_INPUT | HWMON_T_LABEL
-			   ),
+			   HWMON_T_INPUT | HWMON_T_LABEL),
 	HWMON_CHANNEL_INFO(fan,
 			   HWMON_F_INPUT | HWMON_F_LABEL,
 			   HWMON_F_INPUT | HWMON_F_LABEL,
@@ -228,8 +275,16 @@ static const struct hwmon_channel_info *octo_info[] = {
 			   HWMON_F_INPUT | HWMON_F_LABEL,
 			   HWMON_F_INPUT | HWMON_F_LABEL,
 			   HWMON_F_INPUT | HWMON_F_LABEL,
-			   HWMON_F_INPUT | HWMON_F_LABEL
-			   ),
+			   HWMON_F_INPUT | HWMON_F_LABEL),
+	HWMON_CHANNEL_INFO(pwm,
+			   HWMON_PWM_INPUT,
+			   HWMON_PWM_INPUT,
+			   HWMON_PWM_INPUT,
+			   HWMON_PWM_INPUT,
+			   HWMON_PWM_INPUT,
+			   HWMON_PWM_INPUT,
+			   HWMON_PWM_INPUT,
+			   HWMON_PWM_INPUT),
 	HWMON_CHANNEL_INFO(power,
 			   HWMON_P_INPUT | HWMON_P_LABEL,
 			   HWMON_P_INPUT | HWMON_P_LABEL,
@@ -238,8 +293,7 @@ static const struct hwmon_channel_info *octo_info[] = {
 			   HWMON_P_INPUT | HWMON_P_LABEL,
 			   HWMON_P_INPUT | HWMON_P_LABEL,
 			   HWMON_P_INPUT | HWMON_P_LABEL,
-			   HWMON_P_INPUT | HWMON_P_LABEL
-			   ),
+			   HWMON_P_INPUT | HWMON_P_LABEL),
 	HWMON_CHANNEL_INFO(in,
 			   HWMON_I_INPUT | HWMON_I_LABEL,
 			   HWMON_I_INPUT | HWMON_I_LABEL,
@@ -248,8 +302,7 @@ static const struct hwmon_channel_info *octo_info[] = {
 			   HWMON_I_INPUT | HWMON_I_LABEL,
 			   HWMON_I_INPUT | HWMON_I_LABEL,
 			   HWMON_I_INPUT | HWMON_I_LABEL,
-			   HWMON_I_INPUT | HWMON_I_LABEL
-			   ),
+			   HWMON_I_INPUT | HWMON_I_LABEL),
 	HWMON_CHANNEL_INFO(curr,
 			   HWMON_C_INPUT | HWMON_C_LABEL,
 			   HWMON_C_INPUT | HWMON_C_LABEL,
@@ -258,8 +311,7 @@ static const struct hwmon_channel_info *octo_info[] = {
 			   HWMON_C_INPUT | HWMON_C_LABEL,
 			   HWMON_C_INPUT | HWMON_C_LABEL,
 			   HWMON_C_INPUT | HWMON_C_LABEL,
-			   HWMON_C_INPUT | HWMON_C_LABEL
-			   ),
+			   HWMON_C_INPUT | HWMON_C_LABEL),
 	NULL
 };
 
@@ -285,12 +337,13 @@ static int octo_raw_event(struct hid_device *hdev, struct hid_report *report, u8
 	priv->firmware_version = get_unaligned_be16(data + FIRMWARE_VERSION);
 
 	/* Temperature sensor readings */
-	for (i = 0; i < NUM_SENSORS; i++) {
-		 sensor_value = get_unaligned_be16(data + SENSORS_START + i * SENSOR_SIZE);
-		 if (sensor_value == SENSOR_DISCONNECTED)
-			 sensor_value = 0;
+	for (i = 0; i < NUM_SENSORS; i++)
+	{
+		sensor_value = get_unaligned_be16(data + SENSORS_START + i * SENSOR_SIZE);
+		if (sensor_value == SENSOR_DISCONNECTED)
+			sensor_value = 0;
 
-		 priv->temp_input[i] = sensor_value * 10;
+		priv->temp_input[i] = sensor_value * 10;
 	}
 
 	/* Fan speed and PWM readings */
@@ -313,6 +366,10 @@ static int serial_number_show(struct seq_file *seqf, void *unused)
 	struct octo_data *priv = seqf->private;
 
 	seq_printf(seqf, "%05u-%05u\n", priv->serial_number[0], priv->serial_number[1]);
+	seq_printf(seqf, "%u-%u\n", priv->speed_input[0], priv->speed_input[7]);
+
+	if (priv->speed_input[0] == 0)
+		seq_printf(seqf, "nula je\n");
 
 	return 0;
 }
@@ -328,7 +385,7 @@ static int firmware_version_show(struct seq_file *seqf, void *unused)
 }
 DEFINE_SHOW_ATTRIBUTE(firmware_version);
 
-static void debugfs_init(struct octo_data *priv)
+static void octo_debugfs_init(struct octo_data *priv)
 {
 	char name[32];
 
@@ -341,7 +398,7 @@ static void debugfs_init(struct octo_data *priv)
 
 #else
 
-static void debugfs_init(struct octo_data *priv)
+static void octo_debugfs_init(struct octo_data *priv)
 {
 }
 
@@ -349,8 +406,8 @@ static void debugfs_init(struct octo_data *priv)
 
 static int octo_probe(struct hid_device *hdev, const struct hid_device_id *id)
 {
-	int ret;
 	struct octo_data *priv;
+	int ret;
 
 	priv = devm_kzalloc(&hdev->dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
@@ -359,7 +416,11 @@ static int octo_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	priv->hdev = hdev;
 	hid_set_drvdata(hdev, priv);
 
-	priv->updated = jiffies - SENSOR_UPDATE_INTERVAL;
+	priv->buffer = devm_kzalloc(&hdev->dev, CTRL_REPORT_SIZE, GFP_KERNEL);
+	if (!priv->buffer)
+		return -ENOMEM;
+
+	priv->updated = jiffies - STATUS_UPDATE_INTERVAL;
 
 	ret = hid_parse(hdev);
 	if (ret)
@@ -373,17 +434,19 @@ static int octo_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	if (ret)
 		goto fail_and_stop;
 
-	/*hid_device_io_start(hdev);*/
+	hid_device_io_start(hdev);
 
 	priv->hwmon_dev = hwmon_device_register_with_info(&hdev->dev, "octo", priv,
 							  &octo_chip_info, NULL);
+
+	mutex_init(&priv->mutex);
 
 	if (IS_ERR(priv->hwmon_dev)) {
 		ret = PTR_ERR(priv->hwmon_dev);
 		goto fail_and_close;
 	}
 
-	debugfs_init(priv);
+	octo_debugfs_init(priv);
 
 	return 0;
 
@@ -397,6 +460,9 @@ fail_and_stop:
 static void octo_remove(struct hid_device *hdev)
 {
 	struct octo_data *priv = hid_get_drvdata(hdev);
+
+	mutex_unlock(&priv->mutex);
+	mutex_destroy(&priv->mutex);
 
 	debugfs_remove_recursive(priv->debugfs);
 	hwmon_device_unregister(priv->hwmon_dev);
