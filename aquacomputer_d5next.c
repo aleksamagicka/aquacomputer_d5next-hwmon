@@ -445,7 +445,7 @@ static int d5next_set_u8_val(struct device *dev, u8 *to_set, long val)
 	return d5next_set_val(dev, to_set, val, 8);
 }
 
-static ssize_t d5next_get_pwm_setting(struct device *dev, struct device_attribute *attr, char *buf)
+static ssize_t d5next_pwm_setting_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct sensor_device_attribute_2 *sensor_attr = to_sensor_dev_attr_2(attr);
 	int channel = d5next_userspace_to_internal_channel(sensor_attr->nr);
@@ -475,7 +475,7 @@ static ssize_t d5next_get_pwm_setting(struct device *dev, struct device_attribut
 	return ret;
 }
 
-static ssize_t d5next_get_auto_temp(struct device *dev, struct device_attribute *attr, char *buf)
+static ssize_t d5next_auto_temp_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct sensor_device_attribute_2 *sensor_attr = to_sensor_dev_attr_2(attr);
 	int channel = d5next_userspace_to_internal_channel(sensor_attr->nr);
@@ -503,7 +503,7 @@ static ssize_t d5next_get_auto_temp(struct device *dev, struct device_attribute 
 	return ret;
 }
 
-static ssize_t d5next_set_auto_temp(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t d5next_auto_temp_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
 	struct sensor_device_attribute_2 *sensor_attr = to_sensor_dev_attr_2(attr);
 	int channel = d5next_userspace_to_internal_channel(sensor_attr->nr);
@@ -531,13 +531,12 @@ static ssize_t d5next_set_auto_temp(struct device *dev, struct device_attribute 
 	return ret;
 }
 
-static ssize_t d5next_set_auto_pwm(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t d5next_pwm_setting_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
 	struct sensor_device_attribute_2 *sensor_attr = to_sensor_dev_attr_2(attr);
 	int channel = d5next_userspace_to_internal_channel(sensor_attr->nr);
 	int idx = sensor_attr->index;
 	struct d5next_data *priv = dev_get_drvdata(dev);
-	int ret;
 	long val;
 
 	if (!fan_channel_is_valid(channel))
@@ -551,11 +550,56 @@ static ssize_t d5next_set_auto_pwm(struct device *dev, struct device_attribute *
 
 	val = d5next_pwm_to_percent(val);
 
-	ret = d5next_set_u16_val(dev, &(priv->buffer->fan_ctrl[channel].curve.powers[idx]), val);
-	return ret;
+	return d5next_set_u16_val(dev, &(priv->buffer->fan_ctrl[channel].curve.powers[idx]), val);
 }
 
-static umode_t d5next_auto_pwm_is_visible(struct kobject *kobj, struct attribute *attr, int index)
+static ssize_t d5next_alarm_config_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	int ret;
+	u16 val;
+	int alarm_config_bit = to_sensor_dev_attr(attr)->index;
+	struct d5next_data *priv = dev_get_drvdata(dev);
+
+	if (!alarm_config_index_is_valid(alarm_config_bit))
+		return -ENOENT;
+
+	ret = d5next_get_val(dev, &(priv->buffer->alarm_flags), &val, 2);
+	if (ret < 0)
+		return ret;
+
+	return sprintf(buf, "%u\n", (BIT(alarm_config_bit) & ntohs(val)) != 0);
+}
+
+static ssize_t d5next_alarm_config_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	int ret;
+	u16 val;
+	int alarm_config_bit = to_sensor_dev_attr(attr)->index;
+	struct d5next_data *priv = dev_get_drvdata(dev);
+	unsigned long to_set;
+
+	if (!alarm_config_index_is_valid(alarm_config_bit))
+		return -ENOENT;
+	ret = kstrtoul(buf, 10, &to_set);
+	if (ret < 0)
+		return ret;
+	if (to_set > 1) /* alarm configs are all booleans, we only want 1 or 0 */
+		return -EINVAL;
+
+	/* need to read the alarm config field first, to not change the other bits */
+	ret = d5next_get_val(dev, &(priv->buffer->alarm_flags), &val, 2);
+	if (ret < 0)
+		return ret;
+
+	val = ntohs(val);
+	if (to_set)
+		val |= BIT(alarm_config_bit);
+	else
+		val &= (~BIT(alarm_config_bit));
+	return d5next_set_u16_val(dev, &(priv->buffer->alarm_flags), val);
+}
+
+static umode_t d5next_extra_props_are_visible(struct kobject *kobj, struct attribute *attr, int index)
 {
 	/* these settings are always visible, they exist on every d5next */
 	return attr->mode;
@@ -916,7 +960,7 @@ static int d5next_raw_event(struct hid_device *hdev, struct hid_report *report, 
 	priv->current_input[0] = ntohs(event_data->pump.current_ma);
 	priv->current_input[1] = ntohs(event_data->fan.current_ma);
 
-	update_alarms(&(priv->alarms), ntohs(event_data->alarms[0]));
+	update_alarms(&(priv->alarms), ntohl(event_data->alarms[0]));
 
 	priv->updated = jiffies;
 
@@ -1005,79 +1049,86 @@ static void d5next_debugfs_init(struct d5next_data *priv)
 #endif
 
 
-static SENSOR_DEVICE_ATTR_2(pwm1_auto_point1_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN);
-static SENSOR_DEVICE_ATTR_2(pwm1_auto_point1_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN);
-static SENSOR_DEVICE_ATTR_2(pwm1_auto_point2_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 1);
-static SENSOR_DEVICE_ATTR_2(pwm1_auto_point2_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 1);
-static SENSOR_DEVICE_ATTR_2(pwm1_auto_point3_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 2);
-static SENSOR_DEVICE_ATTR_2(pwm1_auto_point3_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 2);
-static SENSOR_DEVICE_ATTR_2(pwm1_auto_point4_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 3);
-static SENSOR_DEVICE_ATTR_2(pwm1_auto_point4_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 3);
-static SENSOR_DEVICE_ATTR_2(pwm1_auto_point5_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 4);
-static SENSOR_DEVICE_ATTR_2(pwm1_auto_point5_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 4);
-static SENSOR_DEVICE_ATTR_2(pwm1_auto_point6_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 5);
-static SENSOR_DEVICE_ATTR_2(pwm1_auto_point6_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 5);
-static SENSOR_DEVICE_ATTR_2(pwm1_auto_point7_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 6);
-static SENSOR_DEVICE_ATTR_2(pwm1_auto_point7_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 6);
-static SENSOR_DEVICE_ATTR_2(pwm1_auto_point8_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 7);
-static SENSOR_DEVICE_ATTR_2(pwm1_auto_point8_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 7);
-static SENSOR_DEVICE_ATTR_2(pwm1_auto_point9_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 8);
-static SENSOR_DEVICE_ATTR_2(pwm1_auto_point9_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 8);
-static SENSOR_DEVICE_ATTR_2(pwm1_auto_point10_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 9);
-static SENSOR_DEVICE_ATTR_2(pwm1_auto_point10_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 9);
-static SENSOR_DEVICE_ATTR_2(pwm1_auto_point11_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 10);
-static SENSOR_DEVICE_ATTR_2(pwm1_auto_point11_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 10);
-static SENSOR_DEVICE_ATTR_2(pwm1_auto_point12_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 11);
-static SENSOR_DEVICE_ATTR_2(pwm1_auto_point12_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 11);
-static SENSOR_DEVICE_ATTR_2(pwm1_auto_point13_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 12);
-static SENSOR_DEVICE_ATTR_2(pwm1_auto_point13_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 12);
-static SENSOR_DEVICE_ATTR_2(pwm1_auto_point14_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 13);
-static SENSOR_DEVICE_ATTR_2(pwm1_auto_point14_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 13);
-static SENSOR_DEVICE_ATTR_2(pwm1_auto_point15_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 14);
-static SENSOR_DEVICE_ATTR_2(pwm1_auto_point15_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 14);
-static SENSOR_DEVICE_ATTR_2(pwm1_auto_point16_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MAX);
-static SENSOR_DEVICE_ATTR_2(pwm1_auto_point16_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MAX);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point1_pwm, d5next_pwm_setting, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point1_temp, d5next_auto_temp, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point2_pwm, d5next_pwm_setting, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 1);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point2_temp, d5next_auto_temp, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 1);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point3_pwm, d5next_pwm_setting, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 2);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point3_temp, d5next_auto_temp, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 2);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point4_pwm, d5next_pwm_setting, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 3);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point4_temp, d5next_auto_temp, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 3);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point5_pwm, d5next_pwm_setting, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 4);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point5_temp, d5next_auto_temp, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 4);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point6_pwm, d5next_pwm_setting, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 5);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point6_temp, d5next_auto_temp, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 5);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point7_pwm, d5next_pwm_setting, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 6);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point7_temp, d5next_auto_temp, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 6);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point8_pwm, d5next_pwm_setting, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 7);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point8_temp, d5next_auto_temp, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 7);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point9_pwm, d5next_pwm_setting, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 8);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point9_temp, d5next_auto_temp, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 8);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point10_pwm, d5next_pwm_setting, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 9);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point10_temp, d5next_auto_temp, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 9);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point11_pwm, d5next_pwm_setting, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 10);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point11_temp, d5next_auto_temp, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 10);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point12_pwm, d5next_pwm_setting, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 11);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point12_temp, d5next_auto_temp, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 11);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point13_pwm, d5next_pwm_setting, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 12);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point13_temp, d5next_auto_temp, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 12);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point14_pwm, d5next_pwm_setting, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 13);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point14_temp, d5next_auto_temp, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 13);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point15_pwm, d5next_pwm_setting, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 14);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point15_temp, d5next_auto_temp, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MIN + 14);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point16_pwm, d5next_pwm_setting, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MAX);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point16_temp, d5next_auto_temp, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_POINT_MAX);
 
-static SENSOR_DEVICE_ATTR_2(pwm1_auto_start_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp, 0, CURVE_CONTROL_STARTING_TEMPERATURE);
-static SENSOR_DEVICE_ATTR_2(pwm1_min, 0644, d5next_get_pwm_setting, d5next_set_auto_temp, 0, CURVE_CONTROL_MIN_PWM);
-static SENSOR_DEVICE_ATTR_2(pwm1_max, 0644, d5next_get_pwm_setting, d5next_set_auto_temp, 0, CURVE_CONTROL_MAX_PWM);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_start_temp, d5next_auto_temp, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_STARTING_TEMPERATURE);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_min, d5next_pwm_setting, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_MIN_PWM);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_max, d5next_pwm_setting, USERSPACE_CHANNEL_PUMP, CURVE_CONTROL_MAX_PWM);
 
-static SENSOR_DEVICE_ATTR_2(pwm2_auto_point1_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN);
-static SENSOR_DEVICE_ATTR_2(pwm2_auto_point1_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN);
-static SENSOR_DEVICE_ATTR_2(pwm2_auto_point2_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 1);
-static SENSOR_DEVICE_ATTR_2(pwm2_auto_point2_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 1);
-static SENSOR_DEVICE_ATTR_2(pwm2_auto_point3_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 2);
-static SENSOR_DEVICE_ATTR_2(pwm2_auto_point3_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 2);
-static SENSOR_DEVICE_ATTR_2(pwm2_auto_point4_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 3);
-static SENSOR_DEVICE_ATTR_2(pwm2_auto_point4_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 3);
-static SENSOR_DEVICE_ATTR_2(pwm2_auto_point5_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 4);
-static SENSOR_DEVICE_ATTR_2(pwm2_auto_point5_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 4);
-static SENSOR_DEVICE_ATTR_2(pwm2_auto_point6_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 5);
-static SENSOR_DEVICE_ATTR_2(pwm2_auto_point6_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 5);
-static SENSOR_DEVICE_ATTR_2(pwm2_auto_point7_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 6);
-static SENSOR_DEVICE_ATTR_2(pwm2_auto_point7_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 6);
-static SENSOR_DEVICE_ATTR_2(pwm2_auto_point8_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 7);
-static SENSOR_DEVICE_ATTR_2(pwm2_auto_point8_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 7);
-static SENSOR_DEVICE_ATTR_2(pwm2_auto_point9_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 8);
-static SENSOR_DEVICE_ATTR_2(pwm2_auto_point9_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 8);
-static SENSOR_DEVICE_ATTR_2(pwm2_auto_point10_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 9);
-static SENSOR_DEVICE_ATTR_2(pwm2_auto_point10_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 9);
-static SENSOR_DEVICE_ATTR_2(pwm2_auto_point11_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 10);
-static SENSOR_DEVICE_ATTR_2(pwm2_auto_point11_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 10);
-static SENSOR_DEVICE_ATTR_2(pwm2_auto_point12_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 11);
-static SENSOR_DEVICE_ATTR_2(pwm2_auto_point12_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 11);
-static SENSOR_DEVICE_ATTR_2(pwm2_auto_point13_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 12);
-static SENSOR_DEVICE_ATTR_2(pwm2_auto_point13_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 12);
-static SENSOR_DEVICE_ATTR_2(pwm2_auto_point14_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 13);
-static SENSOR_DEVICE_ATTR_2(pwm2_auto_point14_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 13);
-static SENSOR_DEVICE_ATTR_2(pwm2_auto_point15_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 14);
-static SENSOR_DEVICE_ATTR_2(pwm2_auto_point15_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 14);
-static SENSOR_DEVICE_ATTR_2(pwm2_auto_point16_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MAX);
-static SENSOR_DEVICE_ATTR_2(pwm2_auto_point16_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MAX);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point1_pwm, d5next_pwm_setting, USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point1_temp, d5next_auto_temp, USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point2_pwm, d5next_pwm_setting, USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 1);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point2_temp, d5next_auto_temp, USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 1);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point3_pwm, d5next_pwm_setting, USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 2);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point3_temp, d5next_auto_temp, USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 2);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point4_pwm, d5next_pwm_setting, USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 3);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point4_temp, d5next_auto_temp, USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 3);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point5_pwm, d5next_pwm_setting, USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 4);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point5_temp, d5next_auto_temp, USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 4);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point6_pwm, d5next_pwm_setting, USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 5);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point6_temp, d5next_auto_temp, USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 5);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point7_pwm, d5next_pwm_setting, USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 6);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point7_temp, d5next_auto_temp, USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 6);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point8_pwm, d5next_pwm_setting, USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 7);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point8_temp, d5next_auto_temp, USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 7);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point9_pwm, d5next_pwm_setting, USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 8);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point9_temp, d5next_auto_temp, USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 8);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point10_pwm, d5next_pwm_setting, USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 9);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point10_temp, d5next_auto_temp, USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 9);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point11_pwm, d5next_pwm_setting, USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 10);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point11_temp, d5next_auto_temp, USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 10);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point12_pwm, d5next_pwm_setting, USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 11);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point12_temp, d5next_auto_temp, USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 11);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point13_pwm, d5next_pwm_setting, USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 12);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point13_temp, d5next_auto_temp, USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 12);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point14_pwm, d5next_pwm_setting, USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 13);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point14_temp, d5next_auto_temp, USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 13);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point15_pwm, d5next_pwm_setting, USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 14);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point15_temp, d5next_auto_temp, USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MIN + 14);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point16_pwm, d5next_pwm_setting,USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MAX);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point16_temp, d5next_auto_temp, USERSPACE_CHANNEL_FAN, CURVE_CONTROL_POINT_MAX);
 
-static SENSOR_DEVICE_ATTR_2(pwm2_auto_start_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp, 1, CURVE_CONTROL_STARTING_TEMPERATURE);
-static SENSOR_DEVICE_ATTR_2(pwm2_min, 0644, d5next_get_pwm_setting, d5next_set_auto_temp, 1, CURVE_CONTROL_MIN_PWM);
-static SENSOR_DEVICE_ATTR_2(pwm2_max, 0644, d5next_get_pwm_setting, d5next_set_auto_temp, 1, CURVE_CONTROL_MAX_PWM);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_start_temp, d5next_auto_temp, USERSPACE_CHANNEL_FAN, CURVE_CONTROL_STARTING_TEMPERATURE);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_min, d5next_pwm_setting, USERSPACE_CHANNEL_FAN, CURVE_CONTROL_MIN_PWM);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_max, d5next_pwm_setting, USERSPACE_CHANNEL_FAN, CURVE_CONTROL_MAX_PWM);
+
+static SENSOR_DEVICE_ATTR_RW(beep_enable, d5next_alarm_config, ALARM_CFG_BUZZER);
+/* todo these don't seem to have standard kernel interfaces
+static SENSOR_DEVICE_ATTR_RW(blink_enable, d5next_alarm_config, ALARM_CFG_BLINK_LED);
+static SENSOR_DEVICE_ATTR_RW(fan2_alarm_enable, d5next_alarm_config, ALARM_CFG_FAN_RPM);
+static SENSOR_DEVICE_ATTR_RW(temp1_alarm_enable, d5next_alarm_config, ALARM_CFG_WATER_TEMP);
+*/
 
 static struct attribute *d5next_attributes_auto_pwm[] = {
 	&sensor_dev_attr_pwm1_auto_point1_pwm.dev_attr.attr,
@@ -1154,12 +1205,20 @@ static struct attribute *d5next_attributes_auto_pwm[] = {
 	&sensor_dev_attr_pwm2_auto_start_temp.dev_attr.attr,
 	&sensor_dev_attr_pwm2_min.dev_attr.attr,
 	&sensor_dev_attr_pwm2_max.dev_attr.attr,
+
+	&sensor_dev_attr_beep_enable.dev_attr.attr,
+	/* todo these don't seem to have standard kernel interfaces
+	&sensor_dev_attr_blink_enable.dev_attr.attr,
+	&sensor_dev_attr_fan2_alarm_enable.dev_attr.attr,
+	&sensor_dev_attr_temp1_alarm_enable.dev_attr.attr,
+	 */
+
 	NULL,
 };
 
 static const struct attribute_group d5next_group_auto_pwm = {
 	.attrs = d5next_attributes_auto_pwm,
-	.is_visible = d5next_auto_pwm_is_visible,
+	.is_visible = d5next_extra_props_are_visible,
 };
 
 static int d5next_probe(struct hid_device *hdev, const struct hid_device_id *id)
