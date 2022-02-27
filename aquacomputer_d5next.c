@@ -293,8 +293,6 @@ static bool curve_point_is_valid(u8 idx)
 		default:
 			return false;
 	}
-
-	return false;
 }
 
 	static int d5next_percent_to_pwm(u16 x)
@@ -559,135 +557,11 @@ static ssize_t d5next_set_auto_pwm(struct device *dev, struct device_attribute *
 	return ret;
 }
 
-#define AUTO_POINT(pwm_num, i) \
-static SENSOR_DEVICE_ATTR_2(pwm##pwm_num##_auto_point##i##_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm, (pwm_num)-1, (i)-1); \
-static SENSOR_DEVICE_ATTR_2(pwm##pwm_num##_auto_point##i##_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp, (pwm_num)-1, (i)-1)
-
-AUTO_POINT(1, 1);
-AUTO_POINT(1, 2);
-AUTO_POINT(1, 3);
-AUTO_POINT(1, 4);
-AUTO_POINT(1, 5);
-AUTO_POINT(1, 6);
-AUTO_POINT(1, 7);
-AUTO_POINT(1, 8);
-AUTO_POINT(1, 9);
-AUTO_POINT(1, 10);
-AUTO_POINT(1, 11);
-AUTO_POINT(1, 12);
-AUTO_POINT(1, 13);
-AUTO_POINT(1, 14);
-AUTO_POINT(1, 15);
-AUTO_POINT(1, 16);
-static SENSOR_DEVICE_ATTR_2(pwm1_auto_start_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp, 0, CURVE_CONTROL_STARTING_TEMPERATURE);
-static SENSOR_DEVICE_ATTR_2(pwm1_min, 0644, d5next_get_pwm_setting, d5next_set_auto_temp, 0, CURVE_CONTROL_MIN_PWM);
-static SENSOR_DEVICE_ATTR_2(pwm1_max, 0644, d5next_get_pwm_setting, d5next_set_auto_temp, 0, CURVE_CONTROL_MAX_PWM);
-
-AUTO_POINT(2, 1);
-AUTO_POINT(2, 2);
-AUTO_POINT(2, 3);
-AUTO_POINT(2, 4);
-AUTO_POINT(2, 5);
-AUTO_POINT(2, 6);
-AUTO_POINT(2, 7);
-AUTO_POINT(2, 8);
-AUTO_POINT(2, 9);
-AUTO_POINT(2, 10);
-AUTO_POINT(2, 11);
-AUTO_POINT(2, 12);
-AUTO_POINT(2, 13);
-AUTO_POINT(2, 14);
-AUTO_POINT(2, 15);
-AUTO_POINT(2, 16);
-static SENSOR_DEVICE_ATTR_2(pwm2_auto_start_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp, 1, CURVE_CONTROL_STARTING_TEMPERATURE);
-static SENSOR_DEVICE_ATTR_2(pwm2_min, 0644, d5next_get_pwm_setting, d5next_set_auto_temp, 1, CURVE_CONTROL_MIN_PWM);
-static SENSOR_DEVICE_ATTR_2(pwm2_max, 0644, d5next_get_pwm_setting, d5next_set_auto_temp, 1, CURVE_CONTROL_MAX_PWM);
-
-static struct attribute *d5next_attributes_auto_pwm[] = {
-	&sensor_dev_attr_pwm1_auto_point1_pwm.dev_attr.attr,
-	&sensor_dev_attr_pwm1_auto_point2_pwm.dev_attr.attr,
-	&sensor_dev_attr_pwm1_auto_point3_pwm.dev_attr.attr,
-	&sensor_dev_attr_pwm1_auto_point4_pwm.dev_attr.attr,
-	&sensor_dev_attr_pwm1_auto_point5_pwm.dev_attr.attr,
-	&sensor_dev_attr_pwm1_auto_point6_pwm.dev_attr.attr,
-	&sensor_dev_attr_pwm1_auto_point7_pwm.dev_attr.attr,
-	&sensor_dev_attr_pwm1_auto_point8_pwm.dev_attr.attr,
-	&sensor_dev_attr_pwm1_auto_point9_pwm.dev_attr.attr,
-	&sensor_dev_attr_pwm1_auto_point10_pwm.dev_attr.attr,
-	&sensor_dev_attr_pwm1_auto_point11_pwm.dev_attr.attr,
-	&sensor_dev_attr_pwm1_auto_point12_pwm.dev_attr.attr,
-	&sensor_dev_attr_pwm1_auto_point13_pwm.dev_attr.attr,
-	&sensor_dev_attr_pwm1_auto_point14_pwm.dev_attr.attr,
-	&sensor_dev_attr_pwm1_auto_point15_pwm.dev_attr.attr,
-	&sensor_dev_attr_pwm1_auto_point16_pwm.dev_attr.attr,
-
-	&sensor_dev_attr_pwm1_auto_point1_temp.dev_attr.attr,
-	&sensor_dev_attr_pwm1_auto_point2_temp.dev_attr.attr,
-	&sensor_dev_attr_pwm1_auto_point3_temp.dev_attr.attr,
-	&sensor_dev_attr_pwm1_auto_point4_temp.dev_attr.attr,
-	&sensor_dev_attr_pwm1_auto_point5_temp.dev_attr.attr,
-	&sensor_dev_attr_pwm1_auto_point6_temp.dev_attr.attr,
-	&sensor_dev_attr_pwm1_auto_point7_temp.dev_attr.attr,
-	&sensor_dev_attr_pwm1_auto_point8_temp.dev_attr.attr,
-	&sensor_dev_attr_pwm1_auto_point9_temp.dev_attr.attr,
-	&sensor_dev_attr_pwm1_auto_point10_temp.dev_attr.attr,
-	&sensor_dev_attr_pwm1_auto_point11_temp.dev_attr.attr,
-	&sensor_dev_attr_pwm1_auto_point12_temp.dev_attr.attr,
-	&sensor_dev_attr_pwm1_auto_point13_temp.dev_attr.attr,
-	&sensor_dev_attr_pwm1_auto_point14_temp.dev_attr.attr,
-	&sensor_dev_attr_pwm1_auto_point15_temp.dev_attr.attr,
-	&sensor_dev_attr_pwm1_auto_point16_temp.dev_attr.attr,
-
-	&sensor_dev_attr_pwm1_auto_start_temp.dev_attr.attr,
-	&sensor_dev_attr_pwm1_min.dev_attr.attr,
-	&sensor_dev_attr_pwm1_max.dev_attr.attr,
-
-	&sensor_dev_attr_pwm2_auto_point1_pwm.dev_attr.attr,
-	&sensor_dev_attr_pwm2_auto_point2_pwm.dev_attr.attr,
-	&sensor_dev_attr_pwm2_auto_point3_pwm.dev_attr.attr,
-	&sensor_dev_attr_pwm2_auto_point4_pwm.dev_attr.attr,
-	&sensor_dev_attr_pwm2_auto_point5_pwm.dev_attr.attr,
-	&sensor_dev_attr_pwm2_auto_point6_pwm.dev_attr.attr,
-	&sensor_dev_attr_pwm2_auto_point7_pwm.dev_attr.attr,
-	&sensor_dev_attr_pwm2_auto_point8_pwm.dev_attr.attr,
-	&sensor_dev_attr_pwm2_auto_point9_pwm.dev_attr.attr,
-	&sensor_dev_attr_pwm2_auto_point10_pwm.dev_attr.attr,
-	&sensor_dev_attr_pwm2_auto_point11_pwm.dev_attr.attr,
-	&sensor_dev_attr_pwm2_auto_point12_pwm.dev_attr.attr,
-	&sensor_dev_attr_pwm2_auto_point13_pwm.dev_attr.attr,
-	&sensor_dev_attr_pwm2_auto_point14_pwm.dev_attr.attr,
-	&sensor_dev_attr_pwm2_auto_point15_pwm.dev_attr.attr,
-	&sensor_dev_attr_pwm2_auto_point16_pwm.dev_attr.attr,
-
-	&sensor_dev_attr_pwm2_auto_point1_temp.dev_attr.attr,
-	&sensor_dev_attr_pwm2_auto_point2_temp.dev_attr.attr,
-	&sensor_dev_attr_pwm2_auto_point3_temp.dev_attr.attr,
-	&sensor_dev_attr_pwm2_auto_point4_temp.dev_attr.attr,
-	&sensor_dev_attr_pwm2_auto_point5_temp.dev_attr.attr,
-	&sensor_dev_attr_pwm2_auto_point6_temp.dev_attr.attr,
-	&sensor_dev_attr_pwm2_auto_point7_temp.dev_attr.attr,
-	&sensor_dev_attr_pwm2_auto_point8_temp.dev_attr.attr,
-	&sensor_dev_attr_pwm2_auto_point9_temp.dev_attr.attr,
-	&sensor_dev_attr_pwm2_auto_point10_temp.dev_attr.attr,
-	&sensor_dev_attr_pwm2_auto_point11_temp.dev_attr.attr,
-	&sensor_dev_attr_pwm2_auto_point12_temp.dev_attr.attr,
-	&sensor_dev_attr_pwm2_auto_point13_temp.dev_attr.attr,
-	&sensor_dev_attr_pwm2_auto_point14_temp.dev_attr.attr,
-	&sensor_dev_attr_pwm2_auto_point15_temp.dev_attr.attr,
-	&sensor_dev_attr_pwm2_auto_point16_temp.dev_attr.attr,
-	&sensor_dev_attr_pwm2_auto_start_temp.dev_attr.attr,
-	&sensor_dev_attr_pwm2_min.dev_attr.attr,
-	&sensor_dev_attr_pwm2_max.dev_attr.attr,
-	NULL,
-};
-
 static umode_t d5next_auto_pwm_is_visible(struct kobject *kobj, struct attribute *attr, int index)
 {
 	/* these settings are always visible, they exist on every d5next */
 	return attr->mode;
 }
-
-static const struct attribute_group d5next_group_auto_pwm = {.attrs = d5next_attributes_auto_pwm, .is_visible = d5next_auto_pwm_is_visible,};
 
 static umode_t d5next_is_visible(const void *data, enum hwmon_sensor_types type, u32 attr, int channel)
 {
@@ -980,6 +854,8 @@ static const struct hwmon_chip_info d5next_chip_info = {
 static int d5next_raw_event(struct hid_device *hdev, struct hid_report *report, u8 *data, int size)
 {
 	struct d5next_data *priv;
+	/* Info provided with every sensor report */
+	struct d5next_raw_event_data *event_data = (struct d5next_raw_event_data *)data;
 
 	if(report->id != INTERRUPT_STATUS_REPORT_ID)
 		return 0;
@@ -988,16 +864,13 @@ static int d5next_raw_event(struct hid_device *hdev, struct hid_report *report, 
 
 	priv = hid_get_drvdata(hdev);
 
-	/* Info provided with every sensor report */
-	struct d5next_raw_event_data *event_data = (struct d5next_raw_event_data *)data;
-
 	priv->serial_number[0] = ntohs(event_data->serial_number[0]);
 	priv->serial_number[1] = ntohs(event_data->serial_number[1]);
 
 	priv->firmware_version = ntohs(event_data->firmware_version);
 	priv->power_cycles = ntohs(event_data->power_cycles);
-	/* Sensor readings */
 
+	/* Sensor readings */
 	priv->temp_input = ntohs(event_data->coolant_temp) * 10;
 	/*
 	 * NOTE! The driver uses fan = index 0 / pump = index 1 internally.
@@ -1111,6 +984,164 @@ static void d5next_debugfs_init(struct d5next_data *priv)
 }
 
 #endif
+
+
+static SENSOR_DEVICE_ATTR_2(pwm1_auto_point1_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm, 0, 0);
+static SENSOR_DEVICE_ATTR_2(pwm1_auto_point1_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp, 0, 0);
+static SENSOR_DEVICE_ATTR_2(pwm1_auto_point2_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm, 0, 1);
+static SENSOR_DEVICE_ATTR_2(pwm1_auto_point2_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp, 0, 1);
+static SENSOR_DEVICE_ATTR_2(pwm1_auto_point3_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm, 0, 2);
+static SENSOR_DEVICE_ATTR_2(pwm1_auto_point3_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp, 0, 2);
+static SENSOR_DEVICE_ATTR_2(pwm1_auto_point4_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm, 0, 3);
+static SENSOR_DEVICE_ATTR_2(pwm1_auto_point4_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp, 0, 3);
+static SENSOR_DEVICE_ATTR_2(pwm1_auto_point5_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm, 0, 4);
+static SENSOR_DEVICE_ATTR_2(pwm1_auto_point5_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp, 0, 4);
+static SENSOR_DEVICE_ATTR_2(pwm1_auto_point6_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm, 0, 5);
+static SENSOR_DEVICE_ATTR_2(pwm1_auto_point6_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp, 0, 5);
+static SENSOR_DEVICE_ATTR_2(pwm1_auto_point7_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm, 0, 6);
+static SENSOR_DEVICE_ATTR_2(pwm1_auto_point7_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp, 0, 6);
+static SENSOR_DEVICE_ATTR_2(pwm1_auto_point8_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm, 0, 7);
+static SENSOR_DEVICE_ATTR_2(pwm1_auto_point8_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp, 0, 7);
+static SENSOR_DEVICE_ATTR_2(pwm1_auto_point9_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm, 0, 8);
+static SENSOR_DEVICE_ATTR_2(pwm1_auto_point9_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp, 0, 8);
+static SENSOR_DEVICE_ATTR_2(pwm1_auto_point10_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm, 0, 9);
+static SENSOR_DEVICE_ATTR_2(pwm1_auto_point10_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp, 0, 9);
+static SENSOR_DEVICE_ATTR_2(pwm1_auto_point11_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm, 0, 10);
+static SENSOR_DEVICE_ATTR_2(pwm1_auto_point11_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp, 0, 10);
+static SENSOR_DEVICE_ATTR_2(pwm1_auto_point12_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm, 0, 11);
+static SENSOR_DEVICE_ATTR_2(pwm1_auto_point12_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp, 0, 11);
+static SENSOR_DEVICE_ATTR_2(pwm1_auto_point13_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm, 0, 12);
+static SENSOR_DEVICE_ATTR_2(pwm1_auto_point13_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp, 0, 12);
+static SENSOR_DEVICE_ATTR_2(pwm1_auto_point14_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm, 0, 13);
+static SENSOR_DEVICE_ATTR_2(pwm1_auto_point14_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp, 0, 13);
+static SENSOR_DEVICE_ATTR_2(pwm1_auto_point15_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm, 0, 14);
+static SENSOR_DEVICE_ATTR_2(pwm1_auto_point15_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp, 0, 14);
+static SENSOR_DEVICE_ATTR_2(pwm1_auto_point16_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm, 0, 15);
+static SENSOR_DEVICE_ATTR_2(pwm1_auto_point16_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp, 0, 15);
+
+static SENSOR_DEVICE_ATTR_2(pwm1_auto_start_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp, 0, CURVE_CONTROL_STARTING_TEMPERATURE);
+static SENSOR_DEVICE_ATTR_2(pwm1_min, 0644, d5next_get_pwm_setting, d5next_set_auto_temp, 0, CURVE_CONTROL_MIN_PWM);
+static SENSOR_DEVICE_ATTR_2(pwm1_max, 0644, d5next_get_pwm_setting, d5next_set_auto_temp, 0, CURVE_CONTROL_MAX_PWM);
+
+static SENSOR_DEVICE_ATTR_2(pwm2_auto_point1_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  1, 0);
+static SENSOR_DEVICE_ATTR_2(pwm2_auto_point1_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  1, 0);
+static SENSOR_DEVICE_ATTR_2(pwm2_auto_point2_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  1, 1);
+static SENSOR_DEVICE_ATTR_2(pwm2_auto_point2_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  1, 1);
+static SENSOR_DEVICE_ATTR_2(pwm2_auto_point3_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  1, 2);
+static SENSOR_DEVICE_ATTR_2(pwm2_auto_point3_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  1, 2);
+static SENSOR_DEVICE_ATTR_2(pwm2_auto_point4_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  1, 3);
+static SENSOR_DEVICE_ATTR_2(pwm2_auto_point4_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  1, 3);
+static SENSOR_DEVICE_ATTR_2(pwm2_auto_point5_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  1, 4);
+static SENSOR_DEVICE_ATTR_2(pwm2_auto_point5_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  1, 4);
+static SENSOR_DEVICE_ATTR_2(pwm2_auto_point6_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  1, 5);
+static SENSOR_DEVICE_ATTR_2(pwm2_auto_point6_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  1, 5);
+static SENSOR_DEVICE_ATTR_2(pwm2_auto_point7_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  1, 6);
+static SENSOR_DEVICE_ATTR_2(pwm2_auto_point7_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  1, 6);
+static SENSOR_DEVICE_ATTR_2(pwm2_auto_point8_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  1, 7);
+static SENSOR_DEVICE_ATTR_2(pwm2_auto_point8_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  1, 7);
+static SENSOR_DEVICE_ATTR_2(pwm2_auto_point9_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  1, 8);
+static SENSOR_DEVICE_ATTR_2(pwm2_auto_point9_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  1, 8);
+static SENSOR_DEVICE_ATTR_2(pwm2_auto_point10_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  1, 9);
+static SENSOR_DEVICE_ATTR_2(pwm2_auto_point10_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  1, 9);
+static SENSOR_DEVICE_ATTR_2(pwm2_auto_point11_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  1, 10);
+static SENSOR_DEVICE_ATTR_2(pwm2_auto_point11_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  1, 10);
+static SENSOR_DEVICE_ATTR_2(pwm2_auto_point12_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  1, 11);
+static SENSOR_DEVICE_ATTR_2(pwm2_auto_point12_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  1, 11);
+static SENSOR_DEVICE_ATTR_2(pwm2_auto_point13_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  1, 12);
+static SENSOR_DEVICE_ATTR_2(pwm2_auto_point13_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  1, 12);
+static SENSOR_DEVICE_ATTR_2(pwm2_auto_point14_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  1, 13);
+static SENSOR_DEVICE_ATTR_2(pwm2_auto_point14_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  1, 13);
+static SENSOR_DEVICE_ATTR_2(pwm2_auto_point15_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  1, 14);
+static SENSOR_DEVICE_ATTR_2(pwm2_auto_point15_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  1, 14);
+static SENSOR_DEVICE_ATTR_2(pwm2_auto_point16_pwm, 0644, d5next_get_pwm_setting, d5next_set_auto_pwm,  1, 15);
+static SENSOR_DEVICE_ATTR_2(pwm2_auto_point16_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp,  1, 15);
+
+static SENSOR_DEVICE_ATTR_2(pwm2_auto_start_temp, 0644, d5next_get_auto_temp, d5next_set_auto_temp, 1, CURVE_CONTROL_STARTING_TEMPERATURE);
+static SENSOR_DEVICE_ATTR_2(pwm2_min, 0644, d5next_get_pwm_setting, d5next_set_auto_temp, 1, CURVE_CONTROL_MIN_PWM);
+static SENSOR_DEVICE_ATTR_2(pwm2_max, 0644, d5next_get_pwm_setting, d5next_set_auto_temp, 1, CURVE_CONTROL_MAX_PWM);
+
+static struct attribute *d5next_attributes_auto_pwm[] = {
+	&sensor_dev_attr_pwm1_auto_point1_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point2_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point3_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point4_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point5_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point6_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point7_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point8_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point9_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point10_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point11_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point12_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point13_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point14_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point15_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point16_pwm.dev_attr.attr,
+
+	&sensor_dev_attr_pwm1_auto_point1_temp.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point2_temp.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point3_temp.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point4_temp.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point5_temp.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point6_temp.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point7_temp.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point8_temp.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point9_temp.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point10_temp.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point11_temp.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point12_temp.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point13_temp.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point14_temp.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point15_temp.dev_attr.attr,
+	&sensor_dev_attr_pwm1_auto_point16_temp.dev_attr.attr,
+
+	&sensor_dev_attr_pwm1_auto_start_temp.dev_attr.attr,
+	&sensor_dev_attr_pwm1_min.dev_attr.attr,
+	&sensor_dev_attr_pwm1_max.dev_attr.attr,
+
+	&sensor_dev_attr_pwm2_auto_point1_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point2_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point3_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point4_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point5_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point6_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point7_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point8_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point9_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point10_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point11_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point12_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point13_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point14_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point15_pwm.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point16_pwm.dev_attr.attr,
+
+	&sensor_dev_attr_pwm2_auto_point1_temp.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point2_temp.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point3_temp.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point4_temp.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point5_temp.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point6_temp.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point7_temp.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point8_temp.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point9_temp.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point10_temp.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point11_temp.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point12_temp.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point13_temp.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point14_temp.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point15_temp.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_point16_temp.dev_attr.attr,
+	&sensor_dev_attr_pwm2_auto_start_temp.dev_attr.attr,
+	&sensor_dev_attr_pwm2_min.dev_attr.attr,
+	&sensor_dev_attr_pwm2_max.dev_attr.attr,
+	NULL,
+};
+
+static const struct attribute_group d5next_group_auto_pwm = {
+	.attrs = d5next_attributes_auto_pwm,
+	.is_visible = d5next_auto_pwm_is_visible,
+};
 
 static int d5next_probe(struct hid_device *hdev, const struct hid_device_id *id)
 {
