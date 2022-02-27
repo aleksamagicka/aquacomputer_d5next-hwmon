@@ -138,7 +138,7 @@ struct fan_properties {
 	u16 min_pwm; /* r/w, expressed in big-endian as percent */
 	u16 max_pwm; /* r/w, expressed in big-endian as percent */
 	u16 fallback_pwm; /* expressed in big-endian as percent, purpose currently unclear */
-	u16 max_speed; /* expressed in big-endian as RPM, not sure if r/w */
+	u16 max_speed; /* expressed in big-endian as RPM. R/W. Purpose unclear. */
 } __attribute__((packed)); /* size = 9 */
 
 enum fan_control_mode {
@@ -224,23 +224,13 @@ struct d5next_control_data {
 #define STATUS_REPORT_SIZE	sizeof(struct d5next_control_data)  /* 809 */
 
 struct d5next_alarms {
-	/*
-	public bool VCC12 => (_alarms & 1L) != 0L;
-	public bool VCC5 => (_alarms & 2L) != 0L;
-	public bool FanShortCircuit => (_alarms & 4L) != 0L;
-	public bool FanOverCurrent => (_alarms & 8L) != 0L;
-	public bool PumpSpeed => (_alarms & 0x10L) != 0L;
-	public bool Flow => (_alarms & 0x100L) != 0L;
-	public bool TemperatureWater => (_alarms & 0x200L) != 0L;
-	public bool FanSpeed => (_alarms & 0x400L) != 0L;
-	*/
-	bool vcc12;
-	bool vcc5;
-	bool fan_short_circuit;
-	bool fan_over_current;
-	bool pump_speed;
-	bool water_temperature;
-	bool fan_speed;
+	bool vcc12; //(alarms & 1L)
+	bool vcc5; //(alarms & 2L)
+	bool fan_short_circuit; //(alarms & 4L)
+	bool fan_over_current; //(alarms & 8L)
+	bool pump_speed; //(alarms & 0x10L)
+	bool water_temperature; //(alarms & 0x200L)
+	bool fan_speed; //(alarms & 0x400L)
 };
 
 static void update_alarms(struct d5next_alarms* alarms, u32 data) {
@@ -249,8 +239,8 @@ static void update_alarms(struct d5next_alarms* alarms, u32 data) {
 	alarms->fan_short_circuit = (data & BIT(2)) != 0;
 	alarms->fan_over_current = (data & BIT(3)) != 0;
 	alarms->pump_speed = (data & BIT(4)) != 0;
-	alarms->water_temperature = (data & BIT(5)) != 0;
-	alarms->fan_speed = (data & BIT(6)) != 0;
+	alarms->water_temperature = (data & BIT(9)) != 0;
+	alarms->fan_speed = (data & BIT(10)) != 0;
 }
 
 struct d5next_data {
@@ -699,10 +689,7 @@ unlock_and_return:
 /* todo pull the curve data functions into this somehow */
 static int d5next_read(struct device *dev, enum hwmon_sensor_types type, u32 attr, int channel, long *val)
 {
-	/*
-	 * deferring translation of channel value
-	 * to called functions inside the switch
-	 */
+	/* deferring translation of channel value to called functions inside the switch */
 	int ret = 0;
 	struct d5next_data *priv = dev_get_drvdata(dev);
 
@@ -760,33 +747,39 @@ static int d5next_read_string(struct device *dev, enum hwmon_sensor_types type, 
 	return 0;
 }
 
-static int d5next_set_pwm_setpoint(struct device *dev, enum d5next_ctrl_channel channel, long val)
+static int d5next_set_pwm(struct device *dev, enum d5next_ctrl_channel channel, u32 attr, long val)
 {
-	int ret;
 	struct d5next_data *priv = dev_get_drvdata(dev);
 	if (!fan_channel_is_valid(channel))
 		return -ENOENT;
-	if (val < 0 || val > 255)
-		return -EINVAL;
 
-	val = d5next_pwm_to_percent(val);
-
-	/* TODO: Ensure that the pump is configured to use fan ctrl out, and not flow sensor in! */
-	ret = d5next_set_u16_val(dev, &(priv->buffer->fan_ctrl[channel].manual_setpoint), val);
-	return ret;
+	switch (attr) {
+		case hwmon_pwm_input:
+			if (val < 0 || val > 255)
+				return -EINVAL;
+			val = d5next_pwm_to_percent(val);
+			/* TODO: Ensure that the pump is configured to use fan ctrl out, and not flow sensor in! */
+			return d5next_set_u16_val(dev, &(priv->buffer->fan_ctrl[channel].manual_setpoint), val);
+		case hwmon_pwm_enable:
+			if (val < FAN_CONTROL_MANUAL || val > FAN_CONTROL_CURVE)
+				return -EINVAL;
+			return d5next_set_u8_val(dev, &(priv->buffer->fan_ctrl[channel].mode), val);
+		default:
+			return -EOPNOTSUPP;
+	}
 }
 
-static int d5next_set_pwm_enable(struct device *dev, enum d5next_ctrl_channel channel, long val)
+static int d5next_set_fan(struct device *dev, enum d5next_ctrl_channel channel, u32 attr, long val)
 {
-	int ret;
 	struct d5next_data *priv = dev_get_drvdata(dev);
 	if (!fan_channel_is_valid(channel))
 		return -ENOENT;
-	if (val < FAN_CONTROL_MANUAL || val > FAN_CONTROL_CURVE)
-		return -EINVAL;
-
-	ret = d5next_set_u8_val(dev, &(priv->buffer->fan_ctrl[channel].mode), val);
-	return ret;
+	switch (attr) {
+		case hwmon_fan_max:
+			return d5next_set_u16_val(dev, &(priv->buffer->fan_properties[channel].max_speed), val);
+		default:
+			return -EOPNOTSUPP;
+	}
 }
 
 static int d5next_write(struct device *dev, enum hwmon_sensor_types type, u32 attr, int channel, long val)
@@ -794,20 +787,13 @@ static int d5next_write(struct device *dev, enum hwmon_sensor_types type, u32 at
 	switch (type) {
 		case hwmon_pwm:
 			channel = d5next_userspace_to_internal_channel(channel);
-			switch (attr) {
-				case hwmon_pwm_input:
-					return d5next_set_pwm_setpoint(dev, channel, val);
-				case hwmon_pwm_enable:
-					return d5next_set_pwm_enable(dev, channel, val);
-				default:
-					break;
-			}
-			break;
+			return d5next_set_pwm(dev, channel, attr, val);
+		case hwmon_fan:
+			channel = d5next_userspace_to_internal_channel(channel);
+			return d5next_set_fan(dev, channel, attr, val);
 		default:
-			break;
+			return -EOPNOTSUPP;
 	}
-
-	return -EOPNOTSUPP;
 }
 
 static const struct hwmon_ops d5next_hwmon_ops = {
@@ -893,6 +879,7 @@ static int d5next_raw_event(struct hid_device *hdev, struct hid_report *report, 
 	priv->voltage_input[0] = ntohs(event_data->pump.voltage) * 10;
 	priv->voltage_input[1] = ntohs(event_data->fan.voltage) * 10;
 	priv->voltage_input[2] = ntohs(event_data->vbus) * 10;
+	/* todo we can technically also report event_data->vcc_12 and event_data->vcc_aquabus, but does anyone care? */
 
 	priv->current_input[0] = ntohs(event_data->pump.current_ma);
 	priv->current_input[1] = ntohs(event_data->fan.current_ma);
