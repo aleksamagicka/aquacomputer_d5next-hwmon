@@ -244,7 +244,6 @@ struct d5next_alarms {
 };
 
 static void update_alarms(struct d5next_alarms* alarms, u32 data) {
-	pr_warn("alarms: %x", data);
 	alarms->vcc12 = (data & BIT(0)) != 0;
 	alarms->vcc5 = (data & BIT(1)) != 0;
 	alarms->fan_short_circuit = (data & BIT(2)) != 0;
