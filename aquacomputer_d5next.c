@@ -567,8 +567,16 @@ static umode_t d5next_is_visible(const void *data, enum hwmon_sensor_types type,
 		case hwmon_pwm:
 			switch (attr) {
 				case hwmon_pwm_enable:
-					return 0644;
 				case hwmon_pwm_input:
+					return 0644;
+				default:
+					break;
+			}
+			break;
+		case hwmon_temp:
+			switch (attr) {
+				case hwmon_temp_max:
+				case hwmon_temp_offset:
 					return 0644;
 				default:
 					break;
@@ -653,7 +661,6 @@ unlock_and_return:
 	mutex_unlock(&priv->mutex);
 	return ret;
 }
-
 
 static int d5next_read_temp(struct device *dev, u32 attr, long *val)
 {
@@ -782,6 +789,19 @@ static int d5next_set_fan(struct device *dev, enum d5next_ctrl_channel channel, 
 	}
 }
 
+static int d5next_set_temp(struct device *dev, u32 attr, long val)
+{
+	struct d5next_data *priv = dev_get_drvdata(dev);
+	switch (attr) {
+		case hwmon_temp_max:
+			return d5next_set_u16_val(dev, &(priv->buffer->water_temp_alarm_limit), val / 10);
+		case hwmon_temp_offset:
+			return d5next_set_u16_val(dev, &(priv->buffer->temp_sensor_offset), val / 10);
+		default:
+			return -EOPNOTSUPP;
+	}
+}
+
 static int d5next_write(struct device *dev, enum hwmon_sensor_types type, u32 attr, int channel, long val)
 {
 	switch (type) {
@@ -791,6 +811,10 @@ static int d5next_write(struct device *dev, enum hwmon_sensor_types type, u32 at
 		case hwmon_fan:
 			channel = d5next_userspace_to_internal_channel(channel);
 			return d5next_set_fan(dev, channel, attr, val);
+		case hwmon_temp:
+			if (channel != 0)
+				return -EOPNOTSUPP;
+			return d5next_set_temp(dev, attr, val);
 		default:
 			return -EOPNOTSUPP;
 	}
