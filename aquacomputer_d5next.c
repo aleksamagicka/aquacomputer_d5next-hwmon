@@ -30,8 +30,6 @@
 #define CMD_SAVE_SETTINGS		0x02
 #define STATUS_UPDATE_INTERVAL		(2 * HZ) /* In seconds */
 
-#define SECONDARY_STATUS_REPORT_SIZE 0xB
-
 /* Start index and length of the part of the report that gets checksummed */
 #define STATUS_REPORT_CHECKSUM_START	0x01
 #define STATUS_REPORT_CHECKSUM_LENGTH	0x326
@@ -89,11 +87,11 @@ struct d5next_raw_event_data {
 	struct {
 		u16 fan;	//0x77
 		u16 pump;	//0x79
-	} setpoints;
-	u8 pad6[14];
+	} setpoints __attribute__((packed));
+	u16 pad6[7];
 	u16 flow_cal_progress;
 	u32 alarms[2];
-
+	u8 current_profile;
 } __attribute__((packed));
 
 /* Labels for provided values */
@@ -243,6 +241,29 @@ static void update_alarms(struct d5next_alarms* alarms, u32 data) {
 	alarms->fan_speed = (data & BIT(10)) != 0;
 }
 
+enum d5next_alarm_config_index {
+	ALARM_CFG_FLOW_0 = 0x0,
+	ALARM_CFG_FLOW_1 = 0x1,
+	ALARM_CFG_WATER_TEMP = 0x2,
+	ALARM_CFG_FAN_RPM = 0x3,
+	ALARM_CFG_BLINK_LED = 0xe,
+	ALARM_CFG_BUZZER = 0xf,
+};
+
+static bool alarm_config_index_is_valid(enum d5next_alarm_config_index x) {
+	switch(x) {
+		case ALARM_CFG_FLOW_0:
+		case ALARM_CFG_FLOW_1:
+		case ALARM_CFG_WATER_TEMP:
+		case ALARM_CFG_FAN_RPM:
+		case ALARM_CFG_BLINK_LED:
+		case ALARM_CFG_BUZZER:
+			return true;
+		default:
+			return false;
+	}
+}
+
 struct d5next_data {
 	struct hid_device *hdev;
 	struct device *hwmon_dev;
@@ -259,7 +280,7 @@ struct d5next_data {
 	u32 serial_number[2];
 	u16 firmware_version;
 	u32 power_cycles; /* How many times the device was powered on */
-	struct d5next_alarms alarms;
+	struct d5next_alarms alarms; /* current active alarms */
 	unsigned long updated;
 };
 
@@ -309,7 +330,7 @@ static u16 d5next_pwm_to_percent(u8 x)
 	return DIV_ROUND_CLOSEST(x * 100 * 100, 255);
 }
 
-static long d5next_temp_to_hwmon_temp(s32 x) {
+static s32 d5next_temp_to_hwmon_temp(s32 x) {
 	return ntohs(x) * 10;
 }
 
@@ -339,6 +360,8 @@ static int d5next_get_ctrl_data(struct device *dev)
 static u8 cmd_save_settings_to_flash[] = {
 	0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x34, 0xC6
 };
+
+#define SECONDARY_STATUS_REPORT_SIZE sizeof(cmd_save_settings_to_flash)
 
 /* Note: Expects the mutex to be locked! */
 static int d5next_send_ctrl_data(struct d5next_data *priv)
@@ -844,11 +867,12 @@ static int d5next_set_fan(struct device *dev, enum d5next_ctrl_channel channel, 
 static int d5next_set_temp(struct device *dev, u32 attr, long val)
 {
 	struct d5next_data *priv = dev_get_drvdata(dev);
+	val = d5next_temp_from_hwmon_temp(val);
 	switch (attr) {
 		case hwmon_temp_max:
-			return d5next_set_u16_val(dev, &(priv->buffer->water_temp_alarm_limit), val / 10);
+			return d5next_set_u16_val(dev, &(priv->buffer->water_temp_alarm_limit), val);
 		case hwmon_temp_offset:
-			return d5next_set_u16_val(dev, &(priv->buffer->temp_sensor_offset), val / 10);
+			return d5next_set_u16_val(dev, &(priv->buffer->temp_sensor_offset), val);
 		default:
 			return -EOPNOTSUPP;
 	}
@@ -1002,25 +1026,12 @@ DEFINE_SHOW_ATTRIBUTE(power_cycles);
 static int raw_buffer_show(struct seq_file *seqf, void *unused)
 {
 	struct d5next_data *priv = seqf->private;
-
 	int i;
-	int temp;
-	int power;
 
 	for (i = 0; i < sizeof(struct d5next_control_data); i++) {
 		seq_printf(seqf, "%02x ", ((u8 *) (priv->buffer))[i]);
 		if ((i + 1) % 16 == 0)
 			seq_printf(seqf, "\n");
-	}
-
-	seq_printf(seqf, "\n");
-	seq_printf(seqf, "fan1 setpt: %d\n", ntohs(((struct d5next_control_data *) priv->buffer)->fan_ctrl[0].manual_setpoint));
-	seq_printf(seqf, "pump setpt: %d\n", ntohs(((struct d5next_control_data *) priv->buffer)->fan_ctrl[1].manual_setpoint));
-	seq_printf(seqf, "crc: %x\n", ntohs(((struct d5next_control_data *) priv->buffer)->crc));
-	for (i = 0; i < CURVE_CONTROL_POINT_AMOUNT; i++) {
-		temp = ntohs(((struct d5next_control_data *) priv->buffer)->fan_ctrl[0].curve.temps[i]);
-		power = ntohs(((struct d5next_control_data *) priv->buffer)->fan_ctrl[0].curve.powers[i]);
-		seq_printf(seqf, "fan1 curve: temp %x power %x\n", temp, power);
 	}
 
 	return 0;
