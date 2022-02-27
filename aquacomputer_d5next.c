@@ -216,7 +216,7 @@ struct d5next_control_data {
 	u8 padding2[565];
 	u16 alarm_flags;
 	u16 flow_limit;
-	u16 water_temp_alarm_limit;
+	s16 water_temp_alarm_limit;
 	u8 profile_id;
 	u16 crc;
 } __attribute__((packed));
@@ -285,7 +285,7 @@ static bool curve_point_is_valid(u8 idx)
 	}
 }
 
-	static int d5next_percent_to_pwm(u16 x)
+static int d5next_percent_to_pwm(u16 x)
 {
 	/*
 	 * hwmon expresses PWM settings as a u8.
@@ -307,6 +307,15 @@ static u16 d5next_pwm_to_percent(u8 x)
 	 * Also see the explanation in d5next_percent_to_pwm
 	 */
 	return DIV_ROUND_CLOSEST(x * 100 * 100, 255);
+}
+
+static long d5next_temp_to_hwmon_temp(s32 x) {
+	return ntohs(x) * 10;
+}
+
+static s16 d5next_temp_from_hwmon_temp(long x) {
+	/* no ntohs() because d5next_set_val does that for us */
+	return DIV_ROUND_CLOSEST(x, 10);
 }
 
 /* Note: Expects the mutex to be locked! */
@@ -512,8 +521,7 @@ static ssize_t d5next_set_auto_temp(struct device *dev, struct device_attribute 
 		return -EINVAL;
 
 	/* pump wants values in centi-degrees Celsius, hwmon uses mdegC */
-	val = DIV_ROUND_CLOSEST(val, 10);
-
+	val = d5next_temp_from_hwmon_temp(val);
 	if (idx == CURVE_CONTROL_STARTING_TEMPERATURE)
 		to_set = &(priv->buffer->fan_ctrl[channel].curve.start_temp);
 	else
@@ -675,13 +683,13 @@ static int d5next_read_temp(struct device *dev, u32 attr, long *val)
 			*val = priv->temp_input;
 			break;
 		case hwmon_temp_offset:
-			*val = ntohs(priv->buffer->temp_sensor_offset) * 10;
+			*val = d5next_temp_to_hwmon_temp(priv->buffer->temp_sensor_offset);
 			break;
 		case hwmon_temp_max_alarm:
-			*val = ntohs(priv->alarms.water_temperature);
+			*val = priv->alarms.water_temperature;
 			break;
 		case hwmon_temp_max:
-			*val = ntohs(priv->buffer->water_temp_alarm_limit) * 10;
+			*val = d5next_temp_to_hwmon_temp(priv->buffer->water_temp_alarm_limit);
 			break;
 		default:
 			ret = -ENODATA;
@@ -881,7 +889,7 @@ static int d5next_raw_event(struct hid_device *hdev, struct hid_report *report, 
 	priv->power_cycles = ntohs(event_data->power_cycles);
 
 	/* Sensor readings */
-	priv->temp_input = ntohs(event_data->coolant_temp) * 10;
+	priv->temp_input = d5next_temp_to_hwmon_temp(event_data->coolant_temp);
 	/*
 	 * NOTE! The driver uses fan = index 0 / pump = index 1 internally.
 	 * However, we report the pump as [pwm|fan]_1 and the fan as [pwm|fan]_2 to userspace.
