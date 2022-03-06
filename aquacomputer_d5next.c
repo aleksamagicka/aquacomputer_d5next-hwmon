@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0+
 /*
- * hwmon driver for Aquacomputer D5 Next watercooling pump
+ * hwmon driver for Aquacomputer devices (D5 Next, Farbwerk 360)
  *
- * The D5 Next sends HID reports (with ID 0x01) every second to report sensor values
+ * Aquacomputer devices send HID reports (with ID 0x01) every second to report sensor values
  * (coolant temperature, pump and fan speed, voltage, current and power). This driver
  * also allows controlling the pump and fan speed via PWM.
  *
@@ -10,7 +10,7 @@
  * Copyright 2022 Jack Doan <me@jackdoan.com>
  */
 
-#include <asm/unaligned.h>
+
 #include <linux/byteorder/generic.h>
 #include <linux/crc16.h>
 #include <linux/debugfs.h>
@@ -22,11 +22,23 @@
 #include <linux/mutex.h>
 #include <linux/stddef.h>
 #include <linux/seq_file.h>
+#include <asm/unaligned.h>
 
-#define DRIVER_NAME "aquacomputer-d5next"
+#define USB_VENDOR_ID_AQUACOMPUTER	0x0c70
+#define USB_PRODUCT_ID_D5NEXT		0xf00e
+#define USB_PRODUCT_ID_FARBWERK360	0xf010
+
+enum kinds { d5next, farbwerk360 };
+
+static const char *const aqc_device_names[] = {
+	[d5next] = "d5next",
+	[farbwerk360] = "farbwerk360"
+};
+
+#define DRIVER_NAME			"aquacomputer_d5next"
 
 #define INTERRUPT_STATUS_REPORT_ID	0x01
-#define CMD_WRITE_SETTINGS		0x03
+#define CMD_DEVICE_SETTINGS		0x03
 #define CMD_SAVE_SETTINGS		0x02
 #define STATUS_UPDATE_INTERVAL		(2 * HZ) /* In seconds */
 
@@ -97,38 +109,33 @@ struct d5next_raw_event_data {
 /* Labels for provided values */
 #define L_COOLANT_TEMP		"Coolant temp"
 
-#define L_PUMP_SPEED		"Pump speed"
-#define L_FAN_SPEED		"Fan speed"
-
-#define L_PUMP_POWER		"Pump power"
-#define L_FAN_POWER		"Fan power"
-
-#define L_PUMP_VOLTAGE		"Pump voltage"
-#define L_FAN_VOLTAGE		"Fan voltage"
-#define L_5V_VOLTAGE		"+5V voltage"
-
-#define L_PUMP_CURRENT		"Pump current"
-#define L_FAN_CURRENT		"Fan current"
-
 static const char *const label_speeds[] = {
-	L_PUMP_SPEED,
-	L_FAN_SPEED,
+	"Pump speed",
+	"Fan speed"
 };
 
 static const char *const label_power[] = {
-	L_PUMP_POWER,
-	L_FAN_POWER,
+	"Pump power",
+	"Fan power"
 };
 
 static const char *const label_voltages[] = {
-	L_PUMP_VOLTAGE,
-	L_FAN_VOLTAGE,
-	L_5V_VOLTAGE,
+	"Pump voltage",
+	"Fan voltage",
+	"+5V voltage"
 };
 
 static const char *const label_current[] = {
-	L_PUMP_CURRENT,
-	L_FAN_CURRENT,
+	"Pump current",
+	"Fan current"
+};
+
+/* Labels for Farbwerk 360 temperature sensors */
+static const char *const label_temp_sensors[] = {
+	"Sensor 1",
+	"Sensor 2",
+	"Sensor 3",
+	"Sensor 4"
 };
 
 struct fan_properties {
@@ -264,26 +271,73 @@ static bool alarm_config_index_is_valid(enum d5next_alarm_config_index x) {
 	}
 }
 
-struct d5next_data {
+struct aqc_data {
 	struct hid_device *hdev;
 	struct device *hwmon_dev;
 	struct dentry *debugfs;
+	enum kinds kind;
+	const char *name;
 	struct mutex mutex;
+	
+	/* General info, same across all devices */
+	u32 serial_number[2];
+	u16 firmware_version;
+	
 	struct d5next_control_data *buffer;
 	const struct attribute_group *groups[1];
+
+	/* D5 Next specific - how many times the device was powered on */
+	u32 power_cycles;
+	struct d5next_alarms alarms; /* current active alarms */
+
+	/* Sensor values */
 	s32 temp_input;
 	u16 speed_input[USERSPACE_NUM_CHANNELS];
 	u16 speed_setpoint[USERSPACE_NUM_CHANNELS];
 	u32 power_input[2];
 	u16 voltage_input[3];
 	u16 current_input[2];
-	u32 serial_number[2];
-	u16 firmware_version;
-	u32 power_cycles; /* How many times the device was powered on */
-	struct d5next_alarms alarms; /* current active alarms */
+
 	unsigned long updated;
 };
 
+static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u32 attr, int channel)
+{
+	const struct aqc_data *priv = data;
+
+	switch (type) {
+		case hwmon_fan:
+			switch (attr) {
+				case hwmon_fan_max:
+					return 0644;
+				default:
+					break;
+			}
+			break;
+		case hwmon_pwm:
+			switch (attr) {
+				case hwmon_pwm_enable:
+				case hwmon_pwm_input:
+					return 0644;
+				default:
+					break;
+			}
+			break;
+		case hwmon_temp:
+			switch (attr) {
+				case hwmon_temp_max:
+				case hwmon_temp_offset:
+					return 0644;
+				default:
+					break;
+			}
+			break;
+		default:
+			break;
+	}
+
+	return 0444;
+}
 
 static bool fan_channel_is_valid(enum d5next_ctrl_channel channel)
 {
@@ -306,7 +360,7 @@ static bool curve_point_is_valid(u8 idx)
 	}
 }
 
-static int d5next_percent_to_pwm(u16 x)
+static int aqc_percent_to_pwm(u16 x)
 {
 	/*
 	 * hwmon expresses PWM settings as a u8.
@@ -321,7 +375,7 @@ static int d5next_percent_to_pwm(u16 x)
 	return DIV_ROUND_CLOSEST(ntohs(x) * 255, 100 * 100);
 }
 
-static u16 d5next_pwm_to_percent(u8 x)
+static u16 aqc_pwm_to_percent(u8 x)
 {
 	/*
 	 * Convert to 0-100 range, then multiply by 100, since that's what the pump expects
@@ -330,11 +384,11 @@ static u16 d5next_pwm_to_percent(u8 x)
 	return DIV_ROUND_CLOSEST(x * 100 * 100, 255);
 }
 
-static s32 d5next_temp_to_hwmon_temp(s32 x) {
+static s32 aqc_temp_to_hwmon_temp(s32 x) {
 	return ntohs(x) * 10;
 }
 
-static s16 d5next_temp_from_hwmon_temp(long x) {
+static s16 aqc_temp_from_hwmon_temp(long x) {
 	/* no ntohs() because d5next_set_val does that for us */
 	return DIV_ROUND_CLOSEST(x, 10);
 }
@@ -343,10 +397,10 @@ static s16 d5next_temp_from_hwmon_temp(long x) {
 static int d5next_get_ctrl_data(struct device *dev)
 {
 	int ret;
-	struct d5next_data *priv = dev_get_drvdata(dev);
+	struct aqc_data *priv = dev_get_drvdata(dev);
 	/* Request the status report */
 	memset(priv->buffer, 0x00, STATUS_REPORT_SIZE);
-	ret = hid_hw_raw_request(priv->hdev, CMD_WRITE_SETTINGS, (u8 *) (priv->buffer), STATUS_REPORT_SIZE, HID_FEATURE_REPORT, HID_REQ_GET_REPORT);
+	ret = hid_hw_raw_request(priv->hdev, CMD_DEVICE_SETTINGS, (u8 *) (priv->buffer), STATUS_REPORT_SIZE, HID_FEATURE_REPORT, HID_REQ_GET_REPORT);
 	if (ret < 0)
 		ret = -ENODATA;
 	return ret;
@@ -364,7 +418,7 @@ static u8 cmd_save_settings_to_flash[] = {
 #define SECONDARY_STATUS_REPORT_SIZE sizeof(cmd_save_settings_to_flash)
 
 /* Note: Expects the mutex to be locked! */
-static int d5next_send_ctrl_data(struct d5next_data *priv)
+static int d5next_send_ctrl_data(struct aqc_data *priv)
 {
 	int ret;
 	u16 checksum = 0xffff; /* Init value for CRC-16/USB */
@@ -375,7 +429,7 @@ static int d5next_send_ctrl_data(struct d5next_data *priv)
 	put_unaligned_be16(checksum, &(priv->buffer->crc));
 
 	/* Send the patched up report back to the pump */
-	ret = hid_hw_raw_request(priv->hdev, CMD_WRITE_SETTINGS, (u8 *) (priv->buffer), STATUS_REPORT_SIZE, HID_FEATURE_REPORT, HID_REQ_SET_REPORT);
+	ret = hid_hw_raw_request(priv->hdev, CMD_DEVICE_SETTINGS, (u8 *) (priv->buffer), STATUS_REPORT_SIZE, HID_FEATURE_REPORT, HID_REQ_SET_REPORT);
 	if (ret < 0)
 		goto exit;
 
@@ -393,7 +447,7 @@ exit:
 static int d5next_get_val(struct device *dev, void *to_get, void *val, size_t size)
 {
 	int ret;
-	struct d5next_data *priv = dev_get_drvdata(dev);
+	struct aqc_data *priv = dev_get_drvdata(dev);
 
 	mutex_lock(&priv->mutex);
 
@@ -423,7 +477,7 @@ unlock_and_return:
 static int d5next_set_val(struct device *dev, void *to_set, long val, size_t size)
 {
 	int ret;
-	struct d5next_data *priv = dev_get_drvdata(dev);
+	struct aqc_data *priv = dev_get_drvdata(dev);
 
 	mutex_lock(&priv->mutex);
 
@@ -473,7 +527,7 @@ static ssize_t d5next_pwm_setting_show(struct device *dev, struct device_attribu
 	struct sensor_device_attribute_2 *sensor_attr = to_sensor_dev_attr_2(attr);
 	int channel = d5next_userspace_to_internal_channel(sensor_attr->nr);
 	int idx = sensor_attr->index;
-	struct d5next_data *priv = dev_get_drvdata(dev);
+	struct aqc_data *priv = dev_get_drvdata(dev);
 	int ret;
 	void *to_get;
 	u16 val = 0;
@@ -494,7 +548,7 @@ static ssize_t d5next_pwm_setting_show(struct device *dev, struct device_attribu
 	if (ret < 0)
 		return ret;
 
-	ret = sprintf(buf, "%d\n", d5next_percent_to_pwm(val));
+	ret = sprintf(buf, "%d\n", aqc_percent_to_pwm(val));
 	return ret;
 }
 
@@ -503,7 +557,7 @@ static ssize_t d5next_auto_temp_show(struct device *dev, struct device_attribute
 	struct sensor_device_attribute_2 *sensor_attr = to_sensor_dev_attr_2(attr);
 	int channel = d5next_userspace_to_internal_channel(sensor_attr->nr);
 	int idx = sensor_attr->index;
-	struct d5next_data *priv = dev_get_drvdata(dev);
+	struct aqc_data *priv = dev_get_drvdata(dev);
 	int ret;
 	const char fmt[] = "%d0\n"; /* slap a 0 on the end of the reading to go from centi-degrees to milli-degrees */
 	void *to_get;
@@ -531,7 +585,7 @@ static ssize_t d5next_auto_temp_store(struct device *dev, struct device_attribut
 	struct sensor_device_attribute_2 *sensor_attr = to_sensor_dev_attr_2(attr);
 	int channel = d5next_userspace_to_internal_channel(sensor_attr->nr);
 	int idx = sensor_attr->index;
-	struct d5next_data *priv = dev_get_drvdata(dev);
+	struct aqc_data *priv = dev_get_drvdata(dev);
 	u16 * to_set;
 	int ret;
 	long val;
@@ -544,7 +598,7 @@ static ssize_t d5next_auto_temp_store(struct device *dev, struct device_attribut
 		return -EINVAL;
 
 	/* pump wants values in centi-degrees Celsius, hwmon uses mdegC */
-	val = d5next_temp_from_hwmon_temp(val);
+	val = aqc_temp_from_hwmon_temp(val);
 	if (idx == CURVE_CONTROL_STARTING_TEMPERATURE)
 		to_set = &(priv->buffer->fan_ctrl[channel].curve.start_temp);
 	else
@@ -559,7 +613,7 @@ static ssize_t d5next_pwm_setting_store(struct device *dev, struct device_attrib
 	struct sensor_device_attribute_2 *sensor_attr = to_sensor_dev_attr_2(attr);
 	int channel = d5next_userspace_to_internal_channel(sensor_attr->nr);
 	int idx = sensor_attr->index;
-	struct d5next_data *priv = dev_get_drvdata(dev);
+	struct aqc_data *priv = dev_get_drvdata(dev);
 	long val;
 
 	if (!fan_channel_is_valid(channel))
@@ -571,7 +625,7 @@ static ssize_t d5next_pwm_setting_store(struct device *dev, struct device_attrib
 	if (val < 0 || val > 255)
 		return -EINVAL;
 
-	val = d5next_pwm_to_percent(val);
+	val = aqc_pwm_to_percent(val);
 
 	return d5next_set_u16_val(dev, &(priv->buffer->fan_ctrl[channel].curve.powers[idx]), val);
 }
@@ -581,7 +635,7 @@ static ssize_t d5next_alarm_config_show(struct device *dev, struct device_attrib
 	int ret;
 	u16 val;
 	int alarm_config_bit = to_sensor_dev_attr(attr)->index;
-	struct d5next_data *priv = dev_get_drvdata(dev);
+	struct aqc_data *priv = dev_get_drvdata(dev);
 
 	if (!alarm_config_index_is_valid(alarm_config_bit))
 		return -ENOENT;
@@ -598,7 +652,7 @@ static ssize_t d5next_alarm_config_store(struct device *dev, struct device_attri
 	int ret;
 	u16 val;
 	int alarm_config_bit = to_sensor_dev_attr(attr)->index;
-	struct d5next_data *priv = dev_get_drvdata(dev);
+	struct aqc_data *priv = dev_get_drvdata(dev);
 	unsigned long to_set;
 
 	if (!alarm_config_index_is_valid(alarm_config_bit))
@@ -628,48 +682,12 @@ static umode_t d5next_extra_props_are_visible(struct kobject *kobj, struct attri
 	return attr->mode;
 }
 
-static umode_t d5next_is_visible(const void *data, enum hwmon_sensor_types type, u32 attr, int channel)
-{
-	switch (type) {
-		case hwmon_fan:
-			switch (attr) {
-				case hwmon_fan_max:
-					return 0644;
-				default:
-					break;
-			}
-			break;
-		case hwmon_pwm:
-			switch (attr) {
-				case hwmon_pwm_enable:
-				case hwmon_pwm_input:
-					return 0644;
-				default:
-					break;
-			}
-			break;
-		case hwmon_temp:
-			switch (attr) {
-				case hwmon_temp_max:
-				case hwmon_temp_offset:
-					return 0644;
-				default:
-					break;
-			}
-			break;
-		default:
-			break;
-	}
-
-	return 0444;
-}
-
 static int d5next_read_pwm(struct device *dev, u32 attr, int channel, long *val)
 {
 	int ret;
 	struct fan_ctrl *fan_control_data;
 	/* Request the status report and extract current PWM values */
-	struct d5next_data *priv = dev_get_drvdata(dev);
+	struct aqc_data *priv = dev_get_drvdata(dev);
 	mutex_lock(&priv->mutex);
 	ret = d5next_get_ctrl_data(dev);
 	channel = d5next_userspace_to_internal_channel(channel);
@@ -709,7 +727,7 @@ static int d5next_read_fan(struct device *dev, u32 attr, int channel, long *val)
 	int ret;
 	struct fan_properties *fan_props;
 	/* Request the status report and extract current PWM values */
-	struct d5next_data *priv = dev_get_drvdata(dev);
+	struct aqc_data *priv = dev_get_drvdata(dev);
 	mutex_lock(&priv->mutex);
 	ret = d5next_get_ctrl_data(dev);
 
@@ -741,7 +759,7 @@ static int d5next_read_temp(struct device *dev, u32 attr, long *val)
 {
 	/* Request the status report and extract current temp sensor values */
 	int ret;
-	struct d5next_data *priv = dev_get_drvdata(dev);
+	struct aqc_data *priv = dev_get_drvdata(dev);
 	mutex_lock(&priv->mutex);
 	ret = d5next_get_ctrl_data(dev);
 
@@ -750,13 +768,13 @@ static int d5next_read_temp(struct device *dev, u32 attr, long *val)
 			*val = priv->temp_input;
 			break;
 		case hwmon_temp_offset:
-			*val = d5next_temp_to_hwmon_temp(priv->buffer->temp_sensor_offset);
+			*val = aqc_temp_to_hwmon_temp(priv->buffer->temp_sensor_offset);
 			break;
 		case hwmon_temp_max_alarm:
 			*val = priv->alarms.water_temperature;
 			break;
 		case hwmon_temp_max:
-			*val = d5next_temp_to_hwmon_temp(priv->buffer->water_temp_alarm_limit);
+			*val = aqc_temp_to_hwmon_temp(priv->buffer->water_temp_alarm_limit);
 			break;
 		default:
 			ret = -ENODATA;
@@ -769,28 +787,25 @@ unlock_and_return:
 }
 
 /* todo pull the curve data functions into this somehow */
-static int d5next_read(struct device *dev, enum hwmon_sensor_types type, u32 attr, int channel, long *val)
+static int d5next_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
+	int channel, long *val)
 {
 	/* deferring translation of channel value to called functions inside the switch */
-	int ret = 0;
-	struct d5next_data *priv = dev_get_drvdata(dev);
+	struct aqc_data *priv = dev_get_drvdata(dev);
 
 	if (time_after(jiffies, priv->updated + STATUS_UPDATE_INTERVAL))
 		return -ENODATA;
 
 	switch (type) {
 		case hwmon_temp:
-			ret = d5next_read_temp(dev, attr, val);
-			break;
+			return d5next_read_temp(dev, attr, val);
 		case hwmon_fan:
-			ret = d5next_read_fan(dev, attr, channel, val);
-			break;
+			return d5next_read_fan(dev, attr, channel, val);
 		case hwmon_power:
 			*val = priv->power_input[channel];
 			break;
 		case hwmon_pwm:
-			ret = d5next_read_pwm(dev, attr, channel, val);
-			break;
+			return d5next_read_pwm(dev, attr, channel, val);
 		case hwmon_in:
 			*val = priv->voltage_input[channel];
 			break;
@@ -798,10 +813,10 @@ static int d5next_read(struct device *dev, enum hwmon_sensor_types type, u32 att
 			*val = priv->current_input[channel];
 			break;
 		default:
-			ret = -EOPNOTSUPP;
+			return -EOPNOTSUPP;
 	}
 
-	return ret;
+	return 0;
 }
 
 static int d5next_read_string(struct device *dev, enum hwmon_sensor_types type, u32 attr, int channel, const char **str)
@@ -831,7 +846,7 @@ static int d5next_read_string(struct device *dev, enum hwmon_sensor_types type, 
 
 static int d5next_set_pwm(struct device *dev, enum d5next_ctrl_channel channel, u32 attr, long val)
 {
-	struct d5next_data *priv = dev_get_drvdata(dev);
+	struct aqc_data *priv = dev_get_drvdata(dev);
 	if (!fan_channel_is_valid(channel))
 		return -ENOENT;
 
@@ -839,7 +854,7 @@ static int d5next_set_pwm(struct device *dev, enum d5next_ctrl_channel channel, 
 		case hwmon_pwm_input:
 			if (val < 0 || val > 255)
 				return -EINVAL;
-			val = d5next_pwm_to_percent(val);
+			val = aqc_pwm_to_percent(val);
 			/* TODO: Ensure that the pump is configured to use fan ctrl out, and not flow sensor in! */
 			return d5next_set_u16_val(dev, &(priv->buffer->fan_ctrl[channel].manual_setpoint), val);
 		case hwmon_pwm_enable:
@@ -853,7 +868,7 @@ static int d5next_set_pwm(struct device *dev, enum d5next_ctrl_channel channel, 
 
 static int d5next_set_fan(struct device *dev, enum d5next_ctrl_channel channel, u32 attr, long val)
 {
-	struct d5next_data *priv = dev_get_drvdata(dev);
+	struct aqc_data *priv = dev_get_drvdata(dev);
 	if (!fan_channel_is_valid(channel))
 		return -ENOENT;
 	switch (attr) {
@@ -866,8 +881,8 @@ static int d5next_set_fan(struct device *dev, enum d5next_ctrl_channel channel, 
 
 static int d5next_set_temp(struct device *dev, u32 attr, long val)
 {
-	struct d5next_data *priv = dev_get_drvdata(dev);
-	val = d5next_temp_from_hwmon_temp(val);
+	struct aqc_data *priv = dev_get_drvdata(dev);
+	val = aqc_temp_from_hwmon_temp(val);
 	switch (attr) {
 		case hwmon_temp_max:
 			return d5next_set_u16_val(dev, &(priv->buffer->water_temp_alarm_limit), val);
@@ -896,14 +911,14 @@ static int d5next_write(struct device *dev, enum hwmon_sensor_types type, u32 at
 	}
 }
 
-static const struct hwmon_ops d5next_hwmon_ops = {
-	.is_visible = d5next_is_visible,
+static const struct hwmon_ops aqc_hwmon_ops = {
+	.is_visible = aqc_is_visible,
 	.read = d5next_read,
 	.read_string = d5next_read_string,
 	.write = d5next_write
 };
 
-static const struct hwmon_channel_info *d5next_info[] = {
+static const struct hwmon_channel_info *aqc_info[] = {
 	HWMON_CHANNEL_INFO(temp,
 			HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_MAX_ALARM | HWMON_T_MAX | HWMON_T_OFFSET
 			),
@@ -931,15 +946,16 @@ static const struct hwmon_channel_info *d5next_info[] = {
 	NULL
 };
 
-static const struct hwmon_chip_info d5next_chip_info = {
-	.ops = &d5next_hwmon_ops,
-	.info = d5next_info,
+static const struct hwmon_chip_info aqc_chip_info = {
+	.ops = &aqc_hwmon_ops,
+	.info = aqc_info,
 };
 
 /* Parses sensor reports which the pump automatically sends every second */
-static int d5next_raw_event(struct hid_device *hdev, struct hid_report *report, u8 *data, int size)
+static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 *data,
+	int size)
 {
-	struct d5next_data *priv;
+	struct aqc_data *priv;
 	/* Info provided with every sensor report */
 	struct d5next_raw_event_data *event_data = (struct d5next_raw_event_data *)data;
 
@@ -950,41 +966,49 @@ static int d5next_raw_event(struct hid_device *hdev, struct hid_report *report, 
 
 	priv = hid_get_drvdata(hdev);
 
+	/* Info provided with every report */
 	priv->serial_number[0] = ntohs(event_data->serial_number[0]);
 	priv->serial_number[1] = ntohs(event_data->serial_number[1]);
-
 	priv->firmware_version = ntohs(event_data->firmware_version);
-	priv->power_cycles = ntohs(event_data->power_cycles);
 
 	/* Sensor readings */
-	priv->temp_input = d5next_temp_to_hwmon_temp(event_data->coolant_temp);
-	/*
-	 * NOTE! The driver uses fan = index 0 / pump = index 1 internally.
-	 * However, we report the pump as [pwm|fan]_1 and the fan as [pwm|fan]_2 to userspace.
-	 * Only use `enum d5next_ctrl_channel` to set these values,
-	 * and make sure you translate any `channel` value from hwmon first!
-	 *
-	 * Functions that take an already converted channel as input shall use an
-	 * `enum d5next_ctrl_channel` as their channel argument.
-	 */
-	priv->speed_input[FAN_CONTROL_CHANNEL_PUMP] = ntohs(event_data->pump.speed);
-	priv->speed_input[FAN_CONTROL_CHANNEL_FAN] = ntohs(event_data->fan.speed);
+	switch (priv->kind) {
+		case d5next:
+			priv->power_cycles = ntohs(event_data->power_cycles);
 
-	priv->speed_setpoint[FAN_CONTROL_CHANNEL_PUMP] = d5next_percent_to_pwm(event_data->setpoints.pump);
-	priv->speed_setpoint[FAN_CONTROL_CHANNEL_FAN] = d5next_percent_to_pwm(event_data->setpoints.fan);
+			priv->temp_input = aqc_temp_to_hwmon_temp(event_data->coolant_temp);
 
-	priv->power_input[0] = ntohs(event_data->pump.watts) * 10000;
-	priv->power_input[1] = ntohs(event_data->fan.watts) * 10000;
+			/*
+			 * NOTE! The driver uses fan = index 0 / pump = index 1 internally.
+			 * However, we report the pump as [pwm|fan]_1 and the fan as [pwm|fan]_2 to userspace.
+			 * Only use `enum d5next_ctrl_channel` to set these values,
+			 * and make sure you translate any `channel` value from hwmon first!
+			 *
+			 * Functions that take an already converted channel as input shall use an
+			 * `enum d5next_ctrl_channel` as their channel argument.
+			 */
+			priv->speed_input[FAN_CONTROL_CHANNEL_PUMP] = ntohs(event_data->pump.speed);
+			priv->speed_input[FAN_CONTROL_CHANNEL_FAN] = ntohs(event_data->fan.speed);
 
-	priv->voltage_input[0] = ntohs(event_data->pump.voltage) * 10;
-	priv->voltage_input[1] = ntohs(event_data->fan.voltage) * 10;
-	priv->voltage_input[2] = ntohs(event_data->vbus) * 10;
-	/* todo we can technically also report event_data->vcc_12 and event_data->vcc_aquabus, but does anyone care? */
+			priv->speed_setpoint[FAN_CONTROL_CHANNEL_PUMP] = aqc_percent_to_pwm(event_data->setpoints.pump);
+			priv->speed_setpoint[FAN_CONTROL_CHANNEL_FAN] = aqc_percent_to_pwm(event_data->setpoints.fan);
 
-	priv->current_input[0] = ntohs(event_data->pump.current_ma);
-	priv->current_input[1] = ntohs(event_data->fan.current_ma);
+			priv->power_input[0] = ntohs(event_data->pump.watts) * 10000;
+			priv->power_input[1] = ntohs(event_data->fan.watts) * 10000;
 
-	update_alarms(&(priv->alarms), ntohl(event_data->alarms[0]));
+			priv->voltage_input[0] = ntohs(event_data->pump.voltage) * 10;
+			priv->voltage_input[1] = ntohs(event_data->fan.voltage) * 10;
+			priv->voltage_input[2] = ntohs(event_data->vbus) * 10;
+			/* todo we can technically also report event_data->vcc_12 and event_data->vcc_aquabus, but does anyone care? */
+
+			priv->current_input[0] = ntohs(event_data->pump.current_ma);
+			priv->current_input[1] = ntohs(event_data->fan.current_ma);
+
+			update_alarms(&(priv->alarms), ntohl(event_data->alarms[0]));
+			break;
+		default:
+			break;
+	}
 
 	priv->updated = jiffies;
 
@@ -995,7 +1019,7 @@ static int d5next_raw_event(struct hid_device *hdev, struct hid_report *report, 
 
 static int serial_number_show(struct seq_file *seqf, void *unused)
 {
-	struct d5next_data *priv = seqf->private;
+	struct aqc_data *priv = seqf->private;
 
 	seq_printf(seqf, "%05u-%05u\n", priv->serial_number[0], priv->serial_number[1]);
 
@@ -1005,7 +1029,7 @@ DEFINE_SHOW_ATTRIBUTE(serial_number);
 
 static int firmware_version_show(struct seq_file *seqf, void *unused)
 {
-	struct d5next_data *priv = seqf->private;
+	struct aqc_data *priv = seqf->private;
 
 	seq_printf(seqf, "%u\n", priv->firmware_version);
 
@@ -1015,7 +1039,7 @@ DEFINE_SHOW_ATTRIBUTE(firmware_version);
 
 static int power_cycles_show(struct seq_file *seqf, void *unused)
 {
-	struct d5next_data *priv = seqf->private;
+	struct aqc_data *priv = seqf->private;
 
 	seq_printf(seqf, "%u\n", priv->power_cycles);
 
@@ -1023,37 +1047,24 @@ static int power_cycles_show(struct seq_file *seqf, void *unused)
 }
 DEFINE_SHOW_ATTRIBUTE(power_cycles);
 
-static int raw_buffer_show(struct seq_file *seqf, void *unused)
+static void aqc_debugfs_init(struct aqc_data *priv)
 {
-	struct d5next_data *priv = seqf->private;
-	int i;
+	char name[64];
 
-	for (i = 0; i < sizeof(struct d5next_control_data); i++) {
-		seq_printf(seqf, "%02x ", ((u8 *) (priv->buffer))[i]);
-		if ((i + 1) % 16 == 0)
-			seq_printf(seqf, "\n");
-	}
-
-	return 0;
-}
-DEFINE_SHOW_ATTRIBUTE(raw_buffer);
-
-static void d5next_debugfs_init(struct d5next_data *priv)
-{
-	char name[32];
-
-	scnprintf(name, sizeof(name), "%s-%s", DRIVER_NAME, dev_name(&priv->hdev->dev));
+	scnprintf(name, sizeof(name), "%s_%s-%s", "aquacomputer", priv->name,
+		  dev_name(&priv->hdev->dev));
 
 	priv->debugfs = debugfs_create_dir(name, NULL);
 	debugfs_create_file("serial_number", 0444, priv->debugfs, priv, &serial_number_fops);
 	debugfs_create_file("firmware_version", 0444, priv->debugfs, priv, &firmware_version_fops);
-	debugfs_create_file("power_cycles", 0444, priv->debugfs, priv, &power_cycles_fops);
-	debugfs_create_file("raw_buffer", 0444, priv->debugfs, priv, &raw_buffer_fops);
+
+	if (priv->kind == d5next)
+		debugfs_create_file("power_cycles", 0444, priv->debugfs, priv, &power_cycles_fops);
 }
 
 #else
 
-static void d5next_debugfs_init(struct d5next_data *priv)
+static void aqc_debugfs_init(struct aqc_data *priv)
 {
 }
 
@@ -1232,15 +1243,17 @@ static const struct attribute_group d5next_group_auto_pwm = {
 	.is_visible = d5next_extra_props_are_visible,
 };
 
-static int d5next_probe(struct hid_device *hdev, const struct hid_device_id *id)
+static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 {
-	struct d5next_data *priv;
+	struct aqc_data *priv;
 	int ret;
 
 	priv = devm_kzalloc(&hdev->dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
 
+	priv->hdev = hdev;
+	hid_set_drvdata(hdev, priv);
 	priv->buffer = devm_kzalloc(&hdev->dev, STATUS_REPORT_SIZE, GFP_KERNEL);
 	if (!priv->buffer)
 		return -ENOMEM;
@@ -1259,23 +1272,33 @@ static int d5next_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	if (ret)
 		goto fail_and_stop;
 
-	priv->hdev = hdev;
-	hid_set_drvdata(hdev, priv);
+	switch (hdev->product) {
+		case USB_PRODUCT_ID_D5NEXT:
+			priv->kind = d5next;
+			priv->groups[0] = &d5next_group_auto_pwm;
+			break;
+		case USB_PRODUCT_ID_FARBWERK360:
+			priv->kind = farbwerk360;
+			break;
+		default:
+			break;
+	}
+	
+	priv->name = aqc_device_names[priv->kind];
+	
 	mutex_init(&priv->mutex);
 
 	hid_device_io_start(hdev);
-
-	priv->groups[0] = &d5next_group_auto_pwm;
-
-	priv->hwmon_dev = hwmon_device_register_with_info(&hdev->dev, "d5next", priv,
-							  &d5next_chip_info, priv->groups);
+	
+	priv->hwmon_dev = hwmon_device_register_with_info(&hdev->dev, priv->name, priv,
+							  &aqc_chip_info, priv->groups);
 
 	if (IS_ERR(priv->hwmon_dev)) {
 		ret = (int)PTR_ERR(priv->hwmon_dev);
 		goto fail_and_close;
 	}
 
-	d5next_debugfs_init(priv);
+	aqc_debugfs_init(priv);
 
 	return 0;
 
@@ -1286,9 +1309,9 @@ fail_and_stop:
 	return ret;
 }
 
-static void d5next_remove(struct hid_device *hdev)
+static void aqc_remove(struct hid_device *hdev)
 {
-	struct d5next_data *priv = hid_get_drvdata(hdev);
+	struct aqc_data *priv = hid_get_drvdata(hdev);
 
 	mutex_unlock(&priv->mutex);
 
@@ -1299,37 +1322,38 @@ static void d5next_remove(struct hid_device *hdev)
 	hid_hw_stop(hdev);
 }
 
-static const struct hid_device_id d5next_table[] = {
-	{ HID_USB_DEVICE(0x0c70, 0xf00e) }, /* Aquacomputer D5 Next */
-	{},
+static const struct hid_device_id aqc_table[] = {
+	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_D5NEXT) },
+	/*{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_FARBWERK360) }, */
+	{ }
 };
 
-MODULE_DEVICE_TABLE(hid, d5next_table);
+MODULE_DEVICE_TABLE(hid, aqc_table);
 
-static struct hid_driver d5next_driver = {
+static struct hid_driver aqc_driver = {
 	.name = DRIVER_NAME,
-	.id_table = d5next_table,
-	.probe = d5next_probe,
-	.remove = d5next_remove,
-	.raw_event = d5next_raw_event,
+	.id_table = aqc_table,
+	.probe = aqc_probe,
+	.remove = aqc_remove,
+	.raw_event = aqc_raw_event,
 };
 
-static int __init d5next_init(void)
+static int __init aqc_init(void)
 {
-	return hid_register_driver(&d5next_driver);
+	return hid_register_driver(&aqc_driver);
 }
 
-static void __exit d5next_exit(void)
+static void __exit aqc_exit(void)
 {
-	hid_unregister_driver(&d5next_driver);
+	hid_unregister_driver(&aqc_driver);
 }
 
 /* Request to initialize after the HID bus to ensure it's not being loaded before */
 
-late_initcall(d5next_init);
-module_exit(d5next_exit);
+late_initcall(aqc_init);
+module_exit(aqc_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Aleksa Savic <savicaleksa83@gmail.com>");
 MODULE_AUTHOR("Jack Doan <me@jackdoan.com>");
-MODULE_DESCRIPTION("Hwmon driver for Aquacomputer D5 Next pump");
+MODULE_DESCRIPTION("Hwmon driver for Aquacomputer devices");
