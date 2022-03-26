@@ -1,59 +1,62 @@
 .. SPDX-License-Identifier: GPL-2.0-or-later
 
-Kernel driver aquacomputer_d5next
+Kernel driver aquacomputer-d5next
 =================================
 
 Supported devices:
 
 * Aquacomputer D5 Next watercooling pump
+* Aquacomputer Farbwerk 360 RGB controller
+* Aquacomputer Octo fan controller
 
 Author: Aleksa Savic
 
 Description
 -----------
 
-This driver exposes hardware sensors of the Aquacomputer D5 Next watercooling
-pump. Available sensors are pump and fan speed, power, voltage and current, as
-well as coolant temperature. Also available through debugfs are the serial
-number, firmware version and power-on count. Attaching a fan to the pump is
-optional, so the entries regarding the fan port may report zero values.
+This driver exposes hardware sensors of listed Aquacomputer devices, which
+communicate through proprietary USB HID protocols.
 
-Pump and fan speed can be controlled using PWM, or via the physical interface
-of the pump. Configuring other aspects of the pump, such as RGB LEDs or RPM
-curves is not supported as there is no standard sysfs interface for them (in 
-a manner that the pump requires). The pump also requires sending it a complete
-configuration for every change, so speed control is implemented in a way that
-should preserve all other current settings.
+For the D5 Next pump, available sensors are pump and fan speed, power, voltage
+and current, as well as coolant temperature. Also available through debugfs are
+the serial number, firmware version and power-on count. Attaching a fan to it is
+optional and allows it to be controlled using temperature curves directly from the
+pump. If it's not connected, the fan-related sensors will report zeroes.
 
-Usage Notes
+The pump can be configured either through software or via its physical
+interface. Configuring the pump through this driver is not implemented, as it
+seems to require sending it a complete configuration. That includes addressable
+RGB LEDs, for which there is no standard sysfs interface. Thus, that task is
+better suited for userspace tools.
+
+The Octo exposes four temperature sensors and eight PWM controllable fans, along
+with their speed (in RPM), power, voltage and current.
+
+The Farbwerk 360 exposes four temperature sensors. Depending on the device,
+not all sysfs and debugfs entries will be available.
+
+Usage notes
 -----------
 
-The pump communicates via HID reports. The driver is loaded automatically by
+The devices communicate via HID reports. The driver is loaded automatically by
 the kernel and supports hotswapping.
 
 Sysfs entries
 -------------
 
-============ =============================================
-temp1_input  Coolant temperature (in millidegrees Celsius)
-fan1_input   Pump speed (in RPM)
-fan2_input   Fan speed (in RPM)
-power1_input Pump power (in micro Watts)
-power2_input Fan power (in micro Watts)
-in0_input    Pump voltage (in milli Volts)
-in1_input    Fan voltage (in milli Volts)
-in2_input    +5V rail voltage (in milli Volts)
-curr1_input  Pump current (in milli Amperes)
-curr2_input  Fan current (in milli Amperes)
-pwm1         Pump speed (PWM)
-pwm2         Fan speed (PWM)
-============ =============================================
+================ =============================================
+temp[1-4]_input  Temperature sensors (in millidegrees Celsius)
+fan[1-2]_input   Pump/fan speed (in RPM)
+power[1-2]_input Pump/fan power (in micro Watts)
+in[0-2]_input    Pump/fan voltage (in milli Volts)
+curr[1-2]_input  Pump/fan current (in milli Amperes)
+================ =============================================
 
 Debugfs entries
 ---------------
 
-================ ===============================================
-serial_number    Serial number of the pump
+================ =================================================
+serial_number    Serial number of the device
 firmware_version Version of installed firmware
-power_cycles     Count of how many times the pump was powered on
-================ ===============================================
+power_cycles     Count of how many times the device was powered on
+================ =================================================
