@@ -100,7 +100,9 @@ static u8 octo_sensor_fan_offsets[] = { 0x7D, 0x8A, 0x97, 0xA4, 0xB1, 0xBE, 0xCB
 static u16 octo_ctrl_fan_offsets[] = { 0x5B, 0xB0, 0x105, 0x15A, 0x1AF, 0x204, 0x259, 0x2AE };
 
 /* Labels for D5 Next */
-#define L_D5NEXT_COOLANT_TEMP		"Coolant temp"
+static const char *const label_d5next_temp[] = {
+	"Coolant temp"
+};
 
 static const char *const label_d5next_speeds[] = {
 	"Pump speed",
@@ -204,16 +206,26 @@ struct aqc_data {
 	u16 voltage_input[8];
 	u16 current_input[8];
 
+	/* Label values */
+	const char *const *temp_label;
+	const char *const *speed_label;
+	const char *const *power_label;
+	const char *const *voltage_label;
+	const char *const *current_label;
+
 	unsigned long updated;
 };
 
-static int aqc_be_percent_to_pwm(u16 val)
+static int aqc_percent_to_pwm(u16 val)
 {
-	return DIV_ROUND_CLOSEST(ntohs(val) * 255, 100 * 100);
+	return DIV_ROUND_CLOSEST(val * 255, 100 * 100);
 }
 
-static u16 aqc_pwm_to_percent(u8 val)
+static int aqc_pwm_to_percent(long val)
 {
+	if (val < 0 || val > 255)
+		return -EINVAL;
+
 	return DIV_ROUND_CLOSEST(val * 100 * 100, 255);
 }
 
@@ -223,8 +235,8 @@ static int aqc_get_ctrl_data(struct aqc_data *priv)
 	int ret;
 
 	memset(priv->buffer, 0x00, priv->buffer_size);
-	ret = hid_hw_raw_request(priv->hdev, CTRL_REPORT_ID, priv->buffer,
-				 priv->buffer_size, HID_FEATURE_REPORT, HID_REQ_GET_REPORT);
+	ret = hid_hw_raw_request(priv->hdev, CTRL_REPORT_ID, priv->buffer, priv->buffer_size,
+				 HID_FEATURE_REPORT, HID_REQ_GET_REPORT);
 	if (ret < 0)
 		ret = -ENODATA;
 
@@ -235,46 +247,41 @@ static int aqc_get_ctrl_data(struct aqc_data *priv)
 static int aqc_send_ctrl_data(struct aqc_data *priv)
 {
 	int ret;
-	u16 checksum = 0xffff;	/* Init value for CRC-16/USB */
+	u16 checksum;
 
-	checksum = crc16(checksum, priv->buffer + priv->checksum_start, priv->checksum_length);
-	checksum ^= 0xffff;	/* Xorout value for CRC-16/USB */
+	/* Init and xorout value for CRC-16/USB is 0xffff */
+	checksum = crc16(0xffff, priv->buffer + priv->checksum_start, priv->checksum_length);
+	checksum ^= 0xffff;
 
 	/* Place the new checksum at the end of the report */
 	put_unaligned_be16(checksum, priv->buffer + priv->checksum_offset);
 
-	/* Send the patched up report back to the pump */
+	/* Send the patched up report back to the device */
 	ret = hid_hw_raw_request(priv->hdev, CTRL_REPORT_ID, priv->buffer, priv->buffer_size,
 				 HID_FEATURE_REPORT, HID_REQ_SET_REPORT);
 	if (ret < 0)
 		goto exit;
 
 	/* The official software sends this report after every change, so do it here as well */
-	ret =
-	    hid_hw_raw_request(priv->hdev, SECONDARY_CTRL_REPORT_ID, secondary_ctrl_report,
-			       SECONDARY_CTRL_REPORT_SIZE, HID_FEATURE_REPORT,
-			       HID_REQ_SET_REPORT);
+	ret = hid_hw_raw_request(priv->hdev, SECONDARY_CTRL_REPORT_ID, secondary_ctrl_report,
+				 SECONDARY_CTRL_REPORT_SIZE, HID_FEATURE_REPORT,
+				 HID_REQ_SET_REPORT);
 exit:
 	return ret;
 }
 
-/* Refreshes the control buffer and returns value at offset in big endian */
-static int aqc_get_ctrl_val(struct aqc_data *priv, int offset, void *val, size_t size)
+/* Refreshes the control buffer and returns value at offset */
+static int aqc_get_ctrl_val(struct aqc_data *priv, int offset)
 {
 	int ret;
 
 	mutex_lock(&priv->mutex);
 
-	if (size < 1 || size > 4) {
-		ret = -EINVAL;
-		goto unlock_and_return;
-	}
-
 	ret = aqc_get_ctrl_data(priv);
 	if (ret < 0)
 		goto unlock_and_return;
 
-	memcpy(val, priv->buffer + offset, size);
+	ret = get_unaligned_be16(priv->buffer + offset);
 
 unlock_and_return:
 	mutex_unlock(&priv->mutex);
@@ -285,12 +292,10 @@ static int aqc_set_ctrl_val(struct aqc_data *priv, int offset, long val, size_t 
 {
 	int ret;
 
-	mutex_lock(&priv->mutex);
+	if (size < 1 || size > 4)
+		return -EINVAL;
 
-	if (size < 1 || size > 4) {
-		ret = -EINVAL;
-		goto unlock_and_return;
-	}
+	mutex_lock(&priv->mutex);
 
 	ret = aqc_get_ctrl_data(priv);
 	if (ret < 0)
@@ -301,7 +306,7 @@ static int aqc_set_ctrl_val(struct aqc_data *priv, int offset, long val, size_t 
 		put_unaligned_be32(val, priv->buffer + offset);
 		break;
 	case 2:
-		put_unaligned_be16((u16) val, priv->buffer + offset);
+		put_unaligned_be16((u16)val, priv->buffer + offset);
 		break;
 	case 1:
 		priv->buffer[offset] = val;
@@ -317,8 +322,7 @@ unlock_and_return:
 	return ret;
 }
 
-static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u32 attr,
-			      int channel)
+static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u32 attr, int channel)
 {
 	const struct aqc_data *priv = data;
 
@@ -408,12 +412,11 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 	case hwmon_pwm:
 		switch (priv->kind) {
 		case octo:
-			ret = aqc_get_ctrl_val(priv, octo_ctrl_fan_offsets[channel], val, 2);
+			ret = aqc_get_ctrl_val(priv, octo_ctrl_fan_offsets[channel]);
 			if (ret < 0)
 				return ret;
 
-			*val = aqc_be_percent_to_pwm(*val);
-			break;
+			*val = aqc_percent_to_pwm(ret);
 		default:
 			break;
 		}
@@ -438,65 +441,19 @@ static int aqc_read_string(struct device *dev, enum hwmon_sensor_types type, u32
 
 	switch (type) {
 	case hwmon_temp:
-		switch (priv->kind) {
-		case d5next:
-			*str = L_D5NEXT_COOLANT_TEMP;
-			break;
-		case farbwerk360:
-		case octo:
-			*str = label_temp_sensors[channel];
-			break;
-		default:
-			break;
-		}
+		*str = priv->temp_label[channel];
 		break;
 	case hwmon_fan:
-		switch (priv->kind) {
-		case d5next:
-			*str = label_d5next_speeds[channel];
-			break;
-		case octo:
-			*str = label_fan_speed[channel];
-			break;
-		default:
-			break;
-		}
+		*str = priv->speed_label[channel];
 		break;
 	case hwmon_power:
-		switch (priv->kind) {
-		case d5next:
-			*str = label_d5next_power[channel];
-			break;
-		case octo:
-			*str = label_fan_power[channel];
-			break;
-		default:
-			break;
-		}
+		*str = priv->power_label[channel];
 		break;
 	case hwmon_in:
-		switch (priv->kind) {
-		case d5next:
-			*str = label_d5next_voltages[channel];
-			break;
-		case octo:
-			*str = label_fan_voltage[channel];
-			break;
-		default:
-			break;
-		}
+		*str = priv->voltage_label[channel];
 		break;
 	case hwmon_curr:
-		switch (priv->kind) {
-		case d5next:
-			*str = label_d5next_current[channel];
-			break;
-		case octo:
-			*str = label_fan_current[channel];
-			break;
-		default:
-			break;
-		}
+		*str = priv->current_label[channel];
 		break;
 	default:
 		return -EOPNOTSUPP;
@@ -505,10 +462,10 @@ static int aqc_read_string(struct device *dev, enum hwmon_sensor_types type, u32
 	return 0;
 }
 
-static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
-		     int channel, long val)
+static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr, int channel,
+		     long val)
 {
-	int ret;
+	int ret, pwm_value;
 	struct aqc_data *priv = dev_get_drvdata(dev);
 
 	switch (type) {
@@ -517,9 +474,12 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		case hwmon_pwm_input:
 			switch (priv->kind) {
 			case octo:
-				ret =
-				    aqc_set_ctrl_val(priv, octo_ctrl_fan_offsets[channel],
-						     aqc_pwm_to_percent(val), 2);
+				pwm_value = aqc_pwm_to_percent(val);
+				if (pwm_value < 0)
+					return pwm_value;
+
+				ret = aqc_set_ctrl_val(priv, octo_ctrl_fan_offsets[channel],
+						       pwm_value, 2);
 				if (ret < 0)
 					return ret;
 				break;
@@ -603,7 +563,7 @@ static const struct hwmon_chip_info aqc_chip_info = {
 	.info = aqc_info,
 };
 
-static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 * data,
+static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 *data,
 			 int size)
 {
 	int i, sensor_value;
@@ -698,7 +658,6 @@ static int serial_number_show(struct seq_file *seqf, void *unused)
 
 	return 0;
 }
-
 DEFINE_SHOW_ATTRIBUTE(serial_number);
 
 static int firmware_version_show(struct seq_file *seqf, void *unused)
@@ -709,7 +668,6 @@ static int firmware_version_show(struct seq_file *seqf, void *unused)
 
 	return 0;
 }
-
 DEFINE_SHOW_ATTRIBUTE(firmware_version);
 
 static int power_cycles_show(struct seq_file *seqf, void *unused)
@@ -720,7 +678,6 @@ static int power_cycles_show(struct seq_file *seqf, void *unused)
 
 	return 0;
 }
-
 DEFINE_SHOW_ATTRIBUTE(power_cycles);
 
 static void aqc_debugfs_init(struct aqc_data *priv)
@@ -732,14 +689,12 @@ static void aqc_debugfs_init(struct aqc_data *priv)
 
 	priv->debugfs = debugfs_create_dir(name, NULL);
 	debugfs_create_file("serial_number", 0444, priv->debugfs, priv, &serial_number_fops);
-	debugfs_create_file("firmware_version", 0444, priv->debugfs, priv,
-			    &firmware_version_fops);
+	debugfs_create_file("firmware_version", 0444, priv->debugfs, priv, &firmware_version_fops);
 
 	switch (priv->kind) {
 	case d5next:
 	case octo:
-		debugfs_create_file("power_cycles", 0444, priv->debugfs, priv,
-				    &power_cycles_fops);
+		debugfs_create_file("power_cycles", 0444, priv->debugfs, priv, &power_cycles_fops);
 	default:
 		break;
 	}
@@ -782,9 +737,17 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	switch (hdev->product) {
 	case USB_PRODUCT_ID_D5NEXT:
 		priv->kind = d5next;
+
+		priv->temp_label = label_d5next_temp;
+		priv->speed_label = label_d5next_speeds;
+		priv->power_label = label_d5next_power;
+		priv->voltage_label = label_d5next_voltages;
+		priv->current_label = label_d5next_current;
 		break;
 	case USB_PRODUCT_ID_FARBWERK360:
 		priv->kind = farbwerk360;
+
+		priv->temp_label = label_temp_sensors;
 		break;
 	case USB_PRODUCT_ID_OCTO:
 		priv->kind = octo;
@@ -792,6 +755,12 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->checksum_start = OCTO_CTRL_REPORT_CHECKSUM_START;
 		priv->checksum_length = OCTO_CTRL_REPORT_CHECKSUM_LENGTH;
 		priv->checksum_offset = OCTO_CTRL_REPORT_CHECKSUM_OFFSET;
+
+		priv->temp_label = label_temp_sensors;
+		priv->speed_label = label_fan_speed;
+		priv->power_label = label_fan_power;
+		priv->voltage_label = label_fan_voltage;
+		priv->current_label = label_fan_current;
 		break;
 	default:
 		break;
@@ -827,8 +796,6 @@ fail_and_stop:
 static void aqc_remove(struct hid_device *hdev)
 {
 	struct aqc_data *priv = hid_get_drvdata(hdev);
-
-	//mutex_unlock(&priv->mutex);
 
 	debugfs_remove_recursive(priv->debugfs);
 	hwmon_device_unregister(priv->hwmon_dev);
