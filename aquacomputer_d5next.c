@@ -218,6 +218,9 @@ struct aqc_data {
 
 static int aqc_percent_to_pwm(u16 val)
 {
+	if (val > 100 * 100)
+		return -EINVAL;
+
 	return DIV_ROUND_CLOSEST(val * 255, 100 * 100);
 }
 
@@ -387,8 +390,8 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 	return 0;
 }
 
-static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
-		    int channel, long *val)
+static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr, int channel,
+		    long *val)
 {
 	int ret;
 	struct aqc_data *priv = dev_get_drvdata(dev);
@@ -417,6 +420,7 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				return ret;
 
 			*val = aqc_percent_to_pwm(ret);
+			break;
 		default:
 			break;
 		}
@@ -434,8 +438,8 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 	return 0;
 }
 
-static int aqc_read_string(struct device *dev, enum hwmon_sensor_types type, u32 attr,
-			   int channel, const char **str)
+static int aqc_read_string(struct device *dev, enum hwmon_sensor_types type, u32 attr, int channel,
+			   const char **str)
 {
 	struct aqc_data *priv = dev_get_drvdata(dev);
 
@@ -563,8 +567,7 @@ static const struct hwmon_chip_info aqc_chip_info = {
 	.info = aqc_info,
 };
 
-static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 *data,
-			 int size)
+static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 *data, int size)
 {
 	int i, sensor_value;
 	struct aqc_data *priv;
@@ -695,6 +698,7 @@ static void aqc_debugfs_init(struct aqc_data *priv)
 	case d5next:
 	case octo:
 		debugfs_create_file("power_cycles", 0444, priv->debugfs, priv, &power_cycles_fops);
+		break;
 	default:
 		break;
 	}
