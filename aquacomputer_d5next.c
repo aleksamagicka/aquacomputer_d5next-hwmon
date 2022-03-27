@@ -218,9 +218,6 @@ struct aqc_data {
 
 static int aqc_percent_to_pwm(u16 val)
 {
-	if (val > 100 * 100)
-		return -EINVAL;
-
 	return DIV_ROUND_CLOSEST(val * 255, 100 * 100);
 }
 
@@ -263,13 +260,12 @@ static int aqc_send_ctrl_data(struct aqc_data *priv)
 	ret = hid_hw_raw_request(priv->hdev, CTRL_REPORT_ID, priv->buffer, priv->buffer_size,
 				 HID_FEATURE_REPORT, HID_REQ_SET_REPORT);
 	if (ret < 0)
-		goto exit;
+		return ret;
 
 	/* The official software sends this report after every change, so do it here as well */
 	ret = hid_hw_raw_request(priv->hdev, SECONDARY_CTRL_REPORT_ID, secondary_ctrl_report,
 				 SECONDARY_CTRL_REPORT_SIZE, HID_FEATURE_REPORT,
 				 HID_REQ_SET_REPORT);
-exit:
 	return ret;
 }
 
@@ -291,12 +287,9 @@ unlock_and_return:
 	return ret;
 }
 
-static int aqc_set_ctrl_val(struct aqc_data *priv, int offset, long val, size_t size)
+static int aqc_set_ctrl_val(struct aqc_data *priv, int offset, long val)
 {
 	int ret;
-
-	if (size < 1 || size > 4)
-		return -EINVAL;
 
 	mutex_lock(&priv->mutex);
 
@@ -304,19 +297,7 @@ static int aqc_set_ctrl_val(struct aqc_data *priv, int offset, long val, size_t 
 	if (ret < 0)
 		goto unlock_and_return;
 
-	switch (size) {
-	case 4:
-		put_unaligned_be32(val, priv->buffer + offset);
-		break;
-	case 2:
-		put_unaligned_be16((u16)val, priv->buffer + offset);
-		break;
-	case 1:
-		priv->buffer[offset] = val;
-		break;
-	default:
-		break;
-	}
+	put_unaligned_be16((u16)val, priv->buffer + offset);
 
 	ret = aqc_send_ctrl_data(priv);
 
@@ -390,8 +371,8 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 	return 0;
 }
 
-static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr, int channel,
-		    long *val)
+static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
+		    int channel, long *val)
 {
 	int ret;
 	struct aqc_data *priv = dev_get_drvdata(dev);
@@ -438,8 +419,8 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr, 
 	return 0;
 }
 
-static int aqc_read_string(struct device *dev, enum hwmon_sensor_types type, u32 attr, int channel,
-			   const char **str)
+static int aqc_read_string(struct device *dev, enum hwmon_sensor_types type, u32 attr,
+			   int channel, const char **str)
 {
 	struct aqc_data *priv = dev_get_drvdata(dev);
 
@@ -483,13 +464,14 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 					return pwm_value;
 
 				ret = aqc_set_ctrl_val(priv, octo_ctrl_fan_offsets[channel],
-						       pwm_value, 2);
+						       pwm_value);
 				if (ret < 0)
 					return ret;
 				break;
 			default:
 				break;
 			}
+			break;
 		default:
 			break;
 		}
@@ -567,7 +549,8 @@ static const struct hwmon_chip_info aqc_chip_info = {
 	.info = aqc_info,
 };
 
-static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 *data, int size)
+static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 *data,
+			 int size)
 {
 	int i, sensor_value;
 	struct aqc_data *priv;
