@@ -8,7 +8,7 @@ A hwmon Linux kernel driver supporting the following Aquacomputer devices:
 | Farbwerk 360 |          5.18          |             Temperature sensors              |
 |     Octo     |  Not yet in mainline   | Temperature and fan sensors, fan PWM control |
 
-Being a standard `hwmon` driver, it provides readings via `sysfs`, which are easily accessible through `lm-sensors` as usual. Here's example output for the D5 Next pump, which supports reading coolant temperature, as well as speed, power, voltage and current of the pump and optionally attached fan:
+Being a standard `hwmon` driver, it provides readings via `sysfs`, which are easily accessible through `lm-sensors` as usual. Here's example output for some of the devices:
 
 ```shell
 [aleksa@fedora linux]$ sensors
