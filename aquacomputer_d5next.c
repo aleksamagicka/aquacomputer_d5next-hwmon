@@ -216,11 +216,13 @@ struct aqc_data {
 	unsigned long updated;
 };
 
+/* Converts from centi-percent */
 static int aqc_percent_to_pwm(u16 val)
 {
 	return DIV_ROUND_CLOSEST(val * 255, 100 * 100);
 }
 
+/* Converts to centi-percent */
 static int aqc_pwm_to_percent(long val)
 {
 	if (val < 0 || val > 255)

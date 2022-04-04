@@ -2,11 +2,11 @@
 
 A hwmon Linux kernel driver supporting the following Aquacomputer devices:
 
-|    Device    | Supported since kernel |                Functionality                 |
-| :----------: | :--------------------: | :------------------------------------------: |
-|   D5 Next    |          5.15          |               Various sensors                |
-| Farbwerk 360 |          5.18          |             Temperature sensors              |
-|     Octo     |  Not yet in mainline   | Temperature and fan sensors, fan PWM control |
+|    Device    | Supported since kernel |                    Functionality                    |
+| :----------: | :--------------------: | :-------------------------------------------------: |
+|   D5 Next    |          5.15          |                   Various sensors                   |
+| Farbwerk 360 |          5.18          |                 Temperature sensors                 |
+|     Octo     |          5.19          | Temperature and fan sensors, direct fan PWM control |
 
 Being a standard `hwmon` driver, it provides readings via `sysfs`, which are easily accessible through `lm-sensors` as usual. Here's example output for some of the devices:
 
