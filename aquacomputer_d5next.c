@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0+
 /*
- * hwmon driver for Aquacomputer devices (D5 Next, Farbwerk, Farbwerk 360, Octo)
+ * hwmon driver for Aquacomputer devices (D5 Next, Farbwerk, Farbwerk 360,
+ * Octo, Quadro)
  *
  * Aquacomputer devices send HID reports (with ID 0x01) every second to report
  * sensor values.
@@ -21,17 +22,19 @@
 
 #define USB_VENDOR_ID_AQUACOMPUTER	0x0c70
 #define USB_PRODUCT_ID_FARBWERK		0xf00a
+#define USB_PRODUCT_ID_QUADRO		0xf00d
 #define USB_PRODUCT_ID_D5NEXT		0xf00e
 #define USB_PRODUCT_ID_FARBWERK360	0xf010
 #define USB_PRODUCT_ID_OCTO		0xf011
 
-enum kinds { d5next, farbwerk, farbwerk360, octo };
+enum kinds { d5next, farbwerk, farbwerk360, octo, quadro };
 
 static const char *const aqc_device_names[] = {
 	[d5next] = "d5next",
 	[farbwerk] = "farbwerk",
 	[farbwerk360] = "farbwerk360",
-	[octo] = "octo"
+	[octo] = "octo",
+	[quadro] = "quadro"
 };
 
 #define DRIVER_NAME			"aquacomputer_d5next"
@@ -107,6 +110,31 @@ static u8 octo_sensor_fan_offsets[] = { 0x7D, 0x8A, 0x97, 0xA4, 0xB1, 0xBE, 0xCB
 
 /* Fan speed registers in Octo control report (from 0-100%) */
 static u16 octo_ctrl_fan_offsets[] = { 0x5B, 0xB0, 0x105, 0x15A, 0x1AF, 0x204, 0x259, 0x2AE };
+
+
+/* Register offsets for the Quadro fan controller */
+#define QUADRO_POWER_CYCLES		0x18
+#define QUADRO_NUM_FANS			4
+#define QUADRO_FAN_PERCENT_OFFSET	OCTO_FAN_PERCENT_OFFSET
+#define QUADRO_FAN_VOLTAGE_OFFSET	OCTO_FAN_VOLTAGE_OFFSET
+#define QUADRO_FAN_CURRENT_OFFSET	OCTO_FAN_CURRENT_OFFSET
+#define QUADRO_FAN_POWER_OFFSET		OCTO_FAN_POWER_OFFSET
+#define QUADRO_FAN_SPEED_OFFSET		OCTO_FAN_SPEED_OFFSET
+
+static u8 quadro_sensor_fan_offsets[] = { 0x70, 0x7D, 0x8A, 0x97};
+
+#define QUADRO_NUM_SENSORS		4
+#define QUADRO_SENSOR_START		0x34
+#define QUADRO_SENSOR_SIZE		0x02
+#define QUADRO_SENSOR_DISCONNECTED	0x7FFF
+
+#define QUADRO_CTRL_REPORT_SIZE			0x3c1
+#define QUADRO_CTRL_REPORT_CHECKSUM_OFFSET	(QUADRO_CTRL_REPORT_SIZE-2)
+#define QUADRO_CTRL_REPORT_CHECKSUM_START	0x01
+#define QUADRO_CTRL_REPORT_CHECKSUM_LENGTH	(QUADRO_CTRL_REPORT_SIZE-3)
+
+/* Fan speed registers in Quadro control report (from 0-100%) */
+static u16 quadro_ctrl_fan_offsets[] = { 0x37, 0x8c, 0xe1, 0x136};
 
 /* Labels for D5 Next */
 static const char *const label_d5next_temp[] = {
@@ -330,6 +358,7 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 			break;
 		case farbwerk:
 		case farbwerk360:
+		case quadro:
 		case octo:
 			return 0444;
 		default:
@@ -338,6 +367,18 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 		break;
 	case hwmon_pwm:
 		switch (priv->kind) {
+		case quadro:
+			if (channel < 4) {
+				switch (attr) {
+					case hwmon_pwm_input:
+						return 0644;
+					default:
+						break;
+				}
+				break;
+			}
+			break;
+
 		case octo:
 			switch (attr) {
 			case hwmon_pwm_input:
@@ -358,6 +399,10 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 			if (channel < 2)
 				return 0444;
 			break;
+		case quadro:
+			if (channel < 4)
+				return 0444;
+			break;
 		case octo:
 			return 0444;
 		default:
@@ -368,6 +413,10 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 		switch (priv->kind) {
 		case d5next:
 			if (channel < 3)
+				return 0444;
+			break;
+		case quadro:
+			if (channel < 4)
 				return 0444;
 			break;
 		case octo:
@@ -409,6 +458,13 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		switch (priv->kind) {
 		case octo:
 			ret = aqc_get_ctrl_val(priv, octo_ctrl_fan_offsets[channel]);
+			if (ret < 0)
+				return ret;
+
+			*val = aqc_percent_to_pwm(ret);
+			break;
+		case quadro:
+			ret = aqc_get_ctrl_val(priv, quadro_ctrl_fan_offsets[channel]);
 			if (ret < 0)
 				return ret;
 
@@ -476,6 +532,16 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 					return pwm_value;
 
 				ret = aqc_set_ctrl_val(priv, octo_ctrl_fan_offsets[channel],
+						       pwm_value);
+				if (ret < 0)
+					return ret;
+				break;
+			case quadro:
+				pwm_value = aqc_pwm_to_percent(val);
+				if (pwm_value < 0)
+					return pwm_value;
+
+				ret = aqc_set_ctrl_val(priv, quadro_ctrl_fan_offsets[channel],
 						       pwm_value);
 				if (ret < 0)
 					return ret;
@@ -647,6 +713,35 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 				priv->temp_input[i] = sensor_value * 10;
 		}
 		break;
+	case quadro:
+		priv->power_cycles = get_unaligned_be32(data + QUADRO_POWER_CYCLES);
+
+		/* Fan speed and related readings */
+		for (i = 0; i < QUADRO_NUM_FANS; i++) {
+			priv->speed_input[i] =
+				get_unaligned_be16(data + quadro_sensor_fan_offsets[i] +
+						   QUADRO_FAN_SPEED_OFFSET);
+			priv->power_input[i] =
+				get_unaligned_be16(data + quadro_sensor_fan_offsets[i] +
+						   QUADRO_FAN_POWER_OFFSET) * 10000;
+			priv->voltage_input[i] =
+				get_unaligned_be16(data + quadro_sensor_fan_offsets[i] +
+						   QUADRO_FAN_VOLTAGE_OFFSET) * 10;
+			priv->current_input[i] =
+				get_unaligned_be16(data + quadro_sensor_fan_offsets[i] +
+						   QUADRO_FAN_CURRENT_OFFSET);
+		}
+
+		/* Temperature sensor readings */
+		for (i = 0; i < QUADRO_NUM_SENSORS; i++) {
+			sensor_value = get_unaligned_be16(data + QUADRO_SENSOR_START +
+							  i * QUADRO_SENSOR_SIZE);
+			if (sensor_value == QUADRO_SENSOR_DISCONNECTED)
+				priv->temp_input[i] = -ENODATA;
+			else
+				priv->temp_input[i] = sensor_value * 10;
+		}
+		break;
 	default:
 		break;
 	}
@@ -702,6 +797,7 @@ static void aqc_debugfs_init(struct aqc_data *priv)
 	switch (priv->kind) {
 	case d5next:
 	case octo:
+	case quadro:
 		debugfs_create_file("power_cycles", 0444, priv->debugfs, priv, &power_cycles_fops);
 		break;
 	default:
@@ -746,7 +842,6 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	switch (hdev->product) {
 	case USB_PRODUCT_ID_D5NEXT:
 		priv->kind = d5next;
-
 		priv->temp_label = label_d5next_temp;
 		priv->speed_label = label_d5next_speeds;
 		priv->power_label = label_d5next_power;
@@ -755,12 +850,10 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		break;
 	case USB_PRODUCT_ID_FARBWERK:
 		priv->kind = farbwerk;
-
 		priv->temp_label = label_temp_sensors;
 		break;
 	case USB_PRODUCT_ID_FARBWERK360:
 		priv->kind = farbwerk360;
-
 		priv->temp_label = label_temp_sensors;
 		break;
 	case USB_PRODUCT_ID_OCTO:
@@ -769,6 +862,19 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->checksum_start = OCTO_CTRL_REPORT_CHECKSUM_START;
 		priv->checksum_length = OCTO_CTRL_REPORT_CHECKSUM_LENGTH;
 		priv->checksum_offset = OCTO_CTRL_REPORT_CHECKSUM_OFFSET;
+
+		priv->temp_label = label_temp_sensors;
+		priv->speed_label = label_fan_speed;
+		priv->power_label = label_fan_power;
+		priv->voltage_label = label_fan_voltage;
+		priv->current_label = label_fan_current;
+		break;
+	case USB_PRODUCT_ID_QUADRO:
+		priv->kind = quadro;
+		priv->buffer_size = QUADRO_CTRL_REPORT_SIZE;
+		priv->checksum_start = QUADRO_CTRL_REPORT_CHECKSUM_START;
+		priv->checksum_length = QUADRO_CTRL_REPORT_CHECKSUM_LENGTH;
+		priv->checksum_offset = QUADRO_CTRL_REPORT_CHECKSUM_OFFSET;
 
 		priv->temp_label = label_temp_sensors;
 		priv->speed_label = label_fan_speed;
@@ -823,6 +929,7 @@ static const struct hid_device_id aqc_table[] = {
 	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_FARBWERK) },
 	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_FARBWERK360) },
 	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_OCTO) },
+	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_QUADRO) },
 	{ }
 };
 
