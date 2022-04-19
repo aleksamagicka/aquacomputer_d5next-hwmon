@@ -134,7 +134,7 @@ static const char *const label_d5next_current[] = {
 	"Fan current"
 };
 
-/* Labels for Farbwerk 360 and Octo temperature sensors */
+/* Labels for Farbwerk, Farbwerk 360 and Octo temperature sensors */
 static const char *const label_temp_sensors[] = {
 	"Sensor 1",
 	"Sensor 2",
@@ -561,8 +561,7 @@ static const struct hwmon_chip_info aqc_chip_info = {
 	.info = aqc_info,
 };
 
-static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 *data,
-			 int size)
+static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 *data, int size)
 {
 	int i, sensor_value;
 	struct aqc_data *priv;
@@ -607,7 +606,7 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 			else
 				priv->temp_input[i] = sensor_value * 10;
 		}
-			break;
+		break;
 	case farbwerk360:
 		/* Temperature sensor readings */
 		for (i = 0; i < FARBWERK360_NUM_SENSORS; i++) {
