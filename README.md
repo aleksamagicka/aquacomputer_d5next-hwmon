@@ -1,13 +1,18 @@
 # aquacomputer_d5next
 
-A hwmon Linux kernel driver supporting the following Aquacomputer devices:
+## Overview
 
-|    Device    | Supported since kernel |                    Functionality                    |
-| :----------: | :--------------------: | :-------------------------------------------------: |
-|   D5 Next    |          5.15          |                   Various sensors                   |
-| Farbwerk 360 |          5.18          |                 Temperature sensors                 |
-|   Farbwerk   |          5.19          |                 Temperature sensors                 |
-|     Octo     |          5.19          | Temperature and fan sensors, direct fan PWM control |
+This is a hwmon Linux kernel driver supporting the following Aquacomputer devices:
+
+|    Device    | Supported since kernel |                    Functionality                    | Microcontroller |
+| :----------: | :--------------------: | :-------------------------------------------------: | :-------------: |
+|   D5 Next    |          5.15          |                   Various sensors                   |        ?        |
+| Farbwerk 360 |          5.18          |                 Temperature sensors                 |  MCF51JU128VHS  |
+|   Farbwerk   |          5.19          |                 Temperature sensors                 |        ?        |
+|     Octo     |          5.19          | Temperature and fan sensors, direct fan PWM control |  MCF51JU128VLH  |
+|    Quadro    |  Iterating (PR open)   | Temperature and fan sensors, direct fan PWM control |  MCF51JU128VHS  |
+
+The above table shows what devices this driver supports and starting from which kernel version, if applicable. Microcontrollers are noted for general reference, as this driver only communicates through HID reports and does not interact with the device CPU & electronics directly.
 
 Being a standard `hwmon` driver, it provides readings via `sysfs`, which are easily accessible through `lm-sensors` as usual. Here's example output for some of the devices:
 
