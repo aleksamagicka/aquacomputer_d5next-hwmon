@@ -70,3 +70,19 @@ Fan 6 current:   0.00 A
 Fan 7 current:   0.00 A  
 Fan 8 current:   9.00 mA 
 ```
+
+## Repository contents
+
+Only notable parts are listed:
+
+* _aquacomputer_d5next.c_ - the driver itself
+* [Reverse engineering docs](re-docs) - WIP, documents explaining how the devices communicate to help understand what the driver does
+
+* [Kernel docs](docs) - driver documentation for the kernel
+
+## Installation and usage
+
+Ideally, you are on a recent kernel and your distro includes it. If that's the case, you should already have this driver available! Refer to the table in the overview above to check.
+
+If you're not, or your kernel does not have the driver support for your particular device, you can clone this repository and compile the driver yourself.
+
