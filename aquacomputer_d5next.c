@@ -72,7 +72,7 @@ static u8 secondary_ctrl_report[] = {
 #define D5NEXT_FAN_OFFSET		0x5f
 #define D5NEXT_PUMP_OFFSET		0x6c
 static u8 d5next_sensor_fan_offsets[] = { D5NEXT_PUMP_OFFSET, D5NEXT_FAN_OFFSET};
-
+static u16 d5next_ctrl_fan_offsets[] = { 0x97, 0x42};
 
 /* Register offsets for the Octo fan controller */
 static u8 octo_sensor_fan_offsets[] = { 0x7D, 0x8A, 0x97, 0xA4, 0xB1, 0xBE, 0xCB, 0xD8 };
@@ -663,9 +663,11 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 		priv->num_fans = 2;
 		priv->fan_sensor_offsets = d5next_sensor_fan_offsets;
+		priv->fan_ctrl_offsets = d5next_ctrl_fan_offsets;
 		priv->num_temp_sensors = 1;
 		priv->temp_sensor_start_offset = 0x57;
 		priv->power_cycle_count_offset = 0x18;
+		priv->buffer_size = 0x329;
 		priv->temp_label = label_d5next_temp;
 		priv->speed_label = label_d5next_speeds;
 		priv->power_label = label_d5next_power;
