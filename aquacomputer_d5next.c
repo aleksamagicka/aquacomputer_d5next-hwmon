@@ -165,6 +165,14 @@ static const char *const label_fan_current[] = {
 	"Fan 8 current"
 };
 
+static const char *const label_fan_flow_speed_quadro[] = {
+	"Fan 1 speed",
+	"Fan 2 speed",
+	"Fan 3 speed",
+	"Fan 4 speed",
+	"Flow speed [l/h]"
+};
+
 struct aqc_data {
 	struct hid_device *hdev;
 	struct device *hwmon_dev;
@@ -185,6 +193,7 @@ struct aqc_data {
 	int num_temp_sensors;
 	int temp_sensor_start_offset;
 	u16 power_cycle_count_offset;
+	u8 flow_sensor_offset;
 
 	/* General info, same across all devices */
 	u32 serial_number[2];
@@ -322,6 +331,17 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 		}
 		break;
 	case hwmon_fan:
+		switch (priv->kind) {
+		case quadro:
+			if (channel < priv->num_fans + 1) /* special case to support flow sensor */
+				return 0444;
+			break;
+		default:
+			if (channel < priv->num_fans)
+				return 0444;
+			break;
+		}
+		break;
 	case hwmon_power:
 	case hwmon_curr:
 		if (channel < priv->num_fans)
@@ -566,6 +586,9 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 	case d5next:
 		priv->voltage_input[2] = get_unaligned_be16(data + D5NEXT_5V_VOLTAGE) * 10;
 		break;
+	case quadro:
+		priv->speed_input[4] = get_unaligned_be16(data + priv->flow_sensor_offset) / 10;
+		break;
 	default:
 		break;
 	}
@@ -717,9 +740,10 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->temp_sensor_start_offset = 0x34;
 		priv->power_cycle_count_offset = 0x18;
 		priv->buffer_size = 0x3c1;
+		priv->flow_sensor_offset = 0x6e;
 
 		priv->temp_label = label_temp_sensors;
-		priv->speed_label = label_fan_speed;
+		priv->speed_label = label_fan_flow_speed_quadro;
 		priv->power_label = label_fan_power;
 		priv->voltage_label = label_fan_voltage;
 		priv->current_label = label_fan_current;
