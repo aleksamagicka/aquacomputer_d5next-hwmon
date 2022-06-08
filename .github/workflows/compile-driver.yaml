@@ -2,9 +2,9 @@
 
    on:
      push:
-       branches: [ master ]
+       branches: [ main, gh-actions-test ]
      pull_request:
-       branches: [ master ]
+       branches: [ main, gh-actions-test ]
 
    jobs:
     build:
