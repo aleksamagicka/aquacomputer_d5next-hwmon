@@ -10,7 +10,7 @@ This is a hwmon Linux kernel driver supporting the following Aquacomputer device
 | Farbwerk 360 |          5.18          |                 Temperature sensors                 |  MCF51JU128VHS  |
 |   Farbwerk   |          5.19          |                 Temperature sensors                 |        ?        |
 |     Octo     |          5.19          | Temperature and fan sensors, direct fan PWM control |  MCF51JU128VLH  |
-|    Quadro    |     Available here     | Temperature and fan sensors, direct fan PWM control |  MCF51JU128VHS  |
+|    Quadro    |     Available here     | Temperature, flow and fan sensors, direct fan PWM control |  MCF51JU128VHS  |
 
 The above table shows what devices this driver supports and starting from which kernel version, if applicable. Microcontrollers are noted for general reference, as this driver only communicates through HID reports and does not interact with the device CPU & electronics directly.
 
@@ -68,7 +68,32 @@ Fan 4 current:   0.00 A
 Fan 5 current:   0.00 A  
 Fan 6 current:   0.00 A  
 Fan 7 current:   0.00 A  
-Fan 8 current:   9.00 mA 
+Fan 8 current:   9.00 mA
+
+[leo@manjaro]$ sensors
+quadro-hid-3-3
+Adapter: HID adapter
+Fan 1 voltage:     12.13 V  
+Fan 2 voltage:     12.13 V  
+Fan 3 voltage:     12.13 V  
+Fan 4 voltage:     12.13 V  
+Fan 1 speed:       643 RPM
+Fan 2 speed:      1756 RPM
+Fan 3 speed:       659 RPM
+Fan 4 speed:       650 RPM
+Flow speed [l/h]:   60 RPM
+Sensor 1:          +33.9°C  
+Sensor 2:          +25.3°C  
+Sensor 3:          +37.6°C  
+Sensor 4:          +33.3°C  
+Fan 1 power:      290.00 mW 
+Fan 2 power:        0.00 W  
+Fan 3 power:      260.00 mW 
+Fan 4 power:      260.00 mW 
+Fan 1 current:     24.00 mA 
+Fan 2 current:      0.00 A  
+Fan 3 current:     22.00 mA 
+Fan 4 current:     22.00 mA
 ```
 
 ## Repository contents
