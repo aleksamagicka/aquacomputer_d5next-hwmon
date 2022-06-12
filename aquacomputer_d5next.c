@@ -274,8 +274,8 @@ static int aqc_send_ctrl_data(struct aqc_data *priv)
 	return ret;
 }
 
-/* Refreshes the control buffer and returns value at offset */
-static int aqc_get_ctrl_val(struct aqc_data *priv, int offset)
+/* Refreshes the control buffer and returns u16 value at offset */
+static int aqc_get_u16_val(struct aqc_data *priv, int offset)
 {
 	int ret;
 
@@ -292,7 +292,25 @@ unlock_and_return:
 	return ret;
 }
 
-static int aqc_set_ctrl_val(struct aqc_data *priv, int offset, long val)
+/* Refreshes the control buffer and returns u8 value at offset */
+static int aqc_get_u8_val(struct aqc_data *priv, int offset)
+{
+	int ret;
+
+	mutex_lock(&priv->mutex);
+
+	ret = aqc_get_ctrl_data(priv);
+	if (ret < 0)
+		goto unlock_and_return;
+
+	ret = priv->buffer[offset];
+
+unlock_and_return:
+	mutex_unlock(&priv->mutex);
+	return ret;
+}
+
+static int aqc_set_u16_val(struct aqc_data *priv, int offset, long val)
 {
 	int ret;
 
@@ -303,6 +321,26 @@ static int aqc_set_ctrl_val(struct aqc_data *priv, int offset, long val)
 		goto unlock_and_return;
 
 	put_unaligned_be16((u16)val, priv->buffer + offset);
+
+	ret = aqc_send_ctrl_data(priv);
+
+unlock_and_return:
+	mutex_unlock(&priv->mutex);
+	return ret;
+}
+
+static int aqc_set_u8_val(struct aqc_data *priv, int offset, long val)
+{
+	int ret;
+
+	mutex_lock(&priv->mutex);
+
+	ret = aqc_get_ctrl_data(priv);
+	if (ret < 0)
+		goto unlock_and_return;
+
+	// put_unaligned_be16((u16)val, priv->buffer + offset);
+	priv->buffer[offset] = (u8) val;
 
 	ret = aqc_send_ctrl_data(priv);
 
@@ -323,6 +361,8 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 	case hwmon_pwm:
 		if (priv->fan_ctrl_offsets != NULL && channel < priv->num_fans) {
 			switch (attr) {
+			case hwmon_pwm_enable:
+				return 0644;
 			case hwmon_pwm_input:
 				return 0644;
 			default:
@@ -390,11 +430,25 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		break;
 	case hwmon_pwm:
 		if (priv->fan_ctrl_offsets != NULL) {
-			ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel]);
-			if (ret < 0)
-				return ret;
+			switch (attr) {
+			case hwmon_pwm_enable:
+				ret = aqc_get_u8_val(priv, priv->fan_ctrl_offsets[channel] - 1);
+				if (ret < 0)
+					return ret;
 
-			*val = aqc_percent_to_pwm(ret);
+				*val = ret;
+				// *val = 3;
+				break;
+			case hwmon_pwm_input:
+				ret = aqc_get_u16_val(priv, priv->fan_ctrl_offsets[channel]);
+				if (ret < 0)
+					return ret;
+
+				*val = aqc_percent_to_pwm(ret);
+				break;
+			default:
+				break;
+			}	
 		}
 		break;
 	case hwmon_in:
@@ -447,13 +501,24 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 	switch (type) {
 	case hwmon_pwm:
 		switch (attr) {
+		case hwmon_pwm_enable:
+			if (priv->fan_ctrl_offsets != NULL) {
+				if (val < 0)
+					return val;
+
+				ret = aqc_set_u8_val(priv, priv->fan_ctrl_offsets[channel] - 1,
+						       val);
+				if (ret < 0)
+					return ret;
+			}
+			break;
 		case hwmon_pwm_input:
 			if (priv->fan_ctrl_offsets != NULL) {
 				pwm_value = aqc_pwm_to_percent(val);
 				if (pwm_value < 0)
 					return pwm_value;
 
-				ret = aqc_set_ctrl_val(priv, priv->fan_ctrl_offsets[channel],
+				ret = aqc_set_u16_val(priv, priv->fan_ctrl_offsets[channel],
 						       pwm_value);
 				if (ret < 0)
 					return ret;
@@ -502,14 +567,14 @@ static const struct hwmon_channel_info *aqc_info[] = {
 			   HWMON_P_INPUT | HWMON_P_LABEL,
 			   HWMON_P_INPUT | HWMON_P_LABEL),
 	HWMON_CHANNEL_INFO(pwm,
-			   HWMON_PWM_INPUT,
-			   HWMON_PWM_INPUT,
-			   HWMON_PWM_INPUT,
-			   HWMON_PWM_INPUT,
-			   HWMON_PWM_INPUT,
-			   HWMON_PWM_INPUT,
-			   HWMON_PWM_INPUT,
-			   HWMON_PWM_INPUT),
+			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE,
+			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE,
+			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE,
+			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE,
+			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE,
+			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE,
+			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE,
+			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE),
 	HWMON_CHANNEL_INFO(in,
 			   HWMON_I_INPUT | HWMON_I_LABEL,
 			   HWMON_I_INPUT | HWMON_I_LABEL,
