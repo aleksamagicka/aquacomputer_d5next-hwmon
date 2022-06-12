@@ -53,7 +53,7 @@ Sysfs entries
 temp[1-4]_input  Temperature sensors (in millidegrees Celsius)
 fan[1-8]_input   Pump/fan speed (in RPM) / Flow speed (in l/h)
 power[1-8]_input Pump/fan power (in micro Watts)
-in[1-8]_input    Pump/fan voltage (in milli Volts)
+in[0-7]_input    Pump/fan voltage (in milli Volts)
 curr[1-8]_input  Pump/fan current (in milli Amperes)
 pwm[1-8]         Fan PWM (0 - 255)
 pwm[1-8]_enable  Fan control mode
