@@ -339,7 +339,6 @@ static int aqc_set_u8_val(struct aqc_data *priv, int offset, long val)
 	if (ret < 0)
 		goto unlock_and_return;
 
-	// put_unaligned_be16((u16)val, priv->buffer + offset);
 	priv->buffer[offset] = (u8) val;
 
 	ret = aqc_send_ctrl_data(priv);
@@ -437,7 +436,6 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 					return ret;
 
 				*val = ret;
-				// *val = 3;
 				break;
 			case hwmon_pwm_input:
 				ret = aqc_get_u16_val(priv, priv->fan_ctrl_offsets[channel]);
