@@ -501,8 +501,8 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		switch (attr) {
 		case hwmon_pwm_enable:
 			if (priv->fan_ctrl_offsets != NULL) {
-				if (val < 0)
-					return val;
+				if (val < 0 || val > 6)
+					return -EINVAL;
 
 				ret = aqc_set_u8_val(priv, priv->fan_ctrl_offsets[channel] - 1,
 						       val);
