@@ -275,7 +275,7 @@ static int aqc_send_ctrl_data(struct aqc_data *priv)
 }
 
 /* Refreshes the control buffer and returns u16 value at offset */
-static int aqc_get_u16_val(struct aqc_data *priv, int offset)
+static int aqc_get_ctrl_val(struct aqc_data *priv, int offset)
 {
 	int ret;
 
@@ -310,7 +310,7 @@ unlock_and_return:
 	return ret;
 }
 
-static int aqc_set_u16_val(struct aqc_data *priv, int offset, long val)
+static int aqc_set_ctrl_val(struct aqc_data *priv, int offset, long val)
 {
 	int ret;
 
@@ -438,7 +438,7 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				*val = ret;
 				break;
 			case hwmon_pwm_input:
-				ret = aqc_get_u16_val(priv, priv->fan_ctrl_offsets[channel]);
+				ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel]);
 				if (ret < 0)
 					return ret;
 
@@ -516,7 +516,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				if (pwm_value < 0)
 					return pwm_value;
 
-				ret = aqc_set_u16_val(priv, priv->fan_ctrl_offsets[channel],
+				ret = aqc_set_ctrl_val(priv, priv->fan_ctrl_offsets[channel],
 						       pwm_value);
 				if (ret < 0)
 					return ret;
