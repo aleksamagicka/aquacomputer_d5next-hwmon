@@ -20,8 +20,8 @@
 #include <asm/unaligned.h>
 
 #define USB_VENDOR_ID_AQUACOMPUTER	0x0c70
-#define USB_PRODUCT_ID_FARBWERK 	0xf00a
-#define USB_PRODUCT_ID_QUADRO 		0xf00d
+#define USB_PRODUCT_ID_FARBWERK		0xf00a
+#define USB_PRODUCT_ID_QUADRO		0xf00d
 #define USB_PRODUCT_ID_D5NEXT		0xf00e
 #define USB_PRODUCT_ID_FARBWERK360	0xf010
 #define USB_PRODUCT_ID_OCTO		0xf011
@@ -274,8 +274,7 @@ static int aqc_send_ctrl_data(struct aqc_data *priv)
 	return ret;
 }
 
-/* Refreshes the control buffer and returns u16 value at offset */
-static int aqc_get_ctrl_val(struct aqc_data *priv, int offset)
+static int aqc_get_val(struct aqc_data *priv, int offset, size_t size)
 {
 	int ret;
 
@@ -285,32 +284,35 @@ static int aqc_get_ctrl_val(struct aqc_data *priv, int offset)
 	if (ret < 0)
 		goto unlock_and_return;
 
-	ret = get_unaligned_be16(priv->buffer + offset);
+	switch (size) {
+	case 16:
+		ret = get_unaligned_be16(priv->buffer + offset);
+		break;
+	case 8:
+		ret = priv->buffer[offset];
+		break;
+	default:
+		break;
+	}
 
 unlock_and_return:
 	mutex_unlock(&priv->mutex);
 	return ret;
+}
+
+/* Refreshes the control buffer and returns u16 value at offset */
+static int aqc_get_ctrl_val(struct aqc_data *priv, int offset)
+{
+	return aqc_get_val(priv, offset, 16);
 }
 
 /* Refreshes the control buffer and returns u8 value at offset */
 static int aqc_get_u8_val(struct aqc_data *priv, int offset)
 {
-	int ret;
-
-	mutex_lock(&priv->mutex);
-
-	ret = aqc_get_ctrl_data(priv);
-	if (ret < 0)
-		goto unlock_and_return;
-
-	ret = priv->buffer[offset];
-
-unlock_and_return:
-	mutex_unlock(&priv->mutex);
-	return ret;
+	return aqc_get_val(priv, offset, 8);
 }
 
-static int aqc_set_ctrl_val(struct aqc_data *priv, int offset, long val)
+static int aqc_set_val(struct aqc_data *priv, int offset, long val, size_t size)
 {
 	int ret;
 
@@ -320,32 +322,33 @@ static int aqc_set_ctrl_val(struct aqc_data *priv, int offset, long val)
 	if (ret < 0)
 		goto unlock_and_return;
 
-	put_unaligned_be16((u16)val, priv->buffer + offset);
+	switch (size) {
+	case 16:
+		put_unaligned_be16((u16)val, priv->buffer + offset);
+		break;
+	case 8:
+		priv->buffer[offset] = (u8) val;
+		break;
+	default:
+		ret = -EINVAL;
+		goto unlock_and_return;
+	}
 
 	ret = aqc_send_ctrl_data(priv);
 
 unlock_and_return:
 	mutex_unlock(&priv->mutex);
 	return ret;
+};
+
+static int aqc_set_ctrl_val(struct aqc_data *priv, int offset, long val)
+{
+	return aqc_set_val(priv, offset, val, 16);
 }
 
 static int aqc_set_u8_val(struct aqc_data *priv, int offset, long val)
 {
-	int ret;
-
-	mutex_lock(&priv->mutex);
-
-	ret = aqc_get_ctrl_data(priv);
-	if (ret < 0)
-		goto unlock_and_return;
-
-	priv->buffer[offset] = (u8) val;
-
-	ret = aqc_send_ctrl_data(priv);
-
-unlock_and_return:
-	mutex_unlock(&priv->mutex);
-	return ret;
+	return aqc_set_val(priv, offset, val, 8);
 }
 
 static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u32 attr, int channel)
@@ -446,7 +449,7 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				break;
 			default:
 				break;
-			}	
+			}
 		}
 		break;
 	case hwmon_in:
@@ -504,7 +507,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				if (val < 0 || val > 6)
 					return -EINVAL;
 
-				ret = aqc_set_u8_val(priv, priv->fan_ctrl_offsets[channel] - 1,
+					ret = aqc_set_u8_val(priv, priv->fan_ctrl_offsets[channel] - 1,
 						       val);
 				if (ret < 0)
 					return ret;
