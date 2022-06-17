@@ -26,16 +26,16 @@ optional and allows it to be controlled using temperature curves directly from t
 pump. If it's not connected, the fan-related sensors will report zeroes.
 
 The pump can be configured either through software or via its physical
-interface. Configuring the pump and the other devices through this driver is not implemented completly, as it
-seems to require sending it a complete configuration. That includes addressable
-RGB LEDs, for which there is no standard sysfs interface. Thus, that task is
-better suited for userspace tools.
+interface. Configuring the pump and the other devices through this driver 
+is not implemented completly, as it seems to require sending it a complete 
+configuration. That includes addressable RGB LEDs, for which there is no standard
+sysfs interface. Thus, that task is better suited for userspace tools.
 
 The Octo exposes four temperature sensors and eight PWM controllable fans, along
 with their speed (in RPM), power, voltage and current.
 
-The Quadro exposes four temperature sensors, a flow sensor and four PWM controllable fans, along
-with their speed (in RPM), power, voltage and current.
+The Quadro exposes four temperature sensors, a flow sensor and four PWM controllable fans,
+along with their speed (in RPM), power, voltage and current.
 
 The possible values for pwm_enable are:
 0: no change
