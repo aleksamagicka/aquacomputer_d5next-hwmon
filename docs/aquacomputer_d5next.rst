@@ -37,6 +37,17 @@ with their speed (in RPM), power, voltage and current.
 The Quadro exposes four temperature sensors, a flow sensor and four PWM controllable fans, along
 with their speed (in RPM), power, voltage and current.
 
+The possible values for pwm_enable are:
+0: no change
+1: manual pwm mode
+2: target temp mode
+3: temp curve mode
+4: follow fan1 pwm
+5: follow fan2 pwm
+6: follow fan3 pwm
+7: follow fan4 pwm
+
+
 The Farbwerk and Farbwerk 360 expose four temperature sensors. Depending on the device,
 not all sysfs and debugfs entries will be available.
 
