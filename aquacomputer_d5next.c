@@ -794,7 +794,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 							  &aqc_chip_info, NULL);
 
 	if (IS_ERR(priv->hwmon_dev)) {
-		ret = PTR_ERR(priv->hwmon_dev);
+		ret = (int) PTR_ERR(priv->hwmon_dev);
 		goto fail_and_close;
 	}
 
