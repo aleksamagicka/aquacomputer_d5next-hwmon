@@ -64,6 +64,7 @@ static u8 secondary_ctrl_report[] = {
 #define AQC_FAN_CURRENT_OFFSET		0x04
 #define AQC_FAN_POWER_OFFSET		0x06
 #define AQC_FAN_SPEED_OFFSET		0x08
+#define AQC_FAN_PWM_OFFSET			0x01
 
 
 /* Register offsets for the D5 Next pump */
@@ -72,19 +73,19 @@ static u8 secondary_ctrl_report[] = {
 #define D5NEXT_FAN_OFFSET		0x5f
 #define D5NEXT_PUMP_OFFSET		0x6c
 static u8 d5next_sensor_fan_offsets[] = { D5NEXT_PUMP_OFFSET, D5NEXT_FAN_OFFSET};
-static u16 d5next_ctrl_fan_offsets[] = { 0x97, 0x42};
+static u16 d5next_ctrl_fan_offsets[] = { 0x96, 0x41};
 
 /* Register offsets for the Octo fan controller */
 static u8 octo_sensor_fan_offsets[] = { 0x7D, 0x8A, 0x97, 0xA4, 0xB1, 0xBE, 0xCB, 0xD8 };
 
 /* Fan speed registers in Octo control report (from 0-100%) */
-static u16 octo_ctrl_fan_offsets[] = { 0x5B, 0xB0, 0x105, 0x15A, 0x1AF, 0x204, 0x259, 0x2AE };
+static u16 octo_ctrl_fan_offsets[] = { 0x5A, 0xAF, 0x104, 0x159, 0x1AE, 0x203, 0x258, 0x2AD };
 
 /* Register offsets for the Quadro fan controller */
 static u8 quadro_sensor_fan_offsets[] = { 0x70, 0x7D, 0x8A, 0x97};
 
 /* Fan speed registers in Quadro control report (from 0-100%) */
-static u16 quadro_ctrl_fan_offsets[] = { 0x37, 0x8c, 0xe1, 0x136};
+static u16 quadro_ctrl_fan_offsets[] = { 0x36, 0x8b, 0xe0, 0x135};
 
 /* Labels for D5 Next */
 static const char *const label_d5next_temp[] = {
@@ -434,14 +435,14 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		if (priv->fan_ctrl_offsets != NULL) {
 			switch (attr) {
 			case hwmon_pwm_enable:
-				ret = aqc_get_u8_val(priv, priv->fan_ctrl_offsets[channel] - 1);
+				ret = aqc_get_u8_val(priv, priv->fan_ctrl_offsets[channel]);
 				if (ret < 0)
 					return ret;
 
 				*val = ret + 1;
 				break;
 			case hwmon_pwm_input:
-				ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel]);
+				ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel] + AQC_FAN_PWM_OFFSET);
 				if (ret < 0)
 					return ret;
 
@@ -508,7 +509,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 					return -EINVAL;
 
 				if (val > 0)
-					ret = aqc_set_u8_val(priv, priv->fan_ctrl_offsets[channel] - 1,
+					ret = aqc_set_u8_val(priv, priv->fan_ctrl_offsets[channel],
 						       val - 1);
 				if (ret < 0)
 					return ret;
@@ -520,7 +521,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				if (pwm_value < 0)
 					return pwm_value;
 
-				ret = aqc_set_ctrl_val(priv, priv->fan_ctrl_offsets[channel],
+				ret = aqc_set_ctrl_val(priv, priv->fan_ctrl_offsets[channel] + AQC_FAN_PWM_OFFSET,
 						       pwm_value);
 				if (ret < 0)
 					return ret;
