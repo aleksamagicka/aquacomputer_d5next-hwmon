@@ -78,7 +78,7 @@ static u8 secondary_ctrl_report[] = {
 #define D5NEXT_5V_VOLTAGE		57 //0x39
 static u8 d5next_sensor_fan_offsets[] = { D5NEXT_PUMP_OFFSET, D5NEXT_FAN_OFFSET};
 static u16 d5next_ctrl_fan_offsets[] = { 0x97, 0x42};
-
+static u16 d5next_ctrl_sensor_alarm_offsets[] = {0x324};
 
 /* Register offsets for the Farbwerk RGB controller */
 #define FARBWERK_NUM_SENSORS		4
@@ -219,6 +219,7 @@ struct aqc_data {
 	u16 *fan_ctrl_offsets;
 	int num_temp_sensors;
 	int temp_sensor_start_offset;
+	u16 *temp_sensor_alarms_offsets;
 	u16 power_cycle_count_offset;
 	u8 flow_sensor_offset;
 
@@ -242,7 +243,6 @@ struct aqc_data {
 	const char *const *power_label;
 	const char *const *voltage_label;
 	const char *const *current_label;
-
 	unsigned long updated;
 };
 
@@ -344,8 +344,18 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 
 	switch (type) {
 	case hwmon_temp:
-		if (channel < priv->num_temp_sensors)
-			return 0444;
+		if (channel >= priv->num_temp_sensors)
+			return 0;
+		switch (attr) {
+			case hwmon_temp_input:
+				return 0444;
+			case hwmon_temp_max:
+				if (priv->temp_sensor_alarms_offsets != NULL)
+					return 0644;
+				break;
+			default:
+				break;
+		}
 		break;
 	case hwmon_pwm:
 		if (priv->fan_ctrl_offsets != NULL && channel < priv->num_fans) {
@@ -404,10 +414,23 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 
 	switch (type) {
 	case hwmon_temp:
-		if (priv->temp_input[channel] == -ENODATA)
-			return -ENODATA;
-
-		*val = priv->temp_input[channel];
+		switch (attr) {
+			case hwmon_temp_input:
+				if (priv->temp_input[channel] == -ENODATA)
+					return -ENODATA;
+				*val = priv->temp_input[channel];
+				break;
+			case hwmon_temp_max:
+				if (priv->temp_sensor_alarms_offsets == NULL)
+					return -EINVAL;
+				ret = aqc_get_ctrl_val(priv, priv->temp_sensor_alarms_offsets[channel]);
+				if (ret < 0)
+					return ret;
+				*val = ret * 10;
+				break;
+			default:
+				return -EOPNOTSUPP;
+		}
 		break;
 	case hwmon_fan:
 		*val = priv->speed_input[channel];
@@ -416,13 +439,12 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		*val = priv->power_input[channel];
 		break;
 	case hwmon_pwm:
-		if (priv->fan_ctrl_offsets != NULL) {
-			ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel]);
-			if (ret < 0)
-				return ret;
-
-			*val = aqc_percent_to_pwm(ret);
-		}
+		if (priv->fan_ctrl_offsets == NULL)
+			return -EINVAL;
+		ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel]);
+		if (ret < 0)
+			return ret;
+		*val = aqc_percent_to_pwm(ret);
 		break;
 	case hwmon_in:
 		*val = priv->voltage_input[channel];
@@ -489,6 +511,20 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		default:
 			break;
 		}
+	case hwmon_temp:
+		switch (attr) {
+		case hwmon_temp_max:
+			if (priv->temp_sensor_alarms_offsets != NULL) {
+				val = val / 10;
+				ret = aqc_set_ctrl_val(priv, priv->temp_sensor_alarms_offsets[channel],
+						       val);
+				if (ret < 0)
+					return ret;
+			}
+				break;
+		default:
+			break;
+		}
 		break;
 	default:
 		return -EOPNOTSUPP;
@@ -506,10 +542,10 @@ static const struct hwmon_ops aqc_hwmon_ops = {
 
 static const struct hwmon_channel_info *aqc_info[] = {
 	HWMON_CHANNEL_INFO(temp,
-			   HWMON_T_INPUT | HWMON_T_LABEL,
-			   HWMON_T_INPUT | HWMON_T_LABEL,
-			   HWMON_T_INPUT | HWMON_T_LABEL,
-			   HWMON_T_INPUT | HWMON_T_LABEL),
+			   HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_MAX,
+			   HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_MAX,
+			   HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_MAX,
+			   HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_MAX),
 	HWMON_CHANNEL_INFO(fan,
 			   HWMON_F_INPUT | HWMON_F_LABEL,
 			   HWMON_F_INPUT | HWMON_F_LABEL,
@@ -715,6 +751,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->fan_ctrl_offsets = d5next_ctrl_fan_offsets;
 		priv->num_temp_sensors = D5NEXT_NUM_SENSORS;
 		priv->temp_sensor_start_offset = D5NEXT_COOLANT_TEMP;
+		priv->temp_sensor_alarms_offsets = d5next_ctrl_sensor_alarm_offsets;
 		priv->power_cycle_count_offset = D5NEXT_POWER_CYCLES;
 		priv->buffer_size = D5NEXT_CTRL_REPORT_SIZE;
 		priv->temp_label = label_d5next_temp;
@@ -787,7 +824,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		ret = -ENOMEM;
 		goto fail_and_close;
 	}
-
+	
 	mutex_init(&priv->mutex);
 
 	priv->hwmon_dev = hwmon_device_register_with_info(&hdev->dev, priv->name, priv,
