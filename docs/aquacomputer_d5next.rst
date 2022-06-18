@@ -40,8 +40,8 @@ along with their speed (in RPM), power, voltage and current.
 The possible values for pwm_enable are:
 0: no change
 1: manual pwm mode
-2: target temp mode
-3: temp curve mode
+2: PID control mode
+3: fan curve mode
 4: follow fan1 pwm
 5: follow fan2 pwm
 6: follow fan3 pwm
