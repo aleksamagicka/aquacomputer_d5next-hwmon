@@ -20,8 +20,8 @@
 #include <asm/unaligned.h>
 
 #define USB_VENDOR_ID_AQUACOMPUTER	0x0c70
-#define USB_PRODUCT_ID_FARBWERK		0xf00a
-#define USB_PRODUCT_ID_QUADRO		0xf00d
+#define USB_PRODUCT_ID_FARBWERK 	0xf00a
+#define USB_PRODUCT_ID_QUADRO 		0xf00d
 #define USB_PRODUCT_ID_D5NEXT		0xf00e
 #define USB_PRODUCT_ID_FARBWERK360	0xf010
 #define USB_PRODUCT_ID_OCTO		0xf011
@@ -64,7 +64,9 @@ static u8 secondary_ctrl_report[] = {
 #define AQC_FAN_CURRENT_OFFSET		0x04
 #define AQC_FAN_POWER_OFFSET		0x06
 #define AQC_FAN_SPEED_OFFSET		0x08
-#define AQC_FAN_PWM_OFFSET			0x01
+
+/* Register offsets for fan control*/
+#define AQC_FAN_CTRL_PWM_OFFSET		0x01
 
 
 /* Register offsets for the D5 Next pump */
@@ -275,7 +277,8 @@ static int aqc_send_ctrl_data(struct aqc_data *priv)
 	return ret;
 }
 
-static int aqc_get_val(struct aqc_data *priv, int offset, size_t size)
+/* Refreshes the control buffer and returns value at offset */
+static int aqc_get_ctrl_val(struct aqc_data *priv, int offset, size_t size)
 {
 	int ret;
 
@@ -301,19 +304,8 @@ unlock_and_return:
 	return ret;
 }
 
-/* Refreshes the control buffer and returns u16 value at offset */
-static int aqc_get_ctrl_val(struct aqc_data *priv, int offset)
-{
-	return aqc_get_val(priv, offset, 16);
-}
-
-/* Refreshes the control buffer and returns u8 value at offset */
-static int aqc_get_u8_val(struct aqc_data *priv, int offset)
-{
-	return aqc_get_val(priv, offset, 8);
-}
-
-static int aqc_set_val(struct aqc_data *priv, int offset, long val, size_t size)
+/* Refreshes the control buffer, updates value at offset and writes buffer to device */
+static int aqc_set_ctrl_val(struct aqc_data *priv, int offset, long val, size_t size)
 {
 	int ret;
 
@@ -341,16 +333,6 @@ unlock_and_return:
 	mutex_unlock(&priv->mutex);
 	return ret;
 };
-
-static int aqc_set_ctrl_val(struct aqc_data *priv, int offset, long val)
-{
-	return aqc_set_val(priv, offset, val, 16);
-}
-
-static int aqc_set_u8_val(struct aqc_data *priv, int offset, long val)
-{
-	return aqc_set_val(priv, offset, val, 8);
-}
 
 static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u32 attr, int channel)
 {
@@ -435,14 +417,14 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		if (priv->fan_ctrl_offsets != NULL) {
 			switch (attr) {
 			case hwmon_pwm_enable:
-				ret = aqc_get_u8_val(priv, priv->fan_ctrl_offsets[channel]);
+				ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel], 8);
 				if (ret < 0)
 					return ret;
 
-				*val = ret + 1;
+				*val = ret + 1; /* add 1 to convert pwm_enable from aqc to hwmon */
 				break;
 			case hwmon_pwm_input:
-				ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel] + AQC_FAN_PWM_OFFSET);
+				ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel] + AQC_FAN_CTRL_PWM_OFFSET, 16);
 				if (ret < 0)
 					return ret;
 
@@ -509,8 +491,8 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 					return -EINVAL;
 
 				if (val > 0)
-					ret = aqc_set_u8_val(priv, priv->fan_ctrl_offsets[channel],
-						       val - 1);
+					ret = aqc_set_ctrl_val(priv, priv->fan_ctrl_offsets[channel],
+						       val - 1, 16); /* subtract 1 to convert pwm_enable from hwmon to aqc */
 				if (ret < 0)
 					return ret;
 			}
@@ -521,8 +503,8 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				if (pwm_value < 0)
 					return pwm_value;
 
-				ret = aqc_set_ctrl_val(priv, priv->fan_ctrl_offsets[channel] + AQC_FAN_PWM_OFFSET,
-						       pwm_value);
+				ret = aqc_set_ctrl_val(priv, priv->fan_ctrl_offsets[channel] + AQC_FAN_CTRL_PWM_OFFSET,
+						       pwm_value, 16);
 				if (ret < 0)
 					return ret;
 			}
