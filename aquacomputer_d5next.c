@@ -13,6 +13,7 @@
 #include <linux/debugfs.h>
 #include <linux/hid.h>
 #include <linux/hwmon.h>
+#include <linux/hwmon-sysfs.h>
 #include <linux/jiffies.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
@@ -65,6 +66,16 @@ static u8 secondary_ctrl_report[] = {
 #define AQC_FAN_POWER_OFFSET		0x06
 #define AQC_FAN_SPEED_OFFSET		0x08
 
+#define NUM_CTRL_CURVE_POINTS 0x10
+
+#define AQC_FAN_CTRL_PWM_OFFSET 		0x01
+#define AQC_FAN_CTRL_SRC_OFFSET 		0x03
+#define AQC_FAN_CTRL_PID_OFFSET 		0x05
+#define AQC_FAN_CTRL_CURVE_START_OFFSET 	0x13
+#define AQC_FAN_CTRL_CURVE_TEMPS_OFFSET 	0x15
+#define AQC_FAN_CTRL_CURVE_PWMS_OFFSET 		0x25
+
+
 
 /* Register offsets for the D5 Next pump */
 #define D5NEXT_POWER_CYCLES		24  //0x18
@@ -77,8 +88,7 @@ static u8 secondary_ctrl_report[] = {
 #define D5NEXT_CTRL_REPORT_SIZE		0x329
 #define D5NEXT_5V_VOLTAGE		57 //0x39
 static u8 d5next_sensor_fan_offsets[] = { D5NEXT_PUMP_OFFSET, D5NEXT_FAN_OFFSET};
-static u16 d5next_ctrl_fan_offsets[] = { 0x97, 0x42};
-
+static u16 d5next_ctrl_fan_offsets[] = { 0x96, 0x41};
 
 /* Register offsets for the Farbwerk RGB controller */
 #define FARBWERK_NUM_SENSORS		4
@@ -98,7 +108,7 @@ static u16 d5next_ctrl_fan_offsets[] = { 0x97, 0x42};
 #define OCTO_CTRL_REPORT_SIZE		0x65F
 static u8 octo_sensor_fan_offsets[] = { 0x7D, 0x8A, 0x97, 0xA4, 0xB1, 0xBE, 0xCB, 0xD8 };
 /* Fan speed registers in Octo control report (from 0-100%) */
-static u16 octo_ctrl_fan_offsets[] = { 0x5B, 0xB0, 0x105, 0x15A, 0x1AF, 0x204, 0x259, 0x2AE };
+static u16 octo_ctrl_fan_offsets[] = { 0x5A, 0xAF, 0x104, 0x159, 0x1AE, 0x203, 0x258, 0x2AD };
 
 
 /* Register offsets for the Quadro fan controller */
@@ -108,7 +118,7 @@ static u16 octo_ctrl_fan_offsets[] = { 0x5B, 0xB0, 0x105, 0x15A, 0x1AF, 0x204, 0
 #define QUADRO_SENSOR_START		0x34
 static u8 quadro_sensor_fan_offsets[] = { 0x70, 0x7D, 0x8A, 0x97};
 /* Fan speed registers in Quadro control report (from 0-100%) */
-static u16 quadro_ctrl_fan_offsets[] = { 0x37, 0x8c, 0xe1, 0x136};
+static u16 quadro_ctrl_fan_offsets[] = { 0x36, 0x8b, 0xe0, 0x135};
 #define QUADRO_CTRL_REPORT_SIZE		0x3c1
 #define QUADRO_FLOW_SENSOR_OFFSET	0x6e
 
@@ -205,6 +215,7 @@ struct aqc_data {
 	struct device *hwmon_dev;
 	struct dentry *debugfs;
 	struct mutex mutex;	/* Used for locking access when reading and writing PWM values */
+	const struct attribute_group* groups[35];
 	enum kinds kind;
 	const char *name;
 
@@ -242,7 +253,6 @@ struct aqc_data {
 	const char *const *power_label;
 	const char *const *voltage_label;
 	const char *const *current_label;
-
 	unsigned long updated;
 };
 
@@ -417,7 +427,7 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		break;
 	case hwmon_pwm:
 		if (priv->fan_ctrl_offsets != NULL) {
-			ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel]);
+			ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel] + AQC_FAN_CTRL_PWM_OFFSET);
 			if (ret < 0)
 				return ret;
 
@@ -480,7 +490,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				if (pwm_value < 0)
 					return pwm_value;
 
-				ret = aqc_set_ctrl_val(priv, priv->fan_ctrl_offsets[channel],
+				ret = aqc_set_ctrl_val(priv, priv->fan_ctrl_offsets[channel] + AQC_FAN_CTRL_PWM_OFFSET,
 						       pwm_value);
 				if (ret < 0)
 					return ret;
@@ -681,6 +691,413 @@ static void aqc_debugfs_init(struct aqc_data *priv)
 
 #endif
 
+
+static int aqc_fan_curve_show(struct device *dev, struct device_attribute *attr, int offset)
+{
+	struct sensor_device_attribute_2 *sensor_attr = to_sensor_dev_attr_2(attr);
+	struct aqc_data *priv = dev_get_drvdata(dev);
+	int channel = sensor_attr->nr;
+	int idx = sensor_attr->index;
+	u16 to_get;
+
+	if (channel > priv->num_fans)
+		return -ENOENT;
+	if ((idx > NUM_CTRL_CURVE_POINTS) || idx < 0)
+		return -ENOENT;
+
+	to_get = priv->fan_ctrl_offsets[channel] + offset + 2*idx;
+
+	return aqc_get_ctrl_val(priv, to_get);
+}
+
+static ssize_t aqc_fan_curve_pwm_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	int val = aqc_fan_curve_show(dev, attr, AQC_FAN_CTRL_CURVE_PWMS_OFFSET);
+	if (val < 0)
+		return val;
+	return sprintf(buf, "%d\n", aqc_percent_to_pwm(val));
+}
+
+static ssize_t aqc_fan_curve_temp_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	int val = aqc_fan_curve_show(dev, attr, AQC_FAN_CTRL_CURVE_TEMPS_OFFSET);
+	if (val < 0)
+		return val;
+	return sprintf(buf, "%d0\n", val);
+}
+
+static int aqc_fan_curve_store(struct device *dev, struct device_attribute *attr, int offset, long val)
+{
+	struct sensor_device_attribute_2 *sensor_attr = to_sensor_dev_attr_2(attr);
+	struct aqc_data *priv = dev_get_drvdata(dev);
+	int channel = sensor_attr->nr;
+	int idx = sensor_attr->index;
+	u16 to_set;
+
+	if (channel > priv->num_fans)
+		return -ENOENT;
+	if ((idx > NUM_CTRL_CURVE_POINTS) || idx < 0)
+		return -ENOENT;
+
+	to_set = priv->fan_ctrl_offsets[channel] + offset + 2*idx;
+
+	return aqc_set_ctrl_val(priv, to_set, val);
+}
+
+static ssize_t aqc_fan_curve_pwm_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	long val;
+	if (kstrtol(buf, 10, &val) < 0)
+		return -EINVAL;
+	if (val < 0 || val > 255)
+		return -EINVAL;
+
+	val = aqc_pwm_to_percent(val);
+
+	return aqc_fan_curve_store(dev, attr, AQC_FAN_CTRL_CURVE_PWMS_OFFSET, val);
+}
+
+static ssize_t aqc_fan_curve_temp_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	long val;
+	if (kstrtol(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	val = val / 10;
+
+	return aqc_fan_curve_store(dev, attr, AQC_FAN_CTRL_CURVE_TEMPS_OFFSET, val);
+}
+
+
+static SENSOR_DEVICE_ATTR_2_RW(pwm0_auto_point1_pwm, aqc_fan_curve_pwm, 0, 1);
+static SENSOR_DEVICE_ATTR_2_RW(pwm0_auto_point2_pwm, aqc_fan_curve_pwm, 0, 2);
+static SENSOR_DEVICE_ATTR_2_RW(pwm0_auto_point3_pwm, aqc_fan_curve_pwm, 0, 3);
+static SENSOR_DEVICE_ATTR_2_RW(pwm0_auto_point4_pwm, aqc_fan_curve_pwm, 0, 4);
+static SENSOR_DEVICE_ATTR_2_RW(pwm0_auto_point5_pwm, aqc_fan_curve_pwm, 0, 5);
+static SENSOR_DEVICE_ATTR_2_RW(pwm0_auto_point6_pwm, aqc_fan_curve_pwm, 0, 6);
+static SENSOR_DEVICE_ATTR_2_RW(pwm0_auto_point7_pwm, aqc_fan_curve_pwm, 0, 7);
+static SENSOR_DEVICE_ATTR_2_RW(pwm0_auto_point8_pwm, aqc_fan_curve_pwm, 0, 8);
+static SENSOR_DEVICE_ATTR_2_RW(pwm0_auto_point9_pwm, aqc_fan_curve_pwm, 0, 9);
+static SENSOR_DEVICE_ATTR_2_RW(pwm0_auto_point10_pwm, aqc_fan_curve_pwm, 0, 10);
+static SENSOR_DEVICE_ATTR_2_RW(pwm0_auto_point11_pwm, aqc_fan_curve_pwm, 0, 11);
+static SENSOR_DEVICE_ATTR_2_RW(pwm0_auto_point12_pwm, aqc_fan_curve_pwm, 0, 12);
+static SENSOR_DEVICE_ATTR_2_RW(pwm0_auto_point13_pwm, aqc_fan_curve_pwm, 0, 13);
+static SENSOR_DEVICE_ATTR_2_RW(pwm0_auto_point14_pwm, aqc_fan_curve_pwm, 0, 14);
+static SENSOR_DEVICE_ATTR_2_RW(pwm0_auto_point15_pwm, aqc_fan_curve_pwm, 0, 15);
+static SENSOR_DEVICE_ATTR_2_RW(pwm0_auto_point16_pwm, aqc_fan_curve_pwm, 0, 16);
+
+static SENSOR_DEVICE_ATTR_2_RW(pwm0_auto_point1_temp, aqc_fan_curve_temp, 0, 1);
+static SENSOR_DEVICE_ATTR_2_RW(pwm0_auto_point2_temp, aqc_fan_curve_temp, 0, 2);
+static SENSOR_DEVICE_ATTR_2_RW(pwm0_auto_point3_temp, aqc_fan_curve_temp, 0, 3);
+static SENSOR_DEVICE_ATTR_2_RW(pwm0_auto_point4_temp, aqc_fan_curve_temp, 0, 4);
+static SENSOR_DEVICE_ATTR_2_RW(pwm0_auto_point5_temp, aqc_fan_curve_temp, 0, 5);
+static SENSOR_DEVICE_ATTR_2_RW(pwm0_auto_point6_temp, aqc_fan_curve_temp, 0, 6);
+static SENSOR_DEVICE_ATTR_2_RW(pwm0_auto_point7_temp, aqc_fan_curve_temp, 0, 7);
+static SENSOR_DEVICE_ATTR_2_RW(pwm0_auto_point8_temp, aqc_fan_curve_temp, 0, 8);
+static SENSOR_DEVICE_ATTR_2_RW(pwm0_auto_point9_temp, aqc_fan_curve_temp, 0, 9);
+static SENSOR_DEVICE_ATTR_2_RW(pwm0_auto_point10_temp, aqc_fan_curve_temp, 0, 10);
+static SENSOR_DEVICE_ATTR_2_RW(pwm0_auto_point11_temp, aqc_fan_curve_temp, 0, 11);
+static SENSOR_DEVICE_ATTR_2_RW(pwm0_auto_point12_temp, aqc_fan_curve_temp, 0, 12);
+static SENSOR_DEVICE_ATTR_2_RW(pwm0_auto_point13_temp, aqc_fan_curve_temp, 0, 13);
+static SENSOR_DEVICE_ATTR_2_RW(pwm0_auto_point14_temp, aqc_fan_curve_temp, 0, 14);
+static SENSOR_DEVICE_ATTR_2_RW(pwm0_auto_point15_temp, aqc_fan_curve_temp, 0, 15);
+static SENSOR_DEVICE_ATTR_2_RW(pwm0_auto_point16_temp, aqc_fan_curve_temp, 0, 16);
+
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point1_pwm, aqc_fan_curve_pwm, 1, 1);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point2_pwm, aqc_fan_curve_pwm, 1, 2);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point3_pwm, aqc_fan_curve_pwm, 1, 3);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point4_pwm, aqc_fan_curve_pwm, 1, 4);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point5_pwm, aqc_fan_curve_pwm, 1, 5);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point6_pwm, aqc_fan_curve_pwm, 1, 6);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point7_pwm, aqc_fan_curve_pwm, 1, 7);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point8_pwm, aqc_fan_curve_pwm, 1, 8);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point9_pwm, aqc_fan_curve_pwm, 1, 9);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point10_pwm, aqc_fan_curve_pwm, 1, 10);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point11_pwm, aqc_fan_curve_pwm, 1, 11);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point12_pwm, aqc_fan_curve_pwm, 1, 12);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point13_pwm, aqc_fan_curve_pwm, 1, 13);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point14_pwm, aqc_fan_curve_pwm, 1, 14);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point15_pwm, aqc_fan_curve_pwm, 1, 15);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point16_pwm, aqc_fan_curve_pwm, 1, 16);
+
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point1_temp, aqc_fan_curve_temp, 1, 1);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point2_temp, aqc_fan_curve_temp, 1, 2);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point3_temp, aqc_fan_curve_temp, 1, 3);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point4_temp, aqc_fan_curve_temp, 1, 4);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point5_temp, aqc_fan_curve_temp, 1, 5);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point6_temp, aqc_fan_curve_temp, 1, 6);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point7_temp, aqc_fan_curve_temp, 1, 7);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point8_temp, aqc_fan_curve_temp, 1, 8);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point9_temp, aqc_fan_curve_temp, 1, 9);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point10_temp, aqc_fan_curve_temp, 1, 10);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point11_temp, aqc_fan_curve_temp, 1, 11);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point12_temp, aqc_fan_curve_temp, 1, 12);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point13_temp, aqc_fan_curve_temp, 1, 13);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point14_temp, aqc_fan_curve_temp, 1, 14);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point15_temp, aqc_fan_curve_temp, 1, 15);
+static SENSOR_DEVICE_ATTR_2_RW(pwm1_auto_point16_temp, aqc_fan_curve_temp, 1, 16);
+
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point1_pwm, aqc_fan_curve_pwm, 2, 1);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point2_pwm, aqc_fan_curve_pwm, 2, 2);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point3_pwm, aqc_fan_curve_pwm, 2, 3);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point4_pwm, aqc_fan_curve_pwm, 2, 4);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point5_pwm, aqc_fan_curve_pwm, 2, 5);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point6_pwm, aqc_fan_curve_pwm, 2, 6);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point7_pwm, aqc_fan_curve_pwm, 2, 7);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point8_pwm, aqc_fan_curve_pwm, 2, 8);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point9_pwm, aqc_fan_curve_pwm, 2, 9);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point10_pwm, aqc_fan_curve_pwm, 2, 10);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point11_pwm, aqc_fan_curve_pwm, 2, 11);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point12_pwm, aqc_fan_curve_pwm, 2, 12);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point13_pwm, aqc_fan_curve_pwm, 2, 13);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point14_pwm, aqc_fan_curve_pwm, 2, 14);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point15_pwm, aqc_fan_curve_pwm, 2, 15);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point16_pwm, aqc_fan_curve_pwm, 2, 16);
+
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point1_temp, aqc_fan_curve_temp, 2, 1);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point2_temp, aqc_fan_curve_temp, 2, 2);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point3_temp, aqc_fan_curve_temp, 2, 3);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point4_temp, aqc_fan_curve_temp, 2, 4);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point5_temp, aqc_fan_curve_temp, 2, 5);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point6_temp, aqc_fan_curve_temp, 2, 6);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point7_temp, aqc_fan_curve_temp, 2, 7);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point8_temp, aqc_fan_curve_temp, 2, 8);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point9_temp, aqc_fan_curve_temp, 2, 9);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point10_temp, aqc_fan_curve_temp, 2, 10);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point11_temp, aqc_fan_curve_temp, 2, 11);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point12_temp, aqc_fan_curve_temp, 2, 12);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point13_temp, aqc_fan_curve_temp, 2, 13);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point14_temp, aqc_fan_curve_temp, 2, 14);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point15_temp, aqc_fan_curve_temp, 2, 15);
+static SENSOR_DEVICE_ATTR_2_RW(pwm2_auto_point16_temp, aqc_fan_curve_temp, 2, 16);
+
+static SENSOR_DEVICE_ATTR_2_RW(pwm3_auto_point1_pwm, aqc_fan_curve_pwm, 3, 1);
+static SENSOR_DEVICE_ATTR_2_RW(pwm3_auto_point2_pwm, aqc_fan_curve_pwm, 3, 2);
+static SENSOR_DEVICE_ATTR_2_RW(pwm3_auto_point3_pwm, aqc_fan_curve_pwm, 3, 3);
+static SENSOR_DEVICE_ATTR_2_RW(pwm3_auto_point4_pwm, aqc_fan_curve_pwm, 3, 4);
+static SENSOR_DEVICE_ATTR_2_RW(pwm3_auto_point5_pwm, aqc_fan_curve_pwm, 3, 5);
+static SENSOR_DEVICE_ATTR_2_RW(pwm3_auto_point6_pwm, aqc_fan_curve_pwm, 3, 6);
+static SENSOR_DEVICE_ATTR_2_RW(pwm3_auto_point7_pwm, aqc_fan_curve_pwm, 3, 7);
+static SENSOR_DEVICE_ATTR_2_RW(pwm3_auto_point8_pwm, aqc_fan_curve_pwm, 3, 8);
+static SENSOR_DEVICE_ATTR_2_RW(pwm3_auto_point9_pwm, aqc_fan_curve_pwm, 3, 9);
+static SENSOR_DEVICE_ATTR_2_RW(pwm3_auto_point10_pwm, aqc_fan_curve_pwm, 3, 10);
+static SENSOR_DEVICE_ATTR_2_RW(pwm3_auto_point11_pwm, aqc_fan_curve_pwm, 3, 11);
+static SENSOR_DEVICE_ATTR_2_RW(pwm3_auto_point12_pwm, aqc_fan_curve_pwm, 3, 12);
+static SENSOR_DEVICE_ATTR_2_RW(pwm3_auto_point13_pwm, aqc_fan_curve_pwm, 3, 13);
+static SENSOR_DEVICE_ATTR_2_RW(pwm3_auto_point14_pwm, aqc_fan_curve_pwm, 3, 14);
+static SENSOR_DEVICE_ATTR_2_RW(pwm3_auto_point15_pwm, aqc_fan_curve_pwm, 3, 15);
+static SENSOR_DEVICE_ATTR_2_RW(pwm3_auto_point16_pwm, aqc_fan_curve_pwm, 3, 16);
+
+static SENSOR_DEVICE_ATTR_2_RW(pwm3_auto_point1_temp, aqc_fan_curve_temp, 3, 1);
+static SENSOR_DEVICE_ATTR_2_RW(pwm3_auto_point2_temp, aqc_fan_curve_temp, 3, 2);
+static SENSOR_DEVICE_ATTR_2_RW(pwm3_auto_point3_temp, aqc_fan_curve_temp, 3, 3);
+static SENSOR_DEVICE_ATTR_2_RW(pwm3_auto_point4_temp, aqc_fan_curve_temp, 3, 4);
+static SENSOR_DEVICE_ATTR_2_RW(pwm3_auto_point5_temp, aqc_fan_curve_temp, 3, 5);
+static SENSOR_DEVICE_ATTR_2_RW(pwm3_auto_point6_temp, aqc_fan_curve_temp, 3, 6);
+static SENSOR_DEVICE_ATTR_2_RW(pwm3_auto_point7_temp, aqc_fan_curve_temp, 3, 7);
+static SENSOR_DEVICE_ATTR_2_RW(pwm3_auto_point8_temp, aqc_fan_curve_temp, 3, 8);
+static SENSOR_DEVICE_ATTR_2_RW(pwm3_auto_point9_temp, aqc_fan_curve_temp, 3, 9);
+static SENSOR_DEVICE_ATTR_2_RW(pwm3_auto_point10_temp, aqc_fan_curve_temp, 3, 10);
+static SENSOR_DEVICE_ATTR_2_RW(pwm3_auto_point11_temp, aqc_fan_curve_temp, 3, 11);
+static SENSOR_DEVICE_ATTR_2_RW(pwm3_auto_point12_temp, aqc_fan_curve_temp, 3, 12);
+static SENSOR_DEVICE_ATTR_2_RW(pwm3_auto_point13_temp, aqc_fan_curve_temp, 3, 13);
+static SENSOR_DEVICE_ATTR_2_RW(pwm3_auto_point14_temp, aqc_fan_curve_temp, 3, 14);
+static SENSOR_DEVICE_ATTR_2_RW(pwm3_auto_point15_temp, aqc_fan_curve_temp, 3, 15);
+static SENSOR_DEVICE_ATTR_2_RW(pwm3_auto_point16_temp, aqc_fan_curve_temp, 3, 16);
+
+static SENSOR_DEVICE_ATTR_2_RW(pwm4_auto_point1_pwm, aqc_fan_curve_pwm, 4, 1);
+static SENSOR_DEVICE_ATTR_2_RW(pwm4_auto_point2_pwm, aqc_fan_curve_pwm, 4, 2);
+static SENSOR_DEVICE_ATTR_2_RW(pwm4_auto_point3_pwm, aqc_fan_curve_pwm, 4, 3);
+static SENSOR_DEVICE_ATTR_2_RW(pwm4_auto_point4_pwm, aqc_fan_curve_pwm, 4, 4);
+static SENSOR_DEVICE_ATTR_2_RW(pwm4_auto_point5_pwm, aqc_fan_curve_pwm, 4, 5);
+static SENSOR_DEVICE_ATTR_2_RW(pwm4_auto_point6_pwm, aqc_fan_curve_pwm, 4, 6);
+static SENSOR_DEVICE_ATTR_2_RW(pwm4_auto_point7_pwm, aqc_fan_curve_pwm, 4, 7);
+static SENSOR_DEVICE_ATTR_2_RW(pwm4_auto_point8_pwm, aqc_fan_curve_pwm, 4, 8);
+static SENSOR_DEVICE_ATTR_2_RW(pwm4_auto_point9_pwm, aqc_fan_curve_pwm, 4, 9);
+static SENSOR_DEVICE_ATTR_2_RW(pwm4_auto_point10_pwm, aqc_fan_curve_pwm, 4, 10);
+static SENSOR_DEVICE_ATTR_2_RW(pwm4_auto_point11_pwm, aqc_fan_curve_pwm, 4, 11);
+static SENSOR_DEVICE_ATTR_2_RW(pwm4_auto_point12_pwm, aqc_fan_curve_pwm, 4, 12);
+static SENSOR_DEVICE_ATTR_2_RW(pwm4_auto_point13_pwm, aqc_fan_curve_pwm, 4, 13);
+static SENSOR_DEVICE_ATTR_2_RW(pwm4_auto_point14_pwm, aqc_fan_curve_pwm, 4, 14);
+static SENSOR_DEVICE_ATTR_2_RW(pwm4_auto_point15_pwm, aqc_fan_curve_pwm, 4, 15);
+static SENSOR_DEVICE_ATTR_2_RW(pwm4_auto_point16_pwm, aqc_fan_curve_pwm, 4, 16);
+
+static SENSOR_DEVICE_ATTR_2_RW(pwm4_auto_point1_temp, aqc_fan_curve_temp, 4, 1);
+static SENSOR_DEVICE_ATTR_2_RW(pwm4_auto_point2_temp, aqc_fan_curve_temp, 4, 2);
+static SENSOR_DEVICE_ATTR_2_RW(pwm4_auto_point3_temp, aqc_fan_curve_temp, 4, 3);
+static SENSOR_DEVICE_ATTR_2_RW(pwm4_auto_point4_temp, aqc_fan_curve_temp, 4, 4);
+static SENSOR_DEVICE_ATTR_2_RW(pwm4_auto_point5_temp, aqc_fan_curve_temp, 4, 5);
+static SENSOR_DEVICE_ATTR_2_RW(pwm4_auto_point6_temp, aqc_fan_curve_temp, 4, 6);
+static SENSOR_DEVICE_ATTR_2_RW(pwm4_auto_point7_temp, aqc_fan_curve_temp, 4, 7);
+static SENSOR_DEVICE_ATTR_2_RW(pwm4_auto_point8_temp, aqc_fan_curve_temp, 4, 8);
+static SENSOR_DEVICE_ATTR_2_RW(pwm4_auto_point9_temp, aqc_fan_curve_temp, 4, 9);
+static SENSOR_DEVICE_ATTR_2_RW(pwm4_auto_point10_temp, aqc_fan_curve_temp, 4, 10);
+static SENSOR_DEVICE_ATTR_2_RW(pwm4_auto_point11_temp, aqc_fan_curve_temp, 4, 11);
+static SENSOR_DEVICE_ATTR_2_RW(pwm4_auto_point12_temp, aqc_fan_curve_temp, 4, 12);
+static SENSOR_DEVICE_ATTR_2_RW(pwm4_auto_point13_temp, aqc_fan_curve_temp, 4, 13);
+static SENSOR_DEVICE_ATTR_2_RW(pwm4_auto_point14_temp, aqc_fan_curve_temp, 4, 14);
+static SENSOR_DEVICE_ATTR_2_RW(pwm4_auto_point15_temp, aqc_fan_curve_temp, 4, 15);
+static SENSOR_DEVICE_ATTR_2_RW(pwm4_auto_point16_temp, aqc_fan_curve_temp, 4, 16);
+
+static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point1_pwm, aqc_fan_curve_pwm, 5, 1);
+static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point2_pwm, aqc_fan_curve_pwm, 5, 2);
+static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point3_pwm, aqc_fan_curve_pwm, 5, 3);
+static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point4_pwm, aqc_fan_curve_pwm, 5, 4);
+static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point5_pwm, aqc_fan_curve_pwm, 5, 5);
+static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point6_pwm, aqc_fan_curve_pwm, 5, 6);
+static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point7_pwm, aqc_fan_curve_pwm, 5, 7);
+static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point8_pwm, aqc_fan_curve_pwm, 5, 8);
+static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point9_pwm, aqc_fan_curve_pwm, 5, 9);
+static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point10_pwm, aqc_fan_curve_pwm, 5, 10);
+static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point11_pwm, aqc_fan_curve_pwm, 5, 11);
+static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point12_pwm, aqc_fan_curve_pwm, 5, 12);
+static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point13_pwm, aqc_fan_curve_pwm, 5, 13);
+static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point14_pwm, aqc_fan_curve_pwm, 5, 14);
+static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point15_pwm, aqc_fan_curve_pwm, 5, 15);
+static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point16_pwm, aqc_fan_curve_pwm, 5, 16);
+
+static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point1_temp, aqc_fan_curve_temp, 5, 1);
+static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point2_temp, aqc_fan_curve_temp, 5, 2);
+static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point3_temp, aqc_fan_curve_temp, 5, 3);
+static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point4_temp, aqc_fan_curve_temp, 5, 4);
+static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point5_temp, aqc_fan_curve_temp, 5, 5);
+static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point6_temp, aqc_fan_curve_temp, 5, 6);
+static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point7_temp, aqc_fan_curve_temp, 5, 7);
+static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point8_temp, aqc_fan_curve_temp, 5, 8);
+static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point9_temp, aqc_fan_curve_temp, 5, 9);
+static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point10_temp, aqc_fan_curve_temp, 5, 10);
+static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point11_temp, aqc_fan_curve_temp, 5, 11);
+static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point12_temp, aqc_fan_curve_temp, 5, 12);
+static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point13_temp, aqc_fan_curve_temp, 5, 13);
+static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point14_temp, aqc_fan_curve_temp, 5, 14);
+static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point15_temp, aqc_fan_curve_temp, 5, 15);
+static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point16_temp, aqc_fan_curve_temp, 5, 16);
+
+static SENSOR_DEVICE_ATTR_2_RW(pwm6_auto_point1_pwm, aqc_fan_curve_pwm, 6, 1);
+static SENSOR_DEVICE_ATTR_2_RW(pwm6_auto_point2_pwm, aqc_fan_curve_pwm, 6, 2);
+static SENSOR_DEVICE_ATTR_2_RW(pwm6_auto_point3_pwm, aqc_fan_curve_pwm, 6, 3);
+static SENSOR_DEVICE_ATTR_2_RW(pwm6_auto_point4_pwm, aqc_fan_curve_pwm, 6, 4);
+static SENSOR_DEVICE_ATTR_2_RW(pwm6_auto_point5_pwm, aqc_fan_curve_pwm, 6, 5);
+static SENSOR_DEVICE_ATTR_2_RW(pwm6_auto_point6_pwm, aqc_fan_curve_pwm, 6, 6);
+static SENSOR_DEVICE_ATTR_2_RW(pwm6_auto_point7_pwm, aqc_fan_curve_pwm, 6, 7);
+static SENSOR_DEVICE_ATTR_2_RW(pwm6_auto_point8_pwm, aqc_fan_curve_pwm, 6, 8);
+static SENSOR_DEVICE_ATTR_2_RW(pwm6_auto_point9_pwm, aqc_fan_curve_pwm, 6, 9);
+static SENSOR_DEVICE_ATTR_2_RW(pwm6_auto_point10_pwm, aqc_fan_curve_pwm, 6, 10);
+static SENSOR_DEVICE_ATTR_2_RW(pwm6_auto_point11_pwm, aqc_fan_curve_pwm, 6, 11);
+static SENSOR_DEVICE_ATTR_2_RW(pwm6_auto_point12_pwm, aqc_fan_curve_pwm, 6, 12);
+static SENSOR_DEVICE_ATTR_2_RW(pwm6_auto_point13_pwm, aqc_fan_curve_pwm, 6, 13);
+static SENSOR_DEVICE_ATTR_2_RW(pwm6_auto_point14_pwm, aqc_fan_curve_pwm, 6, 14);
+static SENSOR_DEVICE_ATTR_2_RW(pwm6_auto_point15_pwm, aqc_fan_curve_pwm, 6, 15);
+static SENSOR_DEVICE_ATTR_2_RW(pwm6_auto_point16_pwm, aqc_fan_curve_pwm, 6, 16);
+
+static SENSOR_DEVICE_ATTR_2_RW(pwm6_auto_point1_temp, aqc_fan_curve_temp, 6, 1);
+static SENSOR_DEVICE_ATTR_2_RW(pwm6_auto_point2_temp, aqc_fan_curve_temp, 6, 2);
+static SENSOR_DEVICE_ATTR_2_RW(pwm6_auto_point3_temp, aqc_fan_curve_temp, 6, 3);
+static SENSOR_DEVICE_ATTR_2_RW(pwm6_auto_point4_temp, aqc_fan_curve_temp, 6, 4);
+static SENSOR_DEVICE_ATTR_2_RW(pwm6_auto_point5_temp, aqc_fan_curve_temp, 6, 5);
+static SENSOR_DEVICE_ATTR_2_RW(pwm6_auto_point6_temp, aqc_fan_curve_temp, 6, 6);
+static SENSOR_DEVICE_ATTR_2_RW(pwm6_auto_point7_temp, aqc_fan_curve_temp, 6, 7);
+static SENSOR_DEVICE_ATTR_2_RW(pwm6_auto_point8_temp, aqc_fan_curve_temp, 6, 8);
+static SENSOR_DEVICE_ATTR_2_RW(pwm6_auto_point9_temp, aqc_fan_curve_temp, 6, 9);
+static SENSOR_DEVICE_ATTR_2_RW(pwm6_auto_point10_temp, aqc_fan_curve_temp, 6, 10);
+static SENSOR_DEVICE_ATTR_2_RW(pwm6_auto_point11_temp, aqc_fan_curve_temp, 6, 11);
+static SENSOR_DEVICE_ATTR_2_RW(pwm6_auto_point12_temp, aqc_fan_curve_temp, 6, 12);
+static SENSOR_DEVICE_ATTR_2_RW(pwm6_auto_point13_temp, aqc_fan_curve_temp, 6, 13);
+static SENSOR_DEVICE_ATTR_2_RW(pwm6_auto_point14_temp, aqc_fan_curve_temp, 6, 14);
+static SENSOR_DEVICE_ATTR_2_RW(pwm6_auto_point15_temp, aqc_fan_curve_temp, 6, 15);
+static SENSOR_DEVICE_ATTR_2_RW(pwm6_auto_point16_temp, aqc_fan_curve_temp, 6, 16);
+
+static SENSOR_DEVICE_ATTR_2_RW(pwm7_auto_point1_pwm, aqc_fan_curve_pwm, 7, 1);
+static SENSOR_DEVICE_ATTR_2_RW(pwm7_auto_point2_pwm, aqc_fan_curve_pwm, 7, 2);
+static SENSOR_DEVICE_ATTR_2_RW(pwm7_auto_point3_pwm, aqc_fan_curve_pwm, 7, 3);
+static SENSOR_DEVICE_ATTR_2_RW(pwm7_auto_point4_pwm, aqc_fan_curve_pwm, 7, 4);
+static SENSOR_DEVICE_ATTR_2_RW(pwm7_auto_point5_pwm, aqc_fan_curve_pwm, 7, 5);
+static SENSOR_DEVICE_ATTR_2_RW(pwm7_auto_point6_pwm, aqc_fan_curve_pwm, 7, 6);
+static SENSOR_DEVICE_ATTR_2_RW(pwm7_auto_point7_pwm, aqc_fan_curve_pwm, 7, 7);
+static SENSOR_DEVICE_ATTR_2_RW(pwm7_auto_point8_pwm, aqc_fan_curve_pwm, 7, 8);
+static SENSOR_DEVICE_ATTR_2_RW(pwm7_auto_point9_pwm, aqc_fan_curve_pwm, 7, 9);
+static SENSOR_DEVICE_ATTR_2_RW(pwm7_auto_point10_pwm, aqc_fan_curve_pwm, 7, 10);
+static SENSOR_DEVICE_ATTR_2_RW(pwm7_auto_point11_pwm, aqc_fan_curve_pwm, 7, 11);
+static SENSOR_DEVICE_ATTR_2_RW(pwm7_auto_point12_pwm, aqc_fan_curve_pwm, 7, 12);
+static SENSOR_DEVICE_ATTR_2_RW(pwm7_auto_point13_pwm, aqc_fan_curve_pwm, 7, 13);
+static SENSOR_DEVICE_ATTR_2_RW(pwm7_auto_point14_pwm, aqc_fan_curve_pwm, 7, 14);
+static SENSOR_DEVICE_ATTR_2_RW(pwm7_auto_point15_pwm, aqc_fan_curve_pwm, 7, 15);
+static SENSOR_DEVICE_ATTR_2_RW(pwm7_auto_point16_pwm, aqc_fan_curve_pwm, 7, 16);
+
+static SENSOR_DEVICE_ATTR_2_RW(pwm7_auto_point1_temp, aqc_fan_curve_temp, 7, 1);
+static SENSOR_DEVICE_ATTR_2_RW(pwm7_auto_point2_temp, aqc_fan_curve_temp, 7, 2);
+static SENSOR_DEVICE_ATTR_2_RW(pwm7_auto_point3_temp, aqc_fan_curve_temp, 7, 3);
+static SENSOR_DEVICE_ATTR_2_RW(pwm7_auto_point4_temp, aqc_fan_curve_temp, 7, 4);
+static SENSOR_DEVICE_ATTR_2_RW(pwm7_auto_point5_temp, aqc_fan_curve_temp, 7, 5);
+static SENSOR_DEVICE_ATTR_2_RW(pwm7_auto_point6_temp, aqc_fan_curve_temp, 7, 6);
+static SENSOR_DEVICE_ATTR_2_RW(pwm7_auto_point7_temp, aqc_fan_curve_temp, 7, 7);
+static SENSOR_DEVICE_ATTR_2_RW(pwm7_auto_point8_temp, aqc_fan_curve_temp, 7, 8);
+static SENSOR_DEVICE_ATTR_2_RW(pwm7_auto_point9_temp, aqc_fan_curve_temp, 7, 9);
+static SENSOR_DEVICE_ATTR_2_RW(pwm7_auto_point10_temp, aqc_fan_curve_temp, 7, 10);
+static SENSOR_DEVICE_ATTR_2_RW(pwm7_auto_point11_temp, aqc_fan_curve_temp, 7, 11);
+static SENSOR_DEVICE_ATTR_2_RW(pwm7_auto_point12_temp, aqc_fan_curve_temp, 7, 12);
+static SENSOR_DEVICE_ATTR_2_RW(pwm7_auto_point13_temp, aqc_fan_curve_temp, 7, 13);
+static SENSOR_DEVICE_ATTR_2_RW(pwm7_auto_point14_temp, aqc_fan_curve_temp, 7, 14);
+static SENSOR_DEVICE_ATTR_2_RW(pwm7_auto_point15_temp, aqc_fan_curve_temp, 7, 15);
+static SENSOR_DEVICE_ATTR_2_RW(pwm7_auto_point16_temp, aqc_fan_curve_temp, 7, 16);
+
+static umode_t aqc_curve_props_are_visible(struct kobject *kobj, struct attribute *attr, int index)
+{
+	struct device *dev = kobj_to_dev(kobj);
+	struct aqc_data *priv = dev_get_drvdata(dev);
+	if (index > priv->num_fans)
+		return 0;
+	return attr->mode;
+}
+
+#define CURVE_POINT_ARR(pt) \
+static struct attribute* aqc_curve_pt_##pt##_attrs[] = { \
+	&(sensor_dev_attr_pwm0_auto_point##pt.dev_attr.attr), \
+	&(sensor_dev_attr_pwm1_auto_point##pt.dev_attr.attr), \
+	&(sensor_dev_attr_pwm2_auto_point##pt.dev_attr.attr), \
+	&(sensor_dev_attr_pwm3_auto_point##pt.dev_attr.attr), \
+	&(sensor_dev_attr_pwm4_auto_point##pt.dev_attr.attr), \
+	&(sensor_dev_attr_pwm5_auto_point##pt.dev_attr.attr), \
+	&(sensor_dev_attr_pwm6_auto_point##pt.dev_attr.attr), \
+	&(sensor_dev_attr_pwm7_auto_point##pt.dev_attr.attr), NULL };\
+static const struct attribute_group aqc_curve_pt_##pt##_group = { \
+	.attrs = aqc_curve_pt_##pt##_attrs, .is_visible = aqc_curve_props_are_visible \
+}
+
+CURVE_POINT_ARR(1_pwm);
+CURVE_POINT_ARR(2_pwm);
+CURVE_POINT_ARR(3_pwm);
+CURVE_POINT_ARR(4_pwm);
+CURVE_POINT_ARR(5_pwm);
+CURVE_POINT_ARR(6_pwm);
+CURVE_POINT_ARR(7_pwm);
+CURVE_POINT_ARR(8_pwm);
+CURVE_POINT_ARR(9_pwm);
+CURVE_POINT_ARR(10_pwm);
+CURVE_POINT_ARR(11_pwm);
+CURVE_POINT_ARR(12_pwm);
+CURVE_POINT_ARR(13_pwm);
+CURVE_POINT_ARR(14_pwm);
+CURVE_POINT_ARR(15_pwm);
+CURVE_POINT_ARR(16_pwm);
+CURVE_POINT_ARR(1_temp);
+CURVE_POINT_ARR(2_temp);
+CURVE_POINT_ARR(3_temp);
+CURVE_POINT_ARR(4_temp);
+CURVE_POINT_ARR(5_temp);
+CURVE_POINT_ARR(6_temp);
+CURVE_POINT_ARR(7_temp);
+CURVE_POINT_ARR(8_temp);
+CURVE_POINT_ARR(9_temp);
+CURVE_POINT_ARR(10_temp);
+CURVE_POINT_ARR(11_temp);
+CURVE_POINT_ARR(12_temp);
+CURVE_POINT_ARR(13_temp);
+CURVE_POINT_ARR(14_temp);
+CURVE_POINT_ARR(15_temp);
+CURVE_POINT_ARR(16_temp);
+
+
 static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 {
 	struct aqc_data *priv;
@@ -787,11 +1204,47 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		ret = -ENOMEM;
 		goto fail_and_close;
 	}
-
+	
 	mutex_init(&priv->mutex);
 
+	if (priv->num_fans > 0) {
+		priv->groups[1] = &aqc_curve_pt_1_pwm_group;
+		priv->groups[2] = &aqc_curve_pt_2_pwm_group;
+		priv->groups[3] = &aqc_curve_pt_3_pwm_group;
+		priv->groups[4] = &aqc_curve_pt_4_pwm_group;
+		priv->groups[5] = &aqc_curve_pt_5_pwm_group;
+		priv->groups[6] = &aqc_curve_pt_6_pwm_group;
+		priv->groups[7] = &aqc_curve_pt_7_pwm_group;
+		priv->groups[8] = &aqc_curve_pt_8_pwm_group;
+		priv->groups[9] = &aqc_curve_pt_9_pwm_group;
+		priv->groups[10] = &aqc_curve_pt_10_pwm_group;
+		priv->groups[11] = &aqc_curve_pt_11_pwm_group;
+		priv->groups[12] = &aqc_curve_pt_12_pwm_group;
+		priv->groups[13] = &aqc_curve_pt_13_pwm_group;
+		priv->groups[14] = &aqc_curve_pt_14_pwm_group;
+		priv->groups[15] = &aqc_curve_pt_15_pwm_group;
+		priv->groups[16] = &aqc_curve_pt_16_pwm_group;
+
+		priv->groups[17] = &aqc_curve_pt_1_temp_group;
+		priv->groups[18] = &aqc_curve_pt_2_temp_group;
+		priv->groups[19] = &aqc_curve_pt_3_temp_group;
+		priv->groups[20] = &aqc_curve_pt_4_temp_group;
+		priv->groups[21] = &aqc_curve_pt_5_temp_group;
+		priv->groups[22] = &aqc_curve_pt_6_temp_group;
+		priv->groups[23] = &aqc_curve_pt_7_temp_group;
+		priv->groups[24] = &aqc_curve_pt_8_temp_group;
+		priv->groups[25] = &aqc_curve_pt_9_temp_group;
+		priv->groups[26] = &aqc_curve_pt_10_temp_group;
+		priv->groups[27] = &aqc_curve_pt_11_temp_group;
+		priv->groups[28] = &aqc_curve_pt_12_temp_group;
+		priv->groups[29] = &aqc_curve_pt_13_temp_group;
+		priv->groups[30] = &aqc_curve_pt_14_temp_group;
+		priv->groups[31] = &aqc_curve_pt_15_temp_group;
+		priv->groups[32] = &aqc_curve_pt_16_temp_group;
+		priv->groups[33] = NULL;
+	}
 	priv->hwmon_dev = hwmon_device_register_with_info(&hdev->dev, priv->name, priv,
-							  &aqc_chip_info, NULL);
+							  &aqc_chip_info, priv->groups);
 
 	if (IS_ERR(priv->hwmon_dev)) {
 		ret = (int) PTR_ERR(priv->hwmon_dev);
