@@ -702,7 +702,7 @@ static int aqc_fan_curve_show(struct device *dev, struct device_attribute *attr,
 
 	if (channel >= priv->num_fans)
 		return -ENOENT;
-	if ((idx > NUM_CTRL_CURVE_POINTS) || idx < 0)
+	if ((idx >= NUM_CTRL_CURVE_POINTS) || idx < 0)
 		return -ENOENT;
 
 	to_get = priv->fan_ctrl_offsets[channel] + offset + 2*idx;
@@ -736,7 +736,7 @@ static int aqc_fan_curve_store(struct device *dev, struct device_attribute *attr
 
 	if (channel >= priv->num_fans)
 		return -ENOENT;
-	if ((idx > NUM_CTRL_CURVE_POINTS) || idx < 0)
+	if ((idx >= NUM_CTRL_CURVE_POINTS) || idx < 0)
 		return -ENOENT;
 
 	to_set = priv->fan_ctrl_offsets[channel] + offset + 2*idx;
