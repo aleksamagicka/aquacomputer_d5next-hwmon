@@ -700,7 +700,7 @@ static int aqc_fan_curve_show(struct device *dev, struct device_attribute *attr,
 	int idx = sensor_attr->index;
 	u16 to_get;
 
-	if (channel > priv->num_fans)
+	if (channel >= priv->num_fans)
 		return -ENOENT;
 	if ((idx > NUM_CTRL_CURVE_POINTS) || idx < 0)
 		return -ENOENT;
@@ -734,7 +734,7 @@ static int aqc_fan_curve_store(struct device *dev, struct device_attribute *attr
 	int idx = sensor_attr->index;
 	u16 to_set;
 
-	if (channel > priv->num_fans)
+	if (channel >= priv->num_fans)
 		return -ENOENT;
 	if ((idx > NUM_CTRL_CURVE_POINTS) || idx < 0)
 		return -ENOENT;
@@ -1045,7 +1045,7 @@ static umode_t aqc_curve_props_are_visible(struct kobject *kobj, struct attribut
 {
 	struct device *dev = kobj_to_dev(kobj);
 	struct aqc_data *priv = dev_get_drvdata(dev);
-	if (index > priv->num_fans)
+	if (index >= priv->num_fans)
 		return 0;
 	return attr->mode;
 }
