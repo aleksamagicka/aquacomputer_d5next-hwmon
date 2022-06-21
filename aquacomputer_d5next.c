@@ -914,7 +914,7 @@ static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point6_pwm, aqc_fan_curve_pwm, 4, 5);
 static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point7_pwm, aqc_fan_curve_pwm, 4, 6);
 static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point8_pwm, aqc_fan_curve_pwm, 4, 7);
 static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point9_pwm, aqc_fan_curve_pwm, 4, 8);
-static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point10_pwm, aqc_fan_curve_pwm, 4, 10);
+static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point10_pwm, aqc_fan_curve_pwm, 4, 9);
 static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point11_pwm, aqc_fan_curve_pwm, 4, 10);
 static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point12_pwm, aqc_fan_curve_pwm, 4, 11);
 static SENSOR_DEVICE_ATTR_2_RW(pwm5_auto_point13_pwm, aqc_fan_curve_pwm, 4, 12);
