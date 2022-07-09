@@ -74,10 +74,9 @@ static u8 secondary_ctrl_report[] = {
 #define D5NEXT_FAN_OFFSET		0x5f
 #define D5NEXT_PUMP_OFFSET		0x6c
 #define D5NEXT_CTRL_REPORT_SIZE		0x329
-#define D5NEXT_5V_VOLTAGE		57 //0x39
-static u8 d5next_sensor_fan_offsets[] = { D5NEXT_PUMP_OFFSET, D5NEXT_FAN_OFFSET};
-static u16 d5next_ctrl_fan_offsets[] = { 0x97, 0x42};
-
+#define D5NEXT_5V_VOLTAGE		0x39
+static u8 d5next_sensor_fan_offsets[] = { D5NEXT_PUMP_OFFSET, D5NEXT_FAN_OFFSET };
+static u16 d5next_ctrl_fan_offsets[] = { 0x97, 0x42 };
 
 /* Register offsets for the Farbwerk RGB controller */
 #define FARBWERK_NUM_SENSORS		4
@@ -98,18 +97,18 @@ static u8 octo_sensor_fan_offsets[] = { 0x7D, 0x8A, 0x97, 0xA4, 0xB1, 0xBE, 0xCB
 /* Fan speed registers in Octo control report (from 0-100%) */
 static u16 octo_ctrl_fan_offsets[] = { 0x5B, 0xB0, 0x105, 0x15A, 0x1AF, 0x204, 0x259, 0x2AE };
 
-
 /* Register offsets for the Quadro fan controller */
 #define QUADRO_POWER_CYCLES		0x18
 #define QUADRO_NUM_FANS			4
 #define QUADRO_NUM_SENSORS		4
 #define QUADRO_SENSOR_START		0x34
-static u8 quadro_sensor_fan_offsets[] = { 0x70, 0x7D, 0x8A, 0x97};
+static u8 quadro_sensor_fan_offsets[] = { 0x70, 0x7D, 0x8A, 0x97 };
+
 /* Fan speed registers in Quadro control report (from 0-100%) */
-static u16 quadro_ctrl_fan_offsets[] = { 0x37, 0x8c, 0xe1, 0x136};
+static u16 quadro_ctrl_fan_offsets[] = { 0x37, 0x8c, 0xe1, 0x136 };
+
 #define QUADRO_CTRL_REPORT_SIZE		0x3c1
 #define QUADRO_FLOW_SENSOR_OFFSET	0x6e
-
 
 /* Labels for D5 Next */
 static const char *const label_d5next_temp[] = {
@@ -358,7 +357,8 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 	case hwmon_fan:
 		switch (priv->kind) {
 		case quadro:
-			if (channel < priv->num_fans + 1) /* special case to support flow sensor */
+			/* Special case to support flow sensor */
+			if (channel < priv->num_fans + 1)
 				return 0444;
 			break;
 		default:
