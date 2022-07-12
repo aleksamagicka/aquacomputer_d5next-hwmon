@@ -9,7 +9,7 @@ Supported devices:
 * Aquacomputer Farbwerk RGB controller
 * Aquacomputer Farbwerk 360 RGB controller
 * Aquacomputer Octo fan controller
-* Aquacomputer Quadro fan
+* Aquacomputer Quadro fan controller
 
 Author: Aleksa Savic
 
@@ -27,7 +27,7 @@ pump. If it's not connected, the fan-related sensors will report zeroes.
 
 The pump can be configured either through software or via its physical
 interface. Configuring the pump and the other devices through this driver 
-is not implemented completly, as it seems to require sending it a complete 
+is not implemented completely, as it seems to require sending it a complete 
 configuration. That includes addressable RGB LEDs, for which there is no standard
 sysfs interface. Thus, that task is better suited for userspace tools.
 

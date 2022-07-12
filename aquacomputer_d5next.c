@@ -323,6 +323,7 @@ static int aqc_get_ctrl_val(struct aqc_data *priv, int offset, size_t size)
 		ret = priv->buffer[offset];
 		break;
 	default:
+		ret = -EINVAL;
 		break;
 	}
 
@@ -359,7 +360,7 @@ static int aqc_set_ctrl_val(struct aqc_data *priv, int offset, long val, size_t 
 unlock_and_return:
 	mutex_unlock(&priv->mutex);
 	return ret;
-};
+}
 
 static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u32 attr, int channel)
 {
@@ -513,33 +514,35 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 	case hwmon_pwm:
 		switch (attr) {
 		case hwmon_pwm_enable:
-			if (priv->fan_ctrl_offsets != NULL) {
-				switch (priv->kind) {
-				case d5next:
-					if (val < 0 || val > 3)
+			switch (priv->kind) {
+			case d5next:
+				if (val < 0 || val > 3)
+					return -EINVAL;
+				break;
+			case quadro:
+			case octo:
+				if (val < 0 || val > priv->num_fans + 3)
+					return -EINVAL;
+				/* check if the fan wants to follow itself, as this is not supported */
+				if (val == channel + 4)
+					return -EINVAL;
+				/* check if the fan we want to follow is currently following another one, this is not supported */
+				if (val > 3) {
+					ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[val - 4], 8);
+					if (ret < 0)
+						return ret;
+					/* fan is following another one */
+					if (ret > 2)
 						return -EINVAL;
-					break;
-				case quadro:
-				case octo:
-					if (val < 0 || val > priv->num_fans + 3)
-						return -EINVAL;
-					if (val == channel + 4)
-						return -EINVAL;
-					if (val > 3) {
-						ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[val - 4], 8);
-						if (ret > 2)
-							return -EINVAL;
-					}
-					break;
-				default:
-					break;
 				}
-				if (val > 0)
-					ret = aqc_set_ctrl_val(priv, priv->fan_ctrl_offsets[channel],
-						       val - 1, 8); /* subtract 1 to convert pwm_enable from hwmon to aqc */
-				if (ret < 0)
-					return ret;
+				break;
+			default:
+				return -EOPNOTSUPP;
 			}
+			ret = aqc_set_ctrl_val(priv, priv->fan_ctrl_offsets[channel],
+					       val - 1, 8); /* subtract 1 to convert pwm_enable from hwmon to aqc */
+			if (ret < 0)
+				return ret;
 			break;
 		case hwmon_pwm_input:
 			if (priv->fan_ctrl_offsets != NULL) {
