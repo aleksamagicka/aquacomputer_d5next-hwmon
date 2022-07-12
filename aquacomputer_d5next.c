@@ -20,15 +20,17 @@
 #include <asm/unaligned.h>
 
 #define USB_VENDOR_ID_AQUACOMPUTER	0x0c70
+#define USB_PRODUCT_ID_AQUAERO6LT 	0xf001
 #define USB_PRODUCT_ID_FARBWERK 	0xf00a
 #define USB_PRODUCT_ID_QUADRO 		0xf00d
 #define USB_PRODUCT_ID_D5NEXT		0xf00e
 #define USB_PRODUCT_ID_FARBWERK360	0xf010
 #define USB_PRODUCT_ID_OCTO		0xf011
 
-enum kinds { d5next, farbwerk, farbwerk360, octo, quadro };
+enum kinds { aquaero6lt, d5next, farbwerk, farbwerk360, octo, quadro };
 
 static const char *const aqc_device_names[] = {
+	[aquaero6lt] = "aquaero6lt",
 	[d5next] = "d5next",
 	[farbwerk] = "farbwerk",
 	[farbwerk360] = "farbwerk360",
@@ -40,9 +42,7 @@ static const char *const aqc_device_names[] = {
 
 #define STATUS_REPORT_ID		0x01
 #define STATUS_UPDATE_INTERVAL		(2 * HZ)	/* In seconds */
-#define SERIAL_FIRST_PART		3
-#define SERIAL_SECOND_PART		5
-#define FIRMWARE_VERSION		13
+#define SERIAL_PART_OFFSET		2
 
 #define CTRL_REPORT_ID			0x03
 
@@ -64,6 +64,16 @@ static u8 secondary_ctrl_report[] = {
 #define AQC_FAN_CURRENT_OFFSET		0x04
 #define AQC_FAN_POWER_OFFSET		0x06
 #define AQC_FAN_SPEED_OFFSET		0x08
+
+/* Register offsets for most Aquacomputer devices */
+#define AQC_SERIAL_START		0x03
+#define AQC_FIRMWARE_VERSION		0x0D
+
+/* Register offsets for the Aquaero 6 LT fan controller */
+#define AQUAERO6LT_SERIAL_START		0x07
+#define AQUAERO6LT_FIRMWARE_VERSION	0x0B
+#define AQUAERO6LT_NUM_SENSORS		8
+#define AQUAERO6LT_SENSOR_START		0x65
 
 /* Register offsets for the D5 Next pump */
 #define D5NEXT_POWER_CYCLES		0x18
@@ -136,12 +146,16 @@ static const char *const label_d5next_current[] = {
 	"Fan current"
 };
 
-/* Labels for Farbwerk, Farbwerk 360 and Octo temperature sensors */
+/* Labels for Aquaero 6 LT, Farbwerk, Farbwerk 360 and Octo temperature sensors */
 static const char *const label_temp_sensors[] = {
 	"Sensor 1",
 	"Sensor 2",
 	"Sensor 3",
-	"Sensor 4"
+	"Sensor 4",
+	"Sensor 5",
+	"Sensor 6",
+	"Sensor 7",
+	"Sensor 8"
 };
 
 /* Labels for Octo */
@@ -219,7 +233,10 @@ struct aqc_data {
 	u16 power_cycle_count_offset;
 	u8 flow_sensor_offset;
 
-	/* General info, same across all devices */
+	u8 serial_number_start_offset;
+	u8 firmware_version_offset;
+
+	/* General info, available across all devices */
 	u32 serial_number[2];
 	u16 firmware_version;
 
@@ -227,7 +244,7 @@ struct aqc_data {
 	u32 power_cycles;
 
 	/* Sensor values */
-	s32 temp_input[4];
+	s32 temp_input[8];
 	u16 speed_input[8];
 	u32 power_input[8];
 	u16 voltage_input[8];
@@ -508,6 +525,10 @@ static const struct hwmon_channel_info *aqc_info[] = {
 			   HWMON_T_INPUT | HWMON_T_LABEL,
 			   HWMON_T_INPUT | HWMON_T_LABEL,
 			   HWMON_T_INPUT | HWMON_T_LABEL,
+			   HWMON_T_INPUT | HWMON_T_LABEL,
+			   HWMON_T_INPUT | HWMON_T_LABEL,
+			   HWMON_T_INPUT | HWMON_T_LABEL,
+			   HWMON_T_INPUT | HWMON_T_LABEL,
 			   HWMON_T_INPUT | HWMON_T_LABEL),
 	HWMON_CHANNEL_INFO(fan,
 			   HWMON_F_INPUT | HWMON_F_LABEL,
@@ -573,9 +594,9 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 	priv = hid_get_drvdata(hdev);
 
 	/* Info provided with every report */
-	priv->serial_number[0] = get_unaligned_be16(data + SERIAL_FIRST_PART);
-	priv->serial_number[1] = get_unaligned_be16(data + SERIAL_SECOND_PART);
-	priv->firmware_version = get_unaligned_be16(data + FIRMWARE_VERSION);
+	priv->serial_number[0] = get_unaligned_be16(data + priv->serial_number_start_offset);
+	priv->serial_number[1] = get_unaligned_be16(data + priv->serial_number_start_offset + SERIAL_PART_OFFSET);
+	priv->firmware_version = get_unaligned_be16(data + priv->firmware_version_offset);
 
 	/* Temperature sensor readings */
 	for (i = 0; i < priv->num_temp_sensors; i++) {
@@ -704,8 +725,24 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		goto fail_and_stop;
 
 	switch (hdev->product) {
+	case USB_PRODUCT_ID_AQUAERO6LT:
+		/* TODO: Pick the right Aquaero */
+
+		priv->kind = aquaero6lt;
+
+		priv->serial_number_start_offset = AQUAERO6LT_SERIAL_START;
+		priv->firmware_version_offset = AQUAERO6LT_FIRMWARE_VERSION;
+
+		priv->num_fans = 0;
+		priv->num_temp_sensors = AQUAERO6LT_NUM_SENSORS;
+		priv->temp_sensor_start_offset = AQUAERO6LT_SENSOR_START;
+		priv->temp_label = label_temp_sensors;
+		break;
 	case USB_PRODUCT_ID_D5NEXT:
 		priv->kind = d5next;
+
+		priv->serial_number_start_offset = AQC_SERIAL_START;
+		priv->firmware_version_offset = AQC_FIRMWARE_VERSION;
 
 		priv->num_fans = D5NEXT_NUM_FANS;
 		priv->fan_sensor_offsets = d5next_sensor_fan_offsets;
@@ -714,6 +751,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->temp_sensor_start_offset = D5NEXT_COOLANT_TEMP;
 		priv->power_cycle_count_offset = D5NEXT_POWER_CYCLES;
 		priv->buffer_size = D5NEXT_CTRL_REPORT_SIZE;
+
 		priv->temp_label = label_d5next_temp;
 		priv->speed_label = label_d5next_speeds;
 		priv->power_label = label_d5next_power;
@@ -723,6 +761,9 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	case USB_PRODUCT_ID_FARBWERK:
 		priv->kind = farbwerk;
 
+		priv->serial_number_start_offset = AQC_SERIAL_START;
+		priv->firmware_version_offset = AQC_FIRMWARE_VERSION;
+
 		priv->num_fans = 0;
 		priv->num_temp_sensors = FARBWERK_NUM_SENSORS;
 		priv->temp_sensor_start_offset = FARBWERK_SENSOR_START;
@@ -731,6 +772,9 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	case USB_PRODUCT_ID_FARBWERK360:
 		priv->kind = farbwerk360;
 
+		priv->serial_number_start_offset = AQC_SERIAL_START;
+		priv->firmware_version_offset = AQC_FIRMWARE_VERSION;
+
 		priv->num_fans = 0;
 		priv->num_temp_sensors = FARBWERK360_NUM_SENSORS;
 		priv->temp_sensor_start_offset = FARBWERK360_SENSOR_START;
@@ -738,6 +782,9 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		break;
 	case USB_PRODUCT_ID_OCTO:
 		priv->kind = octo;
+
+		priv->serial_number_start_offset = AQC_SERIAL_START;
+		priv->firmware_version_offset = AQC_FIRMWARE_VERSION;
 
 		priv->num_fans = OCTO_NUM_FANS;
 		priv->fan_sensor_offsets = octo_sensor_fan_offsets;
@@ -755,6 +802,9 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		break;
 	case USB_PRODUCT_ID_QUADRO:
 		priv->kind = quadro;
+
+		priv->serial_number_start_offset = AQC_SERIAL_START;
+		priv->firmware_version_offset = AQC_FIRMWARE_VERSION;
 
 		priv->num_fans = QUADRO_NUM_FANS;
 		priv->fan_sensor_offsets = quadro_sensor_fan_offsets;
@@ -822,6 +872,7 @@ static void aqc_remove(struct hid_device *hdev)
 }
 
 static const struct hid_device_id aqc_table[] = {
+	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_AQUAERO6LT) },
 	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_D5NEXT) },
 	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_FARBWERK) },
 	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_FARBWERK360) },
