@@ -65,6 +65,9 @@ static u8 secondary_ctrl_report[] = {
 #define AQC_FAN_POWER_OFFSET		0x06
 #define AQC_FAN_SPEED_OFFSET		0x08
 
+/* Register offsets for fan control*/
+#define AQC_FAN_CTRL_PWM_OFFSET		0x01
+
 /* Register offsets for the D5 Next pump */
 #define D5NEXT_POWER_CYCLES		0x18
 #define D5NEXT_COOLANT_TEMP		0x57
@@ -75,8 +78,8 @@ static u8 secondary_ctrl_report[] = {
 #define D5NEXT_PUMP_OFFSET		0x6c
 #define D5NEXT_CTRL_REPORT_SIZE		0x329
 #define D5NEXT_5V_VOLTAGE		0x39
-static u8 d5next_sensor_fan_offsets[] = { D5NEXT_PUMP_OFFSET, D5NEXT_FAN_OFFSET };
-static u16 d5next_ctrl_fan_offsets[] = { 0x97, 0x42 };
+static u8 d5next_sensor_fan_offsets[] = { D5NEXT_PUMP_OFFSET, D5NEXT_FAN_OFFSET};
+static u16 d5next_ctrl_fan_offsets[] = { 0x96, 0x41};
 
 /* Register offsets for the Farbwerk RGB controller */
 #define FARBWERK_NUM_SENSORS		4
@@ -95,7 +98,7 @@ static u16 d5next_ctrl_fan_offsets[] = { 0x97, 0x42 };
 static u8 octo_sensor_fan_offsets[] = { 0x7D, 0x8A, 0x97, 0xA4, 0xB1, 0xBE, 0xCB, 0xD8 };
 
 /* Fan speed registers in Octo control report (from 0-100%) */
-static u16 octo_ctrl_fan_offsets[] = { 0x5B, 0xB0, 0x105, 0x15A, 0x1AF, 0x204, 0x259, 0x2AE };
+static u16 octo_ctrl_fan_offsets[] = { 0x5A, 0xAF, 0x104, 0x159, 0x1AE, 0x203, 0x258, 0x2AD };
 
 /* Register offsets for the Quadro fan controller */
 #define QUADRO_POWER_CYCLES		0x18
@@ -105,8 +108,7 @@ static u16 octo_ctrl_fan_offsets[] = { 0x5B, 0xB0, 0x105, 0x15A, 0x1AF, 0x204, 0
 static u8 quadro_sensor_fan_offsets[] = { 0x70, 0x7D, 0x8A, 0x97 };
 
 /* Fan speed registers in Quadro control report (from 0-100%) */
-static u16 quadro_ctrl_fan_offsets[] = { 0x37, 0x8c, 0xe1, 0x136 };
-
+static u16 quadro_ctrl_fan_offsets[] = { 0x36, 0x8b, 0xe0, 0x135};
 #define QUADRO_CTRL_REPORT_SIZE		0x3c1
 #define QUADRO_FLOW_SENSOR_OFFSET	0x6e
 
@@ -299,7 +301,7 @@ static int aqc_send_ctrl_data(struct aqc_data *priv)
 }
 
 /* Refreshes the control buffer and returns value at offset */
-static int aqc_get_ctrl_val(struct aqc_data *priv, int offset)
+static int aqc_get_ctrl_val(struct aqc_data *priv, int offset, size_t size)
 {
 	int ret;
 
@@ -309,14 +311,25 @@ static int aqc_get_ctrl_val(struct aqc_data *priv, int offset)
 	if (ret < 0)
 		goto unlock_and_return;
 
-	ret = get_unaligned_be16(priv->buffer + offset);
+	switch (size) {
+	case 16:
+		ret = get_unaligned_be16(priv->buffer + offset);
+		break;
+	case 8:
+		ret = priv->buffer[offset];
+		break;
+	default:
+		ret = -EINVAL;
+		break;
+	}
 
 unlock_and_return:
 	mutex_unlock(&priv->mutex);
 	return ret;
 }
 
-static int aqc_set_ctrl_val(struct aqc_data *priv, int offset, long val)
+/* Refreshes the control buffer, updates value at offset and writes buffer to device */
+static int aqc_set_ctrl_val(struct aqc_data *priv, int offset, long val, size_t size)
 {
 	int ret;
 
@@ -326,7 +339,17 @@ static int aqc_set_ctrl_val(struct aqc_data *priv, int offset, long val)
 	if (ret < 0)
 		goto unlock_and_return;
 
-	put_unaligned_be16((u16)val, priv->buffer + offset);
+	switch (size) {
+	case 16:
+		put_unaligned_be16((u16)val, priv->buffer + offset);
+		break;
+	case 8:
+		priv->buffer[offset] = (u8) val;
+		break;
+	default:
+		ret = -EINVAL;
+		goto unlock_and_return;
+	}
 
 	ret = aqc_send_ctrl_data(priv);
 
@@ -347,6 +370,8 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 	case hwmon_pwm:
 		if (priv->fan_ctrl_offsets && channel < priv->num_fans) {
 			switch (attr) {
+			case hwmon_pwm_enable:
+				return 0644;
 			case hwmon_pwm_input:
 				return 0644;
 			default:
@@ -416,11 +441,24 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		break;
 	case hwmon_pwm:
 		if (priv->fan_ctrl_offsets) {
-			ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel]);
-			if (ret < 0)
-				return ret;
+			switch (attr) {
+			case hwmon_pwm_enable:
+				ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel], 8);
+				if (ret < 0)
+					return ret;
 
-			*val = aqc_percent_to_pwm(ret);
+				*val = ret + 1; /* add 1 to convert pwm_enable from aqc to hwmon */
+				break;
+			case hwmon_pwm_input:
+				ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel] + AQC_FAN_CTRL_PWM_OFFSET, 16);
+				if (ret < 0)
+					return ret;
+
+				*val = aqc_percent_to_pwm(ret);
+				break;
+			default:
+				break;
+			}
 		}
 		break;
 	case hwmon_in:
@@ -473,14 +511,45 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 	switch (type) {
 	case hwmon_pwm:
 		switch (attr) {
+		case hwmon_pwm_enable:
+			switch (priv->kind) {
+			case d5next:
+				if (val < 0 || val > 3)
+					return -EINVAL;
+				break;
+			case quadro:
+			case octo:
+				if (val < 0 || val > priv->num_fans + 3)
+					return -EINVAL;
+				/* check if the fan wants to follow itself, as this is not supported */
+				if (val == channel + 4)
+					return -EINVAL;
+				/* check if the fan we want to follow is currently following another one, this is not supported */
+				if (val > 3) {
+					ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[val - 4], 8);
+					if (ret < 0)
+						return ret;
+					/* fan is following another one */
+					if (ret > 2)
+						return -EINVAL;
+				}
+				break;
+			default:
+				return -EOPNOTSUPP;
+			}
+			ret = aqc_set_ctrl_val(priv, priv->fan_ctrl_offsets[channel],
+					       val - 1, 8); /* subtract 1 to convert pwm_enable from hwmon to aqc */
+			if (ret < 0)
+				return ret;
+			break;
 		case hwmon_pwm_input:
 			if (priv->fan_ctrl_offsets) {
 				pwm_value = aqc_pwm_to_percent(val);
 				if (pwm_value < 0)
 					return pwm_value;
 
-				ret = aqc_set_ctrl_val(priv, priv->fan_ctrl_offsets[channel],
-						       pwm_value);
+				ret = aqc_set_ctrl_val(priv, priv->fan_ctrl_offsets[channel] + AQC_FAN_CTRL_PWM_OFFSET,
+						       pwm_value, 16);
 				if (ret < 0)
 					return ret;
 			}
@@ -528,14 +597,14 @@ static const struct hwmon_channel_info *aqc_info[] = {
 			   HWMON_P_INPUT | HWMON_P_LABEL,
 			   HWMON_P_INPUT | HWMON_P_LABEL),
 	HWMON_CHANNEL_INFO(pwm,
-			   HWMON_PWM_INPUT,
-			   HWMON_PWM_INPUT,
-			   HWMON_PWM_INPUT,
-			   HWMON_PWM_INPUT,
-			   HWMON_PWM_INPUT,
-			   HWMON_PWM_INPUT,
-			   HWMON_PWM_INPUT,
-			   HWMON_PWM_INPUT),
+			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE,
+			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE,
+			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE,
+			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE,
+			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE,
+			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE,
+			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE,
+			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE),
 	HWMON_CHANNEL_INFO(in,
 			   HWMON_I_INPUT | HWMON_I_LABEL,
 			   HWMON_I_INPUT | HWMON_I_LABEL,
