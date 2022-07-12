@@ -68,30 +68,26 @@ static u8 secondary_ctrl_report[] = {
 /* Register offsets for fan control*/
 #define AQC_FAN_CTRL_PWM_OFFSET		0x01
 
-
 /* Register offsets for the D5 Next pump */
-#define D5NEXT_POWER_CYCLES		24  //0x18
-#define D5NEXT_COOLANT_TEMP		87  //0x57
+#define D5NEXT_POWER_CYCLES		0x18
+#define D5NEXT_COOLANT_TEMP		0x57
 #define D5NEXT_NUM_FANS			2
 #define D5NEXT_NUM_SENSORS		1
-/* we're calling the pump a fan channel here */
+#define D5NEXT_PUMP_OFFSET		0x6c
 #define D5NEXT_FAN_OFFSET		0x5f
 #define D5NEXT_PUMP_OFFSET		0x6c
 #define D5NEXT_CTRL_REPORT_SIZE		0x329
-#define D5NEXT_5V_VOLTAGE		57 //0x39
+#define D5NEXT_5V_VOLTAGE		0x39
 static u8 d5next_sensor_fan_offsets[] = { D5NEXT_PUMP_OFFSET, D5NEXT_FAN_OFFSET};
 static u16 d5next_ctrl_fan_offsets[] = { 0x96, 0x41};
-
 
 /* Register offsets for the Farbwerk RGB controller */
 #define FARBWERK_NUM_SENSORS		4
 #define FARBWERK_SENSOR_START		0x2f
 
-
 /* Register offsets for the Farbwerk 360 RGB controller */
 #define FARBWERK360_NUM_SENSORS		4
 #define FARBWERK360_SENSOR_START	0x32
-
 
 /* Register offsets for the Octo fan controller */
 #define OCTO_POWER_CYCLES		0x18
@@ -100,21 +96,21 @@ static u16 d5next_ctrl_fan_offsets[] = { 0x96, 0x41};
 #define OCTO_SENSOR_START		0x3D
 #define OCTO_CTRL_REPORT_SIZE		0x65F
 static u8 octo_sensor_fan_offsets[] = { 0x7D, 0x8A, 0x97, 0xA4, 0xB1, 0xBE, 0xCB, 0xD8 };
+
 /* Fan speed registers in Octo control report (from 0-100%) */
 static u16 octo_ctrl_fan_offsets[] = { 0x5A, 0xAF, 0x104, 0x159, 0x1AE, 0x203, 0x258, 0x2AD };
-
 
 /* Register offsets for the Quadro fan controller */
 #define QUADRO_POWER_CYCLES		0x18
 #define QUADRO_NUM_FANS			4
 #define QUADRO_NUM_SENSORS		4
 #define QUADRO_SENSOR_START		0x34
-static u8 quadro_sensor_fan_offsets[] = { 0x70, 0x7D, 0x8A, 0x97};
+static u8 quadro_sensor_fan_offsets[] = { 0x70, 0x7D, 0x8A, 0x97 };
+
 /* Fan speed registers in Quadro control report (from 0-100%) */
 static u16 quadro_ctrl_fan_offsets[] = { 0x36, 0x8b, 0xe0, 0x135};
 #define QUADRO_CTRL_REPORT_SIZE		0x3c1
 #define QUADRO_FLOW_SENSOR_OFFSET	0x6e
-
 
 /* Labels for D5 Next */
 static const char *const label_d5next_temp[] = {
@@ -372,7 +368,7 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 			return 0444;
 		break;
 	case hwmon_pwm:
-		if (priv->fan_ctrl_offsets != NULL && channel < priv->num_fans) {
+		if (priv->fan_ctrl_offsets && channel < priv->num_fans) {
 			switch (attr) {
 			case hwmon_pwm_enable:
 				return 0644;
@@ -386,7 +382,8 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 	case hwmon_fan:
 		switch (priv->kind) {
 		case quadro:
-			if (channel < priv->num_fans + 1) /* special case to support flow sensor */
+			/* Special case to support flow sensor */
+			if (channel < priv->num_fans + 1)
 				return 0444;
 			break;
 		default:
@@ -403,7 +400,8 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 	case hwmon_in:
 		switch (priv->kind) {
 		case d5next:
-			if (channel < priv->num_fans + 1) /* special case to support voltage sensor */
+			/* Special case to support voltage sensor */
+			if (channel < priv->num_fans + 1)
 				return 0444;
 			break;
 		default:
@@ -442,7 +440,7 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		*val = priv->power_input[channel];
 		break;
 	case hwmon_pwm:
-		if (priv->fan_ctrl_offsets != NULL) {
+		if (priv->fan_ctrl_offsets) {
 			switch (attr) {
 			case hwmon_pwm_enable:
 				ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel], 8);
@@ -545,7 +543,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				return ret;
 			break;
 		case hwmon_pwm_input:
-			if (priv->fan_ctrl_offsets != NULL) {
+			if (priv->fan_ctrl_offsets) {
 				pwm_value = aqc_pwm_to_percent(val);
 				if (pwm_value < 0)
 					return pwm_value;
@@ -651,7 +649,8 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 	/* Temperature sensor readings */
 	for (i = 0; i < priv->num_temp_sensors; i++) {
 		sensor_value = get_unaligned_be16(data +
-			priv->temp_sensor_start_offset + i * AQC_TEMP_SENSOR_SIZE);
+						  priv->temp_sensor_start_offset +
+						  i * AQC_TEMP_SENSOR_SIZE);
 		if (sensor_value == AQC_TEMP_SENSOR_DISCONNECTED)
 			priv->temp_input[i] = -ENODATA;
 		else
@@ -661,22 +660,19 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 	/* Fan speed and related readings */
 	for (i = 0; i < priv->num_fans; i++) {
 		priv->speed_input[i] =
-			get_unaligned_be16(data + priv->fan_sensor_offsets[i] +
-					   AQC_FAN_SPEED_OFFSET);
+		    get_unaligned_be16(data + priv->fan_sensor_offsets[i] + AQC_FAN_SPEED_OFFSET);
 		priv->power_input[i] =
-			get_unaligned_be16(data + priv->fan_sensor_offsets[i] +
-					   AQC_FAN_POWER_OFFSET) * 10000;
+		    get_unaligned_be16(data + priv->fan_sensor_offsets[i] +
+				       AQC_FAN_POWER_OFFSET) * 10000;
 		priv->voltage_input[i] =
-			get_unaligned_be16(data + priv->fan_sensor_offsets[i] +
-					   AQC_FAN_VOLTAGE_OFFSET) * 10;
+		    get_unaligned_be16(data + priv->fan_sensor_offsets[i] +
+				       AQC_FAN_VOLTAGE_OFFSET) * 10;
 		priv->current_input[i] =
-			get_unaligned_be16(data + priv->fan_sensor_offsets[i] +
-					   AQC_FAN_CURRENT_OFFSET);
+		    get_unaligned_be16(data + priv->fan_sensor_offsets[i] + AQC_FAN_CURRENT_OFFSET);
 	}
 
-	if (priv->power_cycle_count_offset != 0) {
+	if (priv->power_cycle_count_offset != 0)
 		priv->power_cycles = get_unaligned_be32(data + priv->power_cycle_count_offset);
-	}
 
 	/* Special-case sensor readings */
 	switch (priv->kind) {
@@ -738,9 +734,8 @@ static void aqc_debugfs_init(struct aqc_data *priv)
 	debugfs_create_file("serial_number", 0444, priv->debugfs, priv, &serial_number_fops);
 	debugfs_create_file("firmware_version", 0444, priv->debugfs, priv, &firmware_version_fops);
 
-	if (priv->power_cycle_count_offset != 0) {
+	if (priv->power_cycle_count_offset != 0)
 		debugfs_create_file("power_cycles", 0444, priv->debugfs, priv, &power_cycles_fops);
-	}
 }
 
 #else
@@ -780,6 +775,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	switch (hdev->product) {
 	case USB_PRODUCT_ID_D5NEXT:
 		priv->kind = d5next;
+
 		priv->num_fans = D5NEXT_NUM_FANS;
 		priv->fan_sensor_offsets = d5next_sensor_fan_offsets;
 		priv->fan_ctrl_offsets = d5next_ctrl_fan_offsets;
@@ -795,6 +791,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		break;
 	case USB_PRODUCT_ID_FARBWERK:
 		priv->kind = farbwerk;
+
 		priv->num_fans = 0;
 		priv->num_temp_sensors = FARBWERK_NUM_SENSORS;
 		priv->temp_sensor_start_offset = FARBWERK_SENSOR_START;
@@ -802,6 +799,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		break;
 	case USB_PRODUCT_ID_FARBWERK360:
 		priv->kind = farbwerk360;
+
 		priv->num_fans = 0;
 		priv->num_temp_sensors = FARBWERK360_NUM_SENSORS;
 		priv->temp_sensor_start_offset = FARBWERK360_SENSOR_START;
@@ -809,6 +807,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		break;
 	case USB_PRODUCT_ID_OCTO:
 		priv->kind = octo;
+
 		priv->num_fans = OCTO_NUM_FANS;
 		priv->fan_sensor_offsets = octo_sensor_fan_offsets;
 		priv->fan_ctrl_offsets = octo_ctrl_fan_offsets;
@@ -825,6 +824,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		break;
 	case USB_PRODUCT_ID_QUADRO:
 		priv->kind = quadro;
+
 		priv->num_fans = QUADRO_NUM_FANS;
 		priv->fan_sensor_offsets = quadro_sensor_fan_offsets;
 		priv->fan_ctrl_offsets = quadro_ctrl_fan_offsets;
