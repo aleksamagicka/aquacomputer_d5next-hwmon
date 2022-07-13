@@ -39,21 +39,31 @@ along with their speed (in RPM), power, voltage and current.
 
 The possible values for pwm_enable are:
 for D5 Next, Quadro and Octo
-0: no change
-1: manual pwm mode
-2: PID control mode
-3: fan curve mode
-additionally for Quadro and Octo
-4: follow fan1 pwm
-5: follow fan2 pwm
-6: follow fan3 pwm
-7: follow fan4 pwm
-additionally for Octo
-8: follow fan5 pwm
-9: follow fan6 pwm
-10: follow fan7 pwm
-11: follow fan8 pwm
 
+= =================
+0 no change
+1 manual pwm mode
+2 PID control mode
+3 fan curve mode
+= =================
+
+additionally for Quadro and Octo
+
+= ===============
+4 follow fan1 pwm
+5 follow fan2 pwm
+6 follow fan3 pwm
+7 follow fan4 pwm
+= ===============
+
+additionally for Octo
+
+== ===============
+8  follow fan5 pwm
+9  follow fan6 pwm
+10 follow fan7 pwm
+11 follow fan8 pwm
+== ===============
 
 The Farbwerk and Farbwerk 360 expose four temperature sensors. Depending on the device,
 not all sysfs and debugfs entries will be available.
