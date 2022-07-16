@@ -113,18 +113,13 @@ static u16 quadro_ctrl_fan_offsets[] = { 0x37, 0x8c, 0xe1, 0x136 };
 #define QUADRO_FLOW_SENSOR_OFFSET	0x6e
 
 /* Register offsets for the High Flow Next */
-#define HIGHFLOWNEXT_NUM_FANS		10
+#define HIGHFLOWNEXT_NUM_FANS		3
 #define HIGHFLOWNEXT_NUM_SENSORS	2
-#define HIGHFLOWNEXT_SENSOR_START	85	/* TemperatureWater */
+#define HIGHFLOWNEXT_SENSOR_START	85
 #define HIGHFLOWNEXT_POWER		91
 #define HIGHFLOWNEXT_5V_VOLTAGE		97
 #define HIGHFLOWNEXT_5V_VOLTAGE_USB	99
-
-/* Fan speed registers for High Flow Next:
- * FlowRaw, FlowCalibration, SensorDiff, FlowWithoutUserCompensation, Flow, WaterQuality,
- * ConductivityUncompensate, Conductivity, Volume, ImpulseCounter
- * */
-static u8 highflownext_sensor_fan_offsets[] = { 71, 75, 79, 81, 83, 89, 93, 95, 101, 105 };
+static u8 highflownext_sensor_fan_offsets[] = { 75, 89, 95 };
 
 /* Labels for D5 Next */
 static const char *const label_d5next_temp[] = {
@@ -214,23 +209,15 @@ static const char *const label_fan_flow_speed_quadro[] = {
 };
 
 /* Labels for High Flow Next */
-
 static const char *const label_highflownext_temp_sensors[] = {
-	"TemperatureWater",
-	"TemperatureExt"
+	"Coolant temp",
+	"External sensor"
 };
 
 static const char *const label_highflownext_fan_speed[] = {
-	"FlowRaw",
-	"FlowCalibration",
-	"SensorDiff",
-	"FlowWithoutUserCompensation",
-	"Flow",
-	"WaterQuality",
-	"ConductivityUncompensate",
-	"Conductivity",
-	"Volume",
-	"ImpulseCounter"
+	"Calibrated flow [dL/h]",
+	"Water quality [%]",
+	"Conductivity [nS/cm]",
 };
 
 static const char *const label_highflownext_power[] = {
@@ -238,8 +225,8 @@ static const char *const label_highflownext_power[] = {
 };
 
 static const char *const label_highflownext_voltage[] = {
-	"Vcc5",
-	"Vcc5usb"
+	"+5V voltage",
+	"+5V USB voltage"
 };
 
 struct aqc_data {
@@ -273,7 +260,7 @@ struct aqc_data {
 
 	/* Sensor values */
 	s32 temp_input[4];
-	u16 speed_input[10];	/* TODO: For High Flow Next testing */
+	u16 speed_input[8];
 	u32 power_input[8];
 	u16 voltage_input[8];
 	u16 current_input[8];
@@ -688,7 +675,7 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 		priv->speed_input[4] = get_unaligned_be16(data + priv->flow_sensor_offset) / 10;
 		break;
 	case highflownext:
-		priv->power_input[0] = get_unaligned_be16(data + HIGHFLOWNEXT_POWER) * 10000;
+		priv->power_input[0] = get_unaligned_be16(data + HIGHFLOWNEXT_POWER); /* TODO: Figure out */
 
 		priv->voltage_input[0] = get_unaligned_be16(data + HIGHFLOWNEXT_5V_VOLTAGE) * 10;
 		priv->voltage_input[1] = get_unaligned_be16(data + HIGHFLOWNEXT_5V_VOLTAGE_USB) * 10;
@@ -709,6 +696,10 @@ static int serial_number_show(struct seq_file *seqf, void *unused)
 	struct aqc_data *priv = seqf->private;
 
 	seq_printf(seqf, "%05u-%05u\n", priv->serial_number[0], priv->serial_number[1]);
+
+	/* TODO: Development/testing for High Flow Next */
+	if (priv->kind == highflownext)
+		seq_printf(seqf, "High Flow Next power: %08u\n", priv->power_input[0]);
 
 	return 0;
 }
@@ -794,6 +785,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->temp_sensor_start_offset = D5NEXT_COOLANT_TEMP;
 		priv->power_cycle_count_offset = D5NEXT_POWER_CYCLES;
 		priv->buffer_size = D5NEXT_CTRL_REPORT_SIZE;
+
 		priv->temp_label = label_d5next_temp;
 		priv->speed_label = label_d5next_speeds;
 		priv->power_label = label_d5next_power;
@@ -853,8 +845,6 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		break;
 	case USB_PRODUCT_ID_HIGHFLOWNEXT:
 		priv->kind = highflownext;
-
-		/* TODO: DEVELOPMENT/DEBUG VALUES */
 
 		priv->num_fans = HIGHFLOWNEXT_NUM_FANS;
 		priv->fan_sensor_offsets = highflownext_sensor_fan_offsets;
