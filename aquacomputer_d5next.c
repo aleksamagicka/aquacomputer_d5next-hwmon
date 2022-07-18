@@ -726,7 +726,20 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 	switch (hdev->product) {
 	case USB_PRODUCT_ID_AQUAERO6LT:
-		/* TODO: Pick the right Aquaero */
+		/*
+		 * Aquaero 6 presents itself as three HID devices under the same product ID:
+		 * "aquaero keyboard/mouse", "aquaero System Control" and "aquaero Device",
+		 * which is the one we want to communicate with. Unlike most other Aquacomputer
+		 * devices, Aquaero 6 does not return meaningful data when explicitly requested
+		 * using GET_FEATURE_REPORT.
+		 *
+		 * The difference between "aquaero Device" and the other two is in the collections
+		 * they present. The two other devices have the type of the second element in
+		 * their respective collections set to 1, while the real device has it set to 0.
+		 */
+
+		if (hdev->collection[1].type != 0)
+			goto fail_and_close;
 
 		priv->kind = aquaero6lt;
 
