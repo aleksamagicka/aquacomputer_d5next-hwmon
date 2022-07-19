@@ -21,6 +21,6 @@
       - name: checkout repo
         uses: actions/checkout@v2
       - name: install build tools
-        run: sudo dnf groupinstall "Development Tools" "Development Libraries"
+        run: sudo dnf groupinstall "Development Tools" "Development Libraries" -y
       - name: compile driver
         run: make
