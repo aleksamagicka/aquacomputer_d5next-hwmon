@@ -113,13 +113,14 @@ static u16 quadro_ctrl_fan_offsets[] = { 0x37, 0x8c, 0xe1, 0x136 };
 #define QUADRO_FLOW_SENSOR_OFFSET	0x6e
 
 /* Register offsets for the High Flow Next */
-#define HIGHFLOWNEXT_NUM_FANS		3
 #define HIGHFLOWNEXT_NUM_SENSORS	2
 #define HIGHFLOWNEXT_SENSOR_START	85
 #define HIGHFLOWNEXT_POWER		91
 #define HIGHFLOWNEXT_5V_VOLTAGE		97
 #define HIGHFLOWNEXT_5V_VOLTAGE_USB	99
-static u8 highflownext_sensor_fan_offsets[] = { 75, 89, 95 };
+#define HIGHFLOWNEXT_CALIBRATED_FLOW	75
+#define HIGHFLOWNEXT_WATER_QUALITY	89
+#define HIGHFLOWNEXT_CONDUCTIVITY	95
 
 /* Labels for D5 Next */
 static const char *const label_d5next_temp[] = {
@@ -649,10 +650,6 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 		priv->speed_input[i] =
 		    get_unaligned_be16(data + priv->fan_sensor_offsets[i] + AQC_FAN_SPEED_OFFSET);
 
-		/* High Flow Next does not have real fans, so just read the speed */
-		if (priv->kind == highflownext)
-			continue;
-
 		priv->power_input[i] =
 		    get_unaligned_be16(data + priv->fan_sensor_offsets[i] +
 				       AQC_FAN_POWER_OFFSET) * 10000;
@@ -679,6 +676,10 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 
 		priv->voltage_input[0] = get_unaligned_be16(data + HIGHFLOWNEXT_5V_VOLTAGE) * 10;
 		priv->voltage_input[1] = get_unaligned_be16(data + HIGHFLOWNEXT_5V_VOLTAGE_USB) * 10;
+
+		priv->speed_input[0] = get_unaligned_be16(data + HIGHFLOWNEXT_CALIBRATED_FLOW);
+		priv->speed_input[1] = get_unaligned_be16(data + HIGHFLOWNEXT_WATER_QUALITY);
+		priv->speed_input[2] = get_unaligned_be16(data + HIGHFLOWNEXT_CONDUCTIVITY);
 		break;
 	default:
 		break;
@@ -846,8 +847,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	case USB_PRODUCT_ID_HIGHFLOWNEXT:
 		priv->kind = highflownext;
 
-		priv->num_fans = HIGHFLOWNEXT_NUM_FANS;
-		priv->fan_sensor_offsets = highflownext_sensor_fan_offsets;
+		priv->num_fans = 0;
 		priv->num_temp_sensors = HIGHFLOWNEXT_NUM_SENSORS;
 		priv->temp_sensor_start_offset = HIGHFLOWNEXT_SENSOR_START;
 		priv->power_cycle_count_offset = QUADRO_POWER_CYCLES;
