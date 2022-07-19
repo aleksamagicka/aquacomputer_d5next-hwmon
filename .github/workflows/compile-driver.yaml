@@ -16,7 +16,7 @@
         run: make
     build_fedora:
       runs-on: ubuntu-latest
-      container: fedora-36
+      container: fedora:latest
       steps:
       - name: checkout repo
         uses: actions/checkout@v2
