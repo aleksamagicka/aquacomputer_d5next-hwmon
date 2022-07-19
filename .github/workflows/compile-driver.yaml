@@ -14,11 +14,3 @@
         uses: actions/checkout@v2
       - name: compile driver
         run: make
-    build_fedora:
-      runs-on: ubuntu-latest
-      container: fedora:latest
-      steps:
-      - name: checkout repo
-        uses: actions/checkout@v2
-      - name: compile driver
-        run: make
