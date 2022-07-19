@@ -20,5 +20,7 @@
       steps:
       - name: checkout repo
         uses: actions/checkout@v2
+      - name: install build tools
+        run: sudo dnf groupinstall "Development Tools" "Development Libraries"
       - name: compile driver
         run: make
