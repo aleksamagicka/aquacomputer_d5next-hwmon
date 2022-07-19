@@ -196,7 +196,7 @@ static const char *const label_fan_flow_speed_quadro[] = {
 	"Fan 2 speed",
 	"Fan 3 speed",
 	"Fan 4 speed",
-	"Flow speed [l/h]"
+	"Flow speed [dL/h]"
 };
 
 struct aqc_data {
@@ -680,7 +680,7 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 		priv->voltage_input[2] = get_unaligned_be16(data + D5NEXT_5V_VOLTAGE) * 10;
 		break;
 	case quadro:
-		priv->speed_input[4] = get_unaligned_be16(data + priv->flow_sensor_offset) / 10;
+		priv->speed_input[4] = get_unaligned_be16(data + priv->flow_sensor_offset);
 		break;
 	default:
 		break;
