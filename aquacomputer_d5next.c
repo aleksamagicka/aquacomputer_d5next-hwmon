@@ -389,6 +389,13 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 		break;
 	case hwmon_fan:
 		switch (priv->kind) {
+		case highflownext:
+			/* Special case to show three sensor readings:
+			 * calibrated flow, water quality and conductivity
+			 */
+			if (channel < 3)
+				return 0444;
+			break;
 		case quadro:
 			/* Special case to support flow sensor */
 			if (channel < priv->num_fans + 1)
@@ -414,15 +421,8 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 		}
 		break;
 	case hwmon_curr:
-		switch (priv->kind) {
-		case highflownext:
-			/* It has no current sensors exposed that we know of */
-			break;
-		default:
-			if (channel < priv->num_fans)
-				return 0444;
-			break;
-		}
+		if (channel < priv->num_fans)
+			return 0444;
 		break;
 	case hwmon_in:
 		switch (priv->kind) {
