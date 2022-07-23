@@ -75,7 +75,6 @@ static u8 secondary_ctrl_report[] = {
 #define D5NEXT_NUM_SENSORS		1
 #define D5NEXT_PUMP_OFFSET		0x6c
 #define D5NEXT_FAN_OFFSET		0x5f
-#define D5NEXT_PUMP_OFFSET		0x6c
 #define D5NEXT_CTRL_REPORT_SIZE		0x329
 #define D5NEXT_5V_VOLTAGE		0x39
 static u8 d5next_sensor_fan_offsets[] = { D5NEXT_PUMP_OFFSET, D5NEXT_FAN_OFFSET};
@@ -783,6 +782,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->temp_sensor_start_offset = D5NEXT_COOLANT_TEMP;
 		priv->power_cycle_count_offset = D5NEXT_POWER_CYCLES;
 		priv->buffer_size = D5NEXT_CTRL_REPORT_SIZE;
+
 		priv->temp_label = label_d5next_temp;
 		priv->speed_label = label_d5next_speeds;
 		priv->power_label = label_d5next_power;
