@@ -518,75 +518,73 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 
 	switch (type) {
 	case hwmon_pwm:
-		if (priv->fan_ctrl_offsets) {
-			switch (attr) {
-			case hwmon_pwm_enable:
-				switch (priv->kind) {
-				case d5next:
-					if (val < 0 || val > 3)
-						return -EINVAL;
-					break;
-				case quadro:
-				case octo:
-					if (val < 0 || val > priv->num_fans + 3)
-						return -EINVAL;
-					/* check if the fan wants to follow itself, as this is not supported */
-					if (val == channel + 4)
-						return -EINVAL;
-					/* check if the fan we want to follow is currently following another one, this is not supported */
-					if (val > 3) {
-						ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[val - 4], 8);
-						if (ret < 0)
-							return ret;
-						/* fan is following another one */
-						if (ret > 2)
-							return -EINVAL;
-					}
-					break;
-				default:
-					return -EOPNOTSUPP;
-				}
-				ret = aqc_set_ctrl_val(priv, priv->fan_ctrl_offsets[channel],
-						       val - 1, 8); /* subtract 1 to convert pwm_enable from hwmon to aqc */
-				if (ret < 0)
-					return ret;
-				break;
-			case hwmon_pwm_input:
-				pwm_value = aqc_pwm_to_percent(val);
-				if (pwm_value < 0)
-					return pwm_value;
-
-				ret = aqc_set_ctrl_val(priv, priv->fan_ctrl_offsets[channel] + AQC_FAN_CTRL_PWM_OFFSET,
-						       pwm_value, 16);
-				if (ret < 0)
-					return ret;
-				break;
-			case hwmon_pwm_auto_channels_temp:
-				switch (val) {
-				case 1:
-					temp_sensor = 0;
-					break;
-				case 2:
-					temp_sensor = 1;
-					break;
-				case 4:
-					temp_sensor = 2;
-					break;
-				case 8:
-					temp_sensor = 3;
-					break;
-				default:
+		switch (attr) {
+		case hwmon_pwm_enable:
+			switch (priv->kind) {
+			case d5next:
+				if (val < 0 || val > 3)
 					return -EINVAL;
-				}
-				if (temp_sensor >= priv->num_temp_sensors)
+				break;
+			case quadro:
+			case octo:
+				if (val < 0 || val > priv->num_fans + 3)
 					return -EINVAL;
-				ret = aqc_set_ctrl_val(priv, priv->fan_ctrl_offsets[channel] + AQC_FAN_CTRL_TEMP_SELECT_OFFSET,
-						       temp_sensor, 16);
-				if (ret < 0)
-					return ret;
+				/* check if the fan wants to follow itself, as this is not supported */
+				if (val == channel + 4)
+					return -EINVAL;
+				/* check if the fan we want to follow is currently following another one, this is not supported */
+				if (val > 3) {
+					ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[val - 4], 8);
+					if (ret < 0)
+						return ret;
+					/* fan is following another one */
+					if (ret > 2)
+						return -EINVAL;
+				}
+				break;
 			default:
-				break;
+				return -EOPNOTSUPP;
 			}
+			ret = aqc_set_ctrl_val(priv, priv->fan_ctrl_offsets[channel],
+					       val - 1, 8); /* subtract 1 to convert pwm_enable from hwmon to aqc */
+			if (ret < 0)
+				return ret;
+			break;
+		case hwmon_pwm_input:
+			pwm_value = aqc_pwm_to_percent(val);
+			if (pwm_value < 0)
+				return pwm_value;
+
+			ret = aqc_set_ctrl_val(priv, priv->fan_ctrl_offsets[channel] + AQC_FAN_CTRL_PWM_OFFSET,
+					       pwm_value, 16);
+			if (ret < 0)
+				return ret;
+			break;
+		case hwmon_pwm_auto_channels_temp:
+			switch (val) {
+			case 1:
+				temp_sensor = 0;
+				break;
+			case 2:
+				temp_sensor = 1;
+				break;
+			case 4:
+				temp_sensor = 2;
+				break;
+			case 8:
+				temp_sensor = 3;
+				break;
+			default:
+				return -EINVAL;
+			}
+			if (temp_sensor >= priv->num_temp_sensors)
+				return -EINVAL;
+			ret = aqc_set_ctrl_val(priv, priv->fan_ctrl_offsets[channel] + AQC_FAN_CTRL_TEMP_SELECT_OFFSET,
+					       temp_sensor, 16);
+			if (ret < 0)
+				return ret;
+		default:
+			break;
 		}
 		break;
 	default:
