@@ -442,30 +442,28 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		*val = priv->power_input[channel];
 		break;
 	case hwmon_pwm:
-		if (priv->fan_ctrl_offsets) {
-			switch (attr) {
-			case hwmon_pwm_enable:
-				ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel], 8);
-				if (ret < 0)
-					return ret;
+		switch (attr) {
+		case hwmon_pwm_enable:
+			ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel], 8);
+			if (ret < 0)
+				return ret;
 
-				*val = ret + 1; /* add 1 to convert pwm_enable from aqc to hwmon */
-				break;
-			case hwmon_pwm_input:
-				ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel] + AQC_FAN_CTRL_PWM_OFFSET, 16);
-				if (ret < 0)
-					return ret;
+			*val = ret + 1; /* add 1 to convert pwm_enable from aqc to hwmon */
+			break;
+		case hwmon_pwm_input:
+			ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel] + AQC_FAN_CTRL_PWM_OFFSET, 16);
+			if (ret < 0)
+				return ret;
 
-				*val = aqc_percent_to_pwm(ret);
-				break;
-			case hwmon_pwm_auto_channels_temp:
-				ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel] + AQC_FAN_CTRL_TEMP_SELECT_OFFSET, 16);
-				if (ret < 0)
-					return ret;
-				*val = 1 << ret;
-			default:
-				break;
-			}
+			*val = aqc_percent_to_pwm(ret);
+			break;
+		case hwmon_pwm_auto_channels_temp:
+			ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel] + AQC_FAN_CTRL_TEMP_SELECT_OFFSET, 16);
+			if (ret < 0)
+				return ret;
+			*val = 1 << ret;
+		default:
+			break;
 		}
 		break;
 	case hwmon_in:
