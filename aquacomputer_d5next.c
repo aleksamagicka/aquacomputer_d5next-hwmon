@@ -78,6 +78,7 @@ static u8 secondary_ctrl_report[] = {
 #define D5NEXT_FAN_OFFSET		0x5f
 #define D5NEXT_CTRL_REPORT_SIZE		0x329
 #define D5NEXT_5V_VOLTAGE		0x39
+#define D5NEXT_12V_VOLTAGE		0x37
 static u8 d5next_sensor_fan_offsets[] = { D5NEXT_PUMP_OFFSET, D5NEXT_FAN_OFFSET};
 static u16 d5next_ctrl_fan_offsets[] = { 0x96, 0x41};
 
@@ -130,7 +131,8 @@ static const char *const label_d5next_power[] = {
 static const char *const label_d5next_voltages[] = {
 	"Pump voltage",
 	"Fan voltage",
-	"+5V voltage"
+	"+5V voltage",
+	"+12V voltage"
 };
 
 static const char *const label_d5next_current[] = {
@@ -402,8 +404,8 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 	case hwmon_in:
 		switch (priv->kind) {
 		case d5next:
-			/* Special case to support voltage sensor */
-			if (channel < priv->num_fans + 1)
+			/* Special case to support +5V and +12V voltage sensors */
+			if (channel < priv->num_fans + 2)
 				return 0444;
 			break;
 		default:
@@ -704,6 +706,7 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 	switch (priv->kind) {
 	case d5next:
 		priv->voltage_input[2] = get_unaligned_be16(data + D5NEXT_5V_VOLTAGE) * 10;
+		priv->voltage_input[3] = get_unaligned_be16(data + D5NEXT_12V_VOLTAGE) * 10;
 		break;
 	case quadro:
 		priv->speed_input[4] = get_unaligned_be16(data + priv->flow_sensor_offset);

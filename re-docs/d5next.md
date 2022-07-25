@@ -32,6 +32,7 @@ As you can clearly see, its ID is `0x01` and its length is `0x9e`. Here is what 
 |           Pump voltage           |      0x6E      |
 |           Fan voltage            |      0x61      |
 |           +5V voltage            |      0x39      |
+|           +12V voltage           |      0x37      |
 |           Pump current           |      0x70      |
 |           Fan current            |      0x63      |
 
