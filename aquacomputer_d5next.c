@@ -25,15 +25,17 @@
 #define USB_PRODUCT_ID_D5NEXT		0xf00e
 #define USB_PRODUCT_ID_FARBWERK360	0xf010
 #define USB_PRODUCT_ID_OCTO		0xf011
+#define USB_PRODUCT_ID_HIGHFLOWNEXT	0xf012
 
-enum kinds { d5next, farbwerk, farbwerk360, octo, quadro };
+enum kinds { d5next, farbwerk, farbwerk360, octo, quadro, highflownext };
 
 static const char *const aqc_device_names[] = {
 	[d5next] = "d5next",
 	[farbwerk] = "farbwerk",
 	[farbwerk360] = "farbwerk360",
 	[octo] = "octo",
-	[quadro] = "quadro"
+	[quadro] = "quadro",
+	[highflownext] = "highflownext"
 };
 
 #define DRIVER_NAME			"aquacomputer_d5next"
@@ -114,6 +116,16 @@ static u8 quadro_sensor_fan_offsets[] = { 0x70, 0x7D, 0x8A, 0x97 };
 
 /* Fan speed registers in Quadro control report (from 0-100%) */
 static u16 quadro_ctrl_fan_offsets[] = { 0x36, 0x8b, 0xe0, 0x135 };
+
+/* Register offsets for the High Flow Next */
+#define HIGHFLOWNEXT_NUM_SENSORS	2
+#define HIGHFLOWNEXT_SENSOR_START	85
+#define HIGHFLOWNEXT_POWER		91
+#define HIGHFLOWNEXT_5V_VOLTAGE		97
+#define HIGHFLOWNEXT_5V_VOLTAGE_USB	99
+#define HIGHFLOWNEXT_CALIBRATED_FLOW	75
+#define HIGHFLOWNEXT_WATER_QUALITY	89
+#define HIGHFLOWNEXT_CONDUCTIVITY	95
 
 /* Labels for D5 Next */
 static const char *const label_d5next_temp[] = {
@@ -202,6 +214,27 @@ static const char *const label_quadro_speeds[] = {
 	"Fan 3 speed",
 	"Fan 4 speed",
 	"Flow speed [dL/h]"
+};
+
+/* Labels for High Flow Next */
+static const char *const label_highflownext_temp_sensors[] = {
+	"Coolant temp",
+	"External sensor"
+};
+
+static const char *const label_highflownext_fan_speed[] = {
+	"Calibrated flow [dL/h]",
+	"Water quality [%]",
+	"Conductivity [nS/cm]",
+};
+
+static const char *const label_highflownext_power[] = {
+	"Power",
+};
+
+static const char *const label_highflownext_voltage[] = {
+	"+5V voltage",
+	"+5V USB voltage"
 };
 
 struct aqc_data {
@@ -388,6 +421,13 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 		break;
 	case hwmon_fan:
 		switch (priv->kind) {
+		case highflownext:
+			/* Special case to show three sensor readings:
+			 * calibrated flow, water quality and conductivity
+			 */
+			if (channel < 3)
+				return 0444;
+			break;
 		case quadro:
 			/* Special case to support flow sensor */
 			if (channel < priv->num_fans + 1)
@@ -400,6 +440,18 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 		}
 		break;
 	case hwmon_power:
+		switch (priv->kind) {
+		case highflownext:
+			/* Special case to support one power sensor */
+			if (channel == 0)
+				return 0444;
+			break;
+		default:
+			if (channel < priv->num_fans)
+				return 0444;
+			break;
+		}
+		break;
 	case hwmon_curr:
 		if (channel < priv->num_fans)
 			return 0444;
@@ -409,6 +461,11 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 		case d5next:
 			/* Special case to support +5V and +12V voltage sensors */
 			if (channel < priv->num_fans + 2)
+				return 0444;
+			break;
+		case highflownext:
+			/* Special case to support two voltage sensors */
+			if (channel < 2)
 				return 0444;
 			break;
 		default:
@@ -714,6 +771,7 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 	for (i = 0; i < priv->num_fans; i++) {
 		priv->speed_input[i] =
 		    get_unaligned_be16(data + priv->fan_sensor_offsets[i] + AQC_FAN_SPEED_OFFSET);
+
 		priv->power_input[i] =
 		    get_unaligned_be16(data + priv->fan_sensor_offsets[i] +
 				       AQC_FAN_POWER_OFFSET) * 10000;
@@ -736,6 +794,16 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 	case quadro:
 		priv->speed_input[4] = get_unaligned_be16(data + priv->flow_sensor_offset);
 		break;
+	case highflownext:
+		priv->power_input[0] = get_unaligned_be16(data + HIGHFLOWNEXT_POWER); /* TODO: Figure out */
+
+		priv->voltage_input[0] = get_unaligned_be16(data + HIGHFLOWNEXT_5V_VOLTAGE) * 10;
+		priv->voltage_input[1] = get_unaligned_be16(data + HIGHFLOWNEXT_5V_VOLTAGE_USB) * 10;
+
+		priv->speed_input[0] = get_unaligned_be16(data + HIGHFLOWNEXT_CALIBRATED_FLOW);
+		priv->speed_input[1] = get_unaligned_be16(data + HIGHFLOWNEXT_WATER_QUALITY);
+		priv->speed_input[2] = get_unaligned_be16(data + HIGHFLOWNEXT_CONDUCTIVITY);
+		break;
 	default:
 		break;
 	}
@@ -752,6 +820,10 @@ static int serial_number_show(struct seq_file *seqf, void *unused)
 	struct aqc_data *priv = seqf->private;
 
 	seq_printf(seqf, "%05u-%05u\n", priv->serial_number[0], priv->serial_number[1]);
+
+	/* TODO: Development/testing for High Flow Next */
+	if (priv->kind == highflownext)
+		seq_printf(seqf, "High Flow Next power: %08u\n", priv->power_input[0]);
 
 	return 0;
 }
@@ -895,6 +967,19 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->voltage_label = label_fan_voltage;
 		priv->current_label = label_fan_current;
 		break;
+	case USB_PRODUCT_ID_HIGHFLOWNEXT:
+		priv->kind = highflownext;
+
+		priv->num_fans = 0;
+		priv->num_temp_sensors = HIGHFLOWNEXT_NUM_SENSORS;
+		priv->temp_sensor_start_offset = HIGHFLOWNEXT_SENSOR_START;
+		priv->power_cycle_count_offset = QUADRO_POWER_CYCLES;
+
+		priv->temp_label = label_highflownext_temp_sensors;
+		priv->speed_label = label_highflownext_fan_speed;
+		priv->power_label = label_highflownext_power;
+		priv->voltage_label = label_highflownext_voltage;
+		break;
 	default:
 		break;
 	}
@@ -951,6 +1036,7 @@ static const struct hid_device_id aqc_table[] = {
 	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_FARBWERK360) },
 	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_OCTO) },
 	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_QUADRO) },
+	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_HIGHFLOWNEXT) },
 	{ }
 };
 
