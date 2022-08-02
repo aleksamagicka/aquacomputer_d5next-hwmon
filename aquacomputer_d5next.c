@@ -550,8 +550,9 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 	case hwmon_temp:
 		switch (attr) {
 		case hwmon_temp_offset:
+			val = clamp_val(val, -15000, 15000) / 10;
 			ret = aqc_set_ctrl_val(priv, priv->temp_ctrl_offset + channel * AQC_TEMP_SENSOR_SIZE,
-								val/10, 16);
+								val, 16);
 			if (ret < 0)
 				return ret;
 			break;
