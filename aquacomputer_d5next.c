@@ -308,7 +308,7 @@ static int aqc_send_ctrl_data(struct aqc_data *priv)
 }
 
 /* Refreshes the control buffer and stores value at offset in val */
-static int aqc_get_ctrl_val(struct aqc_data *priv, int offset, long* val, size_t size)
+static int aqc_get_ctrl_val(struct aqc_data *priv, int offset, long *val, size_t size)
 {
 	int ret;
 
