@@ -307,8 +307,8 @@ static int aqc_send_ctrl_data(struct aqc_data *priv)
 	return ret;
 }
 
-/* Refreshes the control buffer and returns value at offset */
-static int aqc_get_ctrl_val(struct aqc_data *priv, int offset, size_t size)
+/* Refreshes the control buffer and stores value at offset in val */
+static int aqc_get_ctrl_val(struct aqc_data *priv, int offset, long* val, size_t size)
 {
 	int ret;
 
@@ -320,10 +320,10 @@ static int aqc_get_ctrl_val(struct aqc_data *priv, int offset, size_t size)
 
 	switch (size) {
 	case 16:
-		ret = get_unaligned_be16(priv->buffer + offset);
+		*val = (s16) get_unaligned_be16(priv->buffer + offset);
 		break;
 	case 8:
-		ret = priv->buffer[offset];
+		*val = priv->buffer[offset];
 		break;
 	default:
 		ret = -EINVAL;
@@ -453,10 +453,10 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			*val = priv->temp_input[channel];
 			break;
 		case hwmon_temp_offset:
-			ret = aqc_get_ctrl_val(priv, priv->temp_ctrl_offset + channel * AQC_TEMP_SENSOR_SIZE, 16);
+			ret = aqc_get_ctrl_val(priv, priv->temp_ctrl_offset + channel * AQC_TEMP_SENSOR_SIZE, val, 16);
 			if (ret < 0)
 				return ret;
-			*val = 10 * ret;
+			*val = 10 * *val;
 		default:
 			break;
 		}
@@ -470,31 +470,31 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 	case hwmon_pwm:
 		switch (attr) {
 		case hwmon_pwm_enable:
-			ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel], 8);
+			ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel], val, 8);
 			if (ret < 0)
 				return ret;
 
-			*val = ret + 1;	/* Incrementing to satisfy hwmon rules */
+			*val = *val + 1;	/* Incrementing to satisfy hwmon rules */
 			break;
 		case hwmon_pwm_input:
 			ret =
 			    aqc_get_ctrl_val(priv,
 					     priv->fan_ctrl_offsets[channel] +
-					     AQC_FAN_CTRL_PWM_OFFSET, 16);
+					     AQC_FAN_CTRL_PWM_OFFSET, val, 16);
 			if (ret < 0)
 				return ret;
 
-			*val = aqc_percent_to_pwm(ret);
+			*val = aqc_percent_to_pwm(*val);
 			break;
 		case hwmon_pwm_auto_channels_temp:
 			ret =
 			    aqc_get_ctrl_val(priv,
 					     priv->fan_ctrl_offsets[channel] +
-					     AQC_FAN_CTRL_TEMP_SELECT_OFFSET, 16);
+					     AQC_FAN_CTRL_TEMP_SELECT_OFFSET, val, 16);
 			if (ret < 0)
 				return ret;
 
-			*val = 1 << ret;
+			*val = 1 << *val;
 		default:
 			break;
 		}
@@ -544,6 +544,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		     long val)
 {
 	int ret, pwm_value, temp_sensor;
+	long ctrl_mode;
 	struct aqc_data *priv = dev_get_drvdata(dev);
 
 	switch (type) {
@@ -584,12 +585,12 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				if (val > 3) {
 					ret =
 					    aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[val - 4],
-							     8);
+							     &ctrl_mode, 8);
 					if (ret < 0)
 						return ret;
 
 					/* The fan is indeed following another one */
-					if (ret > 2)
+					if (ctrl_mode > 2)
 						return -EINVAL;
 				}
 				break;
