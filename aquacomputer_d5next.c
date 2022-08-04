@@ -373,10 +373,12 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 	case hwmon_temp:
 		if (channel < priv->num_temp_sensors) {
 			switch (attr) {
+			case hwmon_temp_label:
 			case hwmon_temp_input:
 				return 0444;
 			case hwmon_temp_offset:
-				return 0644;
+				if (priv->temp_ctrl_offset > 0) // TODO: remove when implemented for all devices
+					return 0644;
 			default:
 				break;
 			}
@@ -456,7 +458,7 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			ret = aqc_get_ctrl_val(priv, priv->temp_ctrl_offset + channel * AQC_TEMP_SENSOR_SIZE, val, 16);
 			if (ret < 0)
 				return ret;
-			*val = 10 * *val;
+			*val *= 10;
 		default:
 			break;
 		}
@@ -551,6 +553,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 	case hwmon_temp:
 		switch (attr) {
 		case hwmon_temp_offset:
+			/* Limit temp offset to +/- 15K as in the official software */
 			val = clamp_val(val, -15000, 15000) / 10;
 			ret = aqc_set_ctrl_val(priv, priv->temp_ctrl_offset + channel * AQC_TEMP_SENSOR_SIZE,
 								val, 16);
@@ -872,6 +875,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->temp_sensor_start_offset = D5NEXT_COOLANT_TEMP;
 		priv->power_cycle_count_offset = D5NEXT_POWER_CYCLES;
 		priv->buffer_size = D5NEXT_CTRL_REPORT_SIZE;
+		priv->temp_ctrl_offset = 0;
 
 		priv->temp_label = label_d5next_temp;
 		priv->speed_label = label_d5next_speeds;
@@ -885,6 +889,8 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->num_fans = 0;
 		priv->num_temp_sensors = FARBWERK_NUM_SENSORS;
 		priv->temp_sensor_start_offset = FARBWERK_SENSOR_START;
+		priv->temp_ctrl_offset = 0;
+
 		priv->temp_label = label_temp_sensors;
 		break;
 	case USB_PRODUCT_ID_FARBWERK360:
@@ -893,6 +899,8 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->num_fans = 0;
 		priv->num_temp_sensors = FARBWERK360_NUM_SENSORS;
 		priv->temp_sensor_start_offset = FARBWERK360_SENSOR_START;
+		priv->temp_ctrl_offset = 0;
+
 		priv->temp_label = label_temp_sensors;
 		break;
 	case USB_PRODUCT_ID_OCTO:
@@ -905,6 +913,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->temp_sensor_start_offset = OCTO_SENSOR_START;
 		priv->power_cycle_count_offset = OCTO_POWER_CYCLES;
 		priv->buffer_size = OCTO_CTRL_REPORT_SIZE;
+		priv->temp_ctrl_offset = 0;
 
 		priv->temp_label = label_temp_sensors;
 		priv->speed_label = label_fan_speed;
