@@ -724,7 +724,8 @@ static const struct hwmon_chip_info aqc_chip_info = {
 
 static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 *data, int size)
 {
-	int i, sensor_value;
+	int i;
+	s16 sensor_value;
 	struct aqc_data *priv;
 
 	if (report->id != STATUS_REPORT_ID)
