@@ -411,14 +411,14 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 			case hwmon_temp_input:
 				return 0444;
 			case hwmon_temp_offset:
-				if (priv->temp_ctrl_offset > 0) // TODO: remove when implemented for all devices
+				if (priv->temp_ctrl_offset != 0)
 					return 0644;
 			default:
 				break;
 			}
 		}
 
-		if (channel < priv->num_virtual_temp_sensors)
+		if (channel < priv->num_temp_sensors + priv->num_virtual_temp_sensors)
 			return 0644;
 		break;
 	case hwmon_pwm:
@@ -561,7 +561,7 @@ static int aqc_read_string(struct device *dev, enum hwmon_sensor_types type, u32
 		if (channel < priv->num_temp_sensors)
 			*str = priv->temp_label[channel];
 		else
-			*str = priv->virtual_temp_label[channel - priv->num_temp_sensors - 1];
+			*str = priv->virtual_temp_label[channel - priv->num_temp_sensors];
 		break;
 	case hwmon_fan:
 		*str = priv->speed_label[channel];
