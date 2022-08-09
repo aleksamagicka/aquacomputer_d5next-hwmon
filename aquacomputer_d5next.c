@@ -79,6 +79,7 @@ static u8 secondary_ctrl_report[] = {
 #define D5NEXT_5V_VOLTAGE		0x39
 #define D5NEXT_12V_VOLTAGE		0x37
 #define D5NEXT_CTRL_REPORT_SIZE		0x329
+#define D5NEXT_TEMP_CTRL_OFFSET		0x16
 static u8 d5next_sensor_fan_offsets[] = { D5NEXT_PUMP_OFFSET, D5NEXT_FAN_OFFSET };
 
 /* Pump and fan speed registers in D5 Next control report (from 0-100%) */
@@ -89,8 +90,10 @@ static u16 d5next_ctrl_fan_offsets[] = { 0x96, 0x41 };
 #define FARBWERK_SENSOR_START		0x2f
 
 /* Register offsets for the Farbwerk 360 RGB controller */
-#define FARBWERK360_NUM_SENSORS		4
-#define FARBWERK360_SENSOR_START	0x32
+#define FARBWERK360_NUM_SENSORS			4
+#define FARBWERK360_SENSOR_START		0x32
+#define FARBWERK360_CTRL_REPORT_SIZE	0x68A
+#define FARBWERK360_TEMP_CTRL_OFFSET	0x8
 
 /* Register offsets for the Octo fan controller */
 #define OCTO_POWER_CYCLES		0x18
@@ -98,6 +101,7 @@ static u16 d5next_ctrl_fan_offsets[] = { 0x96, 0x41 };
 #define OCTO_NUM_SENSORS		4
 #define OCTO_SENSOR_START		0x3D
 #define OCTO_CTRL_REPORT_SIZE		0x65F
+#define OCTO_TEMP_CTRL_OFFSET		0xa
 static u8 octo_sensor_fan_offsets[] = { 0x7D, 0x8A, 0x97, 0xA4, 0xB1, 0xBE, 0xCB, 0xD8 };
 
 /* Fan speed registers in Octo control report (from 0-100%) */
@@ -876,7 +880,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->temp_sensor_start_offset = D5NEXT_COOLANT_TEMP;
 		priv->power_cycle_count_offset = D5NEXT_POWER_CYCLES;
 		priv->buffer_size = D5NEXT_CTRL_REPORT_SIZE;
-		priv->temp_ctrl_offset = 0;
+		priv->temp_ctrl_offset = D5NEXT_TEMP_CTRL_OFFSET;
 
 		priv->temp_label = label_d5next_temp;
 		priv->speed_label = label_d5next_speeds;
@@ -900,7 +904,8 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->num_fans = 0;
 		priv->num_temp_sensors = FARBWERK360_NUM_SENSORS;
 		priv->temp_sensor_start_offset = FARBWERK360_SENSOR_START;
-		priv->temp_ctrl_offset = 0;
+		priv->buffer_size = FARBWERK360_CTRL_REPORT_SIZE;
+		priv->temp_ctrl_offset = FARBWERK360_TEMP_CTRL_OFFSET;
 
 		priv->temp_label = label_temp_sensors;
 		break;
@@ -914,7 +919,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->temp_sensor_start_offset = OCTO_SENSOR_START;
 		priv->power_cycle_count_offset = OCTO_POWER_CYCLES;
 		priv->buffer_size = OCTO_CTRL_REPORT_SIZE;
-		priv->temp_ctrl_offset = 0;
+		priv->temp_ctrl_offset = OCTO_TEMP_CTRL_OFFSET;
 
 		priv->temp_label = label_temp_sensors;
 		priv->speed_label = label_fan_speed;
