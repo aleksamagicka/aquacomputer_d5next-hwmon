@@ -79,7 +79,7 @@ static u8 secondary_ctrl_report[] = {
 #define D5NEXT_5V_VOLTAGE		0x39
 #define D5NEXT_12V_VOLTAGE		0x37
 #define D5NEXT_CTRL_REPORT_SIZE		0x329
-#define D5NEXT_TEMP_CTRL_OFFSET		0x16
+#define D5NEXT_TEMP_CTRL_OFFSET		0x2D
 static u8 d5next_sensor_fan_offsets[] = { D5NEXT_PUMP_OFFSET, D5NEXT_FAN_OFFSET };
 
 /* Pump and fan speed registers in D5 Next control report (from 0-100%) */
@@ -92,7 +92,7 @@ static u16 d5next_ctrl_fan_offsets[] = { 0x96, 0x41 };
 /* Register offsets for the Farbwerk 360 RGB controller */
 #define FARBWERK360_NUM_SENSORS			4
 #define FARBWERK360_SENSOR_START		0x32
-#define FARBWERK360_CTRL_REPORT_SIZE	0x68A
+#define FARBWERK360_CTRL_REPORT_SIZE	0x682
 #define FARBWERK360_TEMP_CTRL_OFFSET	0x8
 
 /* Register offsets for the Octo fan controller */
