@@ -12,5 +12,20 @@
       steps:
       - name: checkout repo
         uses: actions/checkout@v2
+      - name: checkout linux
+        uses: actions/checkout@v2
+        with:
+          repository: torvalds/linux
+          path: ./linux
+          ref:  v5.18
+      - name: install libelf-dev
+        run: |
+          sudo apt update
+          sudo apt install libelf-dev
+      - name: prepare linux
+        working-directory: ./linux
+        run: |
+          make x86_64_defconfig
+          make modules_prepare
       - name: compile driver
-        run: make
+        run: make -C ./linux M=$PWD modules
