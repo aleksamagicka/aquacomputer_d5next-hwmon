@@ -762,8 +762,11 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		 * their respective collections set to 1, while the real device has it set to 0.
 		 */
 
-		// if (hdev->collection[1].type != 0)
-		// 	goto fail_and_close;
+		if (hdev->collection[1].type != 0)
+		{
+			ret = -ENODEV;
+			goto fail_and_close;
+		}
 
 		priv->kind = aquaero6lt;
 
