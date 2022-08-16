@@ -20,17 +20,17 @@
 #include <asm/unaligned.h>
 
 #define USB_VENDOR_ID_AQUACOMPUTER	0x0c70
-#define USB_PRODUCT_ID_AQUAERO6LT 	0xf001
+#define USB_PRODUCT_ID_AQUAERO	 	0xf001
 #define USB_PRODUCT_ID_FARBWERK 	0xf00a
 #define USB_PRODUCT_ID_QUADRO 		0xf00d
 #define USB_PRODUCT_ID_D5NEXT		0xf00e
 #define USB_PRODUCT_ID_FARBWERK360	0xf010
 #define USB_PRODUCT_ID_OCTO		0xf011
 
-enum kinds { aquaero6lt, d5next, farbwerk, farbwerk360, octo, quadro };
+enum kinds { aquaero, d5next, farbwerk, farbwerk360, octo, quadro };
 
 static const char *const aqc_device_names[] = {
-	[aquaero6lt] = "aquaero6lt",
+	[aquaero] = "aquaero",
 	[d5next] = "d5next",
 	[farbwerk] = "farbwerk",
 	[farbwerk360] = "farbwerk360",
@@ -69,11 +69,11 @@ static u8 secondary_ctrl_report[] = {
 #define AQC_SERIAL_START		0x03
 #define AQC_FIRMWARE_VERSION		0x0D
 
-/* Register offsets for the Aquaero 6 LT fan controller */
-#define AQUAERO6LT_SERIAL_START		0x07
-#define AQUAERO6LT_FIRMWARE_VERSION	0x0B
-#define AQUAERO6LT_NUM_SENSORS		8
-#define AQUAERO6LT_SENSOR_START		0x65
+/* Register offsets for Aquaero fan controllers */
+#define AQUAERO_SERIAL_START		0x07
+#define AQUAERO_FIRMWARE_VERSION	0x0B
+#define AQUAERO_NUM_SENSORS		8
+#define AQUAERO_SENSOR_START		0x65
 
 /* Register offsets for the D5 Next pump */
 #define D5NEXT_POWER_CYCLES		0x18
@@ -146,7 +146,7 @@ static const char *const label_d5next_current[] = {
 	"Fan current"
 };
 
-/* Labels for Aquaero 6 LT, Farbwerk, Farbwerk 360 and Octo temperature sensors */
+/* Labels for Aquaero, Farbwerk, Farbwerk 360 and Octo temperature sensors */
 static const char *const label_temp_sensors[] = {
 	"Sensor 1",
 	"Sensor 2",
@@ -725,12 +725,12 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		goto fail_and_stop;
 
 	switch (hdev->product) {
-	case USB_PRODUCT_ID_AQUAERO6LT:
+	case USB_PRODUCT_ID_AQUAERO:
 		/*
-		 * Aquaero 6 presents itself as three HID devices under the same product ID:
+		 * Aquaero presents itself as three HID devices under the same product ID:
 		 * "aquaero keyboard/mouse", "aquaero System Control" and "aquaero Device",
 		 * which is the one we want to communicate with. Unlike most other Aquacomputer
-		 * devices, Aquaero 6 does not return meaningful data when explicitly requested
+		 * devices, Aquaero does not return meaningful data when explicitly requested
 		 * using GET_FEATURE_REPORT.
 		 *
 		 * The difference between "aquaero Device" and the other two is in the collections
@@ -744,14 +744,14 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 			goto fail_and_close;
 		}
 
-		priv->kind = aquaero6lt;
+		priv->kind = aquaero;
 
-		priv->serial_number_start_offset = AQUAERO6LT_SERIAL_START;
-		priv->firmware_version_offset = AQUAERO6LT_FIRMWARE_VERSION;
+		priv->serial_number_start_offset = AQUAERO_SERIAL_START;
+		priv->firmware_version_offset = AQUAERO_FIRMWARE_VERSION;
 
 		priv->num_fans = 0;
-		priv->num_temp_sensors = AQUAERO6LT_NUM_SENSORS;
-		priv->temp_sensor_start_offset = AQUAERO6LT_SENSOR_START;
+		priv->num_temp_sensors = AQUAERO_NUM_SENSORS;
+		priv->temp_sensor_start_offset = AQUAERO_SENSOR_START;
 		priv->temp_label = label_temp_sensors;
 		break;
 	case USB_PRODUCT_ID_D5NEXT:
@@ -888,7 +888,7 @@ static void aqc_remove(struct hid_device *hdev)
 }
 
 static const struct hid_device_id aqc_table[] = {
-	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_AQUAERO6LT) },
+	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_AQUAERO) },
 	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_D5NEXT) },
 	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_FARBWERK) },
 	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_FARBWERK360) },
