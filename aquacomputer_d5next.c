@@ -1043,7 +1043,10 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		 */
 
 		if (hdev->collection[1].type != 0)
+		{
+			ret = -ENODEV;
 			goto fail_and_close;
+		}
 
 		priv->kind = aquaero6lt;
 
