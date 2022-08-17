@@ -419,7 +419,7 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 		}
 
 		if (channel < priv->num_temp_sensors + priv->num_virtual_temp_sensors)
-			return 0644;
+			return 0444;
 		break;
 	case hwmon_pwm:
 		if (priv->fan_ctrl_offsets && channel < priv->num_fans) {
