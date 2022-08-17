@@ -62,6 +62,10 @@ static u8 secondary_ctrl_report[] = {
 /* Register offsets for all Aquacomputer devices */
 #define AQC_TEMP_SENSOR_SIZE		0x02
 #define AQC_TEMP_SENSOR_DISCONNECTED	0x7FFF
+
+/* Register offsets for most Aquacomputer devices */
+#define AQC_SERIAL_START		0x03
+#define AQC_FIRMWARE_VERSION		0x0D
 #define AQC_FAN_PERCENT_OFFSET		0x00
 #define AQC_FAN_VOLTAGE_OFFSET		0x02
 #define AQC_FAN_CURRENT_OFFSET		0x04
@@ -79,8 +83,15 @@ static u8 secondary_ctrl_report[] = {
 /* Register offsets for Aquaero fan controllers */
 #define AQUAERO_SERIAL_START		0x07
 #define AQUAERO_FIRMWARE_VERSION	0x0B
+#define AQUAERO_NUM_FANS			4
 #define AQUAERO_NUM_SENSORS		8
 #define AQUAERO_SENSOR_START		0x65
+static u16 aquaero_sensor_fan_offsets[] = { 0x167, 0x173, 0x17f, 0x18B };
+
+#define AQUAERO_FAN_VOLTAGE_OFFSET		0x04
+#define AQUAERO_FAN_CURRENT_OFFSET		0x06
+#define AQUAERO_FAN_POWER_OFFSET		0x08
+#define AQUAERO_FAN_SPEED_OFFSET		0x00
 
 /* Register offsets for the D5 Next pump */
 #define D5NEXT_POWER_CYCLES		0x18
@@ -282,6 +293,28 @@ static const char *const label_highflownext_power[] = {
 static const char *const label_highflownext_voltage[] = {
 	"+5V voltage",
 	"+5V USB voltage"
+
+struct aqc_fan_structure_offsets {
+	u8 voltage;
+	u8 curr;
+	u8 power;
+	u8 speed;
+};
+
+/* Fan structure offsets for Aquaero */
+static struct aqc_fan_structure_offsets aqc_aquaero_fan_structure = {
+	.voltage = AQUAERO_FAN_VOLTAGE_OFFSET,
+	.curr = AQUAERO_FAN_CURRENT_OFFSET,
+	.power = AQUAERO_FAN_POWER_OFFSET,
+	.speed = AQUAERO_FAN_SPEED_OFFSET
+};
+
+/* Fan structure offsets for all devices except Aquaero */
+static struct aqc_fan_structure_offsets aqc_general_fan_structure = {
+	.voltage = AQC_FAN_VOLTAGE_OFFSET,
+	.curr = AQC_FAN_CURRENT_OFFSET,
+	.power = AQC_FAN_POWER_OFFSET,
+	.speed = AQC_FAN_SPEED_OFFSET
 };
 
 struct aqc_data {
@@ -299,7 +332,7 @@ struct aqc_data {
 	int checksum_offset;
 
 	int num_fans;
-	u8 *fan_sensor_offsets;
+	u16 *fan_sensor_offsets;
 	u16 *fan_ctrl_offsets;
 	int num_temp_sensors;
 	int temp_sensor_start_offset;
@@ -308,6 +341,7 @@ struct aqc_data {
 	u16 temp_ctrl_offset;
 	u16 power_cycle_count_offset;
 	u8 flow_sensor_offset;
+	struct aqc_fan_structure_offsets *fan_structure;
 
 	u8 serial_number_start_offset;
 	u8 firmware_version_offset;
@@ -901,15 +935,15 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 	/* Fan speed and related readings */
 	for (i = 0; i < priv->num_fans; i++) {
 		priv->speed_input[i] =
-		    get_unaligned_be16(data + priv->fan_sensor_offsets[i] + AQC_FAN_SPEED_OFFSET);
+		    get_unaligned_be16(data + priv->fan_sensor_offsets[i] + priv->fan_structure->speed);
 		priv->power_input[i] =
 		    get_unaligned_be16(data + priv->fan_sensor_offsets[i] +
-				       AQC_FAN_POWER_OFFSET) * 10000;
+				       priv->fan_structure->power) * 10000;
 		priv->voltage_input[i] =
 		    get_unaligned_be16(data + priv->fan_sensor_offsets[i] +
-				       AQC_FAN_VOLTAGE_OFFSET) * 10;
+				       priv->fan_structure->voltage) * 10;
 		priv->current_input[i] =
-		    get_unaligned_be16(data + priv->fan_sensor_offsets[i] + AQC_FAN_CURRENT_OFFSET);
+		    get_unaligned_be16(data + priv->fan_sensor_offsets[i] + priv->fan_structure->curr);
 	}
 
 	if (priv->power_cycle_count_offset != 0)
@@ -1053,10 +1087,17 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->serial_number_start_offset = AQUAERO_SERIAL_START;
 		priv->firmware_version_offset = AQUAERO_FIRMWARE_VERSION;
 
-		priv->num_fans = 0;
+		priv->num_fans = AQUAERO_NUM_FANS;
+		priv->fan_sensor_offsets = aquaero_sensor_fan_offsets;
 		priv->num_temp_sensors = AQUAERO_NUM_SENSORS;
 		priv->temp_sensor_start_offset = AQUAERO_SENSOR_START;
+		priv->fan_structure = &aqc_aquaero_fan_structure;
+
 		priv->temp_label = label_temp_sensors;
+		priv->speed_label = label_fan_speed;
+		priv->power_label = label_fan_power;
+		priv->voltage_label = label_fan_voltage;
+		priv->current_label = label_fan_current;
 		break;
 	case USB_PRODUCT_ID_D5NEXT:
 		priv->kind = d5next;
@@ -1076,6 +1117,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->power_cycle_count_offset = D5NEXT_POWER_CYCLES;
 		priv->buffer_size = D5NEXT_CTRL_REPORT_SIZE;
 		priv->temp_ctrl_offset = D5NEXT_TEMP_CTRL_OFFSET;
+		priv->fan_structure = &aqc_general_fan_structure;
 
 		priv->temp_label = label_d5next_temp;
 		priv->virtual_temp_label = label_virtual_temp_sensors;
@@ -1135,6 +1177,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->power_cycle_count_offset = OCTO_POWER_CYCLES;
 		priv->buffer_size = OCTO_CTRL_REPORT_SIZE;
 		priv->temp_ctrl_offset = OCTO_TEMP_CTRL_OFFSET;
+		priv->fan_structure = &aqc_general_fan_structure;
 
 		priv->temp_label = label_temp_sensors;
 		priv->virtual_temp_label = label_virtual_temp_sensors;
@@ -1162,6 +1205,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->buffer_size = QUADRO_CTRL_REPORT_SIZE;
 		priv->flow_sensor_offset = QUADRO_FLOW_SENSOR_OFFSET;
 		priv->temp_ctrl_offset = QUADRO_TEMP_CTRL_OFFSET;
+		priv->fan_structure = &aqc_general_fan_structure;
 
 		priv->temp_label = label_temp_sensors;
 		priv->virtual_temp_label = label_virtual_temp_sensors;
