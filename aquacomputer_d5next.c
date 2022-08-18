@@ -56,6 +56,10 @@ static u8 secondary_ctrl_report[] = {
 	0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x34, 0xC6
 };
 
+/* Report for setting fan and temp sensor labels */
+#define LABEL_CTRL_REPORT_ID		0x08
+#define LABEL_MAX_LENGTH		0x17
+
 /* Register offsets for all Aquacomputer devices */
 #define AQC_TEMP_SENSOR_SIZE		0x02
 #define AQC_TEMP_SENSOR_DISCONNECTED	0x7FFF
@@ -100,14 +104,17 @@ static u16 d5next_ctrl_fan_offsets[] = { 0x96, 0x41 };
 #define FARBWERK360_TEMP_CTRL_OFFSET	0x8
 
 /* Register offsets for the Octo fan controller */
-#define OCTO_POWER_CYCLES		0x18
-#define OCTO_NUM_FANS			8
-#define OCTO_NUM_SENSORS		4
-#define OCTO_SENSOR_START		0x3D
-#define OCTO_NUM_VIRTUAL_SENSORS	16
-#define OCTO_VIRTUAL_SENSOR_START	0x45
-#define OCTO_CTRL_REPORT_SIZE		0x65F
-#define OCTO_TEMP_CTRL_OFFSET		0xa
+#define OCTO_POWER_CYCLES			0x18
+#define OCTO_NUM_FANS				8
+#define OCTO_NUM_SENSORS			4
+#define OCTO_SENSOR_START			0x3D
+#define OCTO_NUM_VIRTUAL_SENSORS		16
+#define OCTO_VIRTUAL_SENSOR_START		0x45
+#define OCTO_CTRL_REPORT_SIZE			0x65F
+#define OCTO_TEMP_CTRL_OFFSET			0xa
+#define OCTO_FAN_LABELS_START			0x03
+#define OCTO_SENSOR_LABELS_START		0x1E3
+#define OCTO_VIRTUAL_SENSOR_LABELS_START	0x273
 static u8 octo_sensor_fan_offsets[] = { 0x7D, 0x8A, 0x97, 0xA4, 0xB1, 0xBE, 0xCB, 0xD8 };
 
 /* Fan speed registers in Octo control report (from 0-100%) */
@@ -257,6 +264,9 @@ struct aqc_data {
 	int temp_sensor_start_offset;
 	int num_virtual_temp_sensors;
 	int virtual_temp_sensor_start_offset;
+	int fan_labels_start_offset;
+	int sensor_labels_start_offset;
+	int virtual_sensor_labels_start_offset;
 	u16 temp_ctrl_offset;
 	u16 power_cycle_count_offset;
 	u8 flow_sensor_offset;
@@ -999,6 +1009,9 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->temp_sensor_start_offset = OCTO_SENSOR_START;
 		priv->num_virtual_temp_sensors = OCTO_NUM_VIRTUAL_SENSORS;
 		priv->virtual_temp_sensor_start_offset = OCTO_VIRTUAL_SENSOR_START;
+		priv->fan_labels_start_offset = OCTO_FAN_LABELS_START;
+		priv->sensor_labels_start_offset = OCTO_SENSOR_LABELS_START;
+		priv->virtual_sensor_labels_start_offset = OCTO_VIRTUAL_SENSOR_LABELS_START;
 
 		priv->power_cycle_count_offset = OCTO_POWER_CYCLES;
 		priv->buffer_size = OCTO_CTRL_REPORT_SIZE;
