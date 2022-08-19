@@ -411,7 +411,7 @@ static int aqc_set_ctrl_val(struct aqc_data *priv, struct aqc_report_buffer repo
 		goto unlock_and_return;
 	}
 
-	ret = aqc_send_ctrl_data(priv, priv->buffers[0]);
+	ret = aqc_send_ctrl_data(priv, priv->buffers[CTRL_REPORT_BUFFERS_IDX]);
 
 unlock_and_return:
 	mutex_unlock(&priv->mutex);
@@ -511,8 +511,7 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			*val = priv->temp_input[channel];
 			break;
 		case hwmon_temp_offset:
-			/* todo: samo proslediti idx (enum?) za buffer */
-			ret = aqc_get_ctrl_val(priv, priv->buffers[0], priv->temp_ctrl_offset + channel * AQC_TEMP_SENSOR_SIZE, val, 16);
+			ret = aqc_get_ctrl_val(priv, priv->buffers[CTRL_REPORT_BUFFERS_IDX], priv->temp_ctrl_offset + channel * AQC_TEMP_SENSOR_SIZE, val, 16);
 			if (ret < 0)
 				return ret;
 			*val *= 10;
@@ -529,7 +528,7 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 	case hwmon_pwm:
 		switch (attr) {
 		case hwmon_pwm_enable:
-			ret = aqc_get_ctrl_val(priv, priv->buffers[0], priv->fan_ctrl_offsets[channel], val, 8);
+			ret = aqc_get_ctrl_val(priv, priv->buffers[CTRL_REPORT_BUFFERS_IDX], priv->fan_ctrl_offsets[channel], val, 8);
 			if (ret < 0)
 				return ret;
 
@@ -537,7 +536,7 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			break;
 		case hwmon_pwm_input:
 			ret =
-			    aqc_get_ctrl_val(priv, priv->buffers[0],
+			    aqc_get_ctrl_val(priv, priv->buffers[CTRL_REPORT_BUFFERS_IDX],
 					     priv->fan_ctrl_offsets[channel] +
 					     AQC_FAN_CTRL_PWM_OFFSET, val, 16);
 			if (ret < 0)
@@ -547,7 +546,7 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			break;
 		case hwmon_pwm_auto_channels_temp:
 			ret =
-			    aqc_get_ctrl_val(priv, priv->buffers[0],
+			    aqc_get_ctrl_val(priv, priv->buffers[CTRL_REPORT_BUFFERS_IDX],
 					     priv->fan_ctrl_offsets[channel] +
 					     AQC_FAN_CTRL_TEMP_SELECT_OFFSET, val, 16);
 			if (ret < 0)
@@ -615,7 +614,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		case hwmon_temp_offset:
 			/* Limit temp offset to +/- 15K as in the official software */
 			val = clamp_val(val, -15000, 15000) / 10;
-			ret = aqc_set_ctrl_val(priv, priv->buffers[0], priv->temp_ctrl_offset + channel * AQC_TEMP_SENSOR_SIZE,
+			ret = aqc_set_ctrl_val(priv, priv->buffers[CTRL_REPORT_BUFFERS_IDX], priv->temp_ctrl_offset + channel * AQC_TEMP_SENSOR_SIZE,
 								val, 16);
 			if (ret < 0)
 				return ret;
@@ -647,7 +646,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				 */
 				if (val > 3) {
 					ret =
-					    aqc_get_ctrl_val(priv, priv->buffers[0], priv->fan_ctrl_offsets[val - 4],
+					    aqc_get_ctrl_val(priv, priv->buffers[CTRL_REPORT_BUFFERS_IDX], priv->fan_ctrl_offsets[val - 4],
 							     &ctrl_mode, 8);
 					if (ret < 0)
 						return ret;
@@ -662,7 +661,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			}
 
 			/* Decrement to convert from hwmon to aqc */
-			ret = aqc_set_ctrl_val(priv, priv->buffers[0], priv->fan_ctrl_offsets[channel], val - 1, 8);
+			ret = aqc_set_ctrl_val(priv, priv->buffers[CTRL_REPORT_BUFFERS_IDX], priv->fan_ctrl_offsets[channel], val - 1, 8);
 			if (ret < 0)
 				return ret;
 			break;
@@ -672,7 +671,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				return pwm_value;
 
 			ret =
-			    aqc_set_ctrl_val(priv, priv->buffers[0],
+			    aqc_set_ctrl_val(priv, priv->buffers[CTRL_REPORT_BUFFERS_IDX],
 					     priv->fan_ctrl_offsets[channel] +
 					     AQC_FAN_CTRL_PWM_OFFSET, pwm_value, 16);
 			if (ret < 0)
@@ -700,7 +699,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				return -EINVAL;
 
 			ret =
-			    aqc_set_ctrl_val(priv, priv->buffers[0],
+			    aqc_set_ctrl_val(priv, priv->buffers[CTRL_REPORT_BUFFERS_IDX],
 					     priv->fan_ctrl_offsets[channel] +
 					     AQC_FAN_CTRL_TEMP_SELECT_OFFSET, temp_sensor, 16);
 			if (ret < 0)
