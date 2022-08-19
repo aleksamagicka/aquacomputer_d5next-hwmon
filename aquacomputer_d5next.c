@@ -45,6 +45,7 @@ static const char *const aqc_device_names[] = {
 #define FIRMWARE_VERSION		13
 
 #define CTRL_REPORT_ID			0x03
+#define CTRL_REPORT_BUFFERS_IDX		0	/* Place in priv->buffers */
 
 /* The HID report that the official software always sends
  * after writing values, currently same for all devices
@@ -57,7 +58,8 @@ static u8 secondary_ctrl_report[] = {
 };
 
 /* Report for setting fan and temp sensor labels */
-#define LABEL_CTRL_REPORT_ID		0x08
+#define LABELS_CTRL_REPORT_ID		0x08
+#define LABELS_REPORT_BUFFERS_IDX	1	/* Place in priv->buffers */
 #define LABEL_MAX_LENGTH		0x17
 
 /* Register offsets for all Aquacomputer devices */
@@ -112,6 +114,7 @@ static u16 d5next_ctrl_fan_offsets[] = { 0x96, 0x41 };
 #define OCTO_VIRTUAL_SENSOR_START		0x45
 #define OCTO_CTRL_REPORT_SIZE			0x65F
 #define OCTO_TEMP_CTRL_OFFSET			0xa
+#define OCTO_LABELS_REPORT_SIZE			0x3F5
 #define OCTO_FAN_LABELS_START			0x03
 #define OCTO_SENSOR_LABELS_START		0x1E3
 #define OCTO_VIRTUAL_SENSOR_LABELS_START	0x273
@@ -243,6 +246,16 @@ static const char *const label_quadro_speeds[] = {
 	"Flow speed [dL/h]"
 };
 
+struct aqc_report_buffer {
+	int report_id;
+
+	int buffer_size;
+	u8 *buffer;
+	int checksum_start;
+	int checksum_length;
+	int checksum_offset;
+};
+
 struct aqc_data {
 	struct hid_device *hdev;
 	struct device *hwmon_dev;
@@ -251,11 +264,7 @@ struct aqc_data {
 	enum kinds kind;
 	const char *name;
 
-	int buffer_size;
-	u8 *buffer;
-	int checksum_start;
-	int checksum_length;
-	int checksum_offset;
+	struct aqc_report_buffer buffers[2];	/* Ctrl/settings and label report buffers */
 
 	int num_fans;
 	u8 *fan_sensor_offsets;
@@ -312,12 +321,12 @@ static int aqc_pwm_to_percent(long val)
 }
 
 /* Expects the mutex to be locked */
-static int aqc_get_ctrl_data(struct aqc_data *priv)
+static int aqc_get_ctrl_data(struct aqc_data *priv, struct aqc_report_buffer report_buffer)
 {
 	int ret;
 
-	memset(priv->buffer, 0x00, priv->buffer_size);
-	ret = hid_hw_raw_request(priv->hdev, CTRL_REPORT_ID, priv->buffer, priv->buffer_size,
+	memset(report_buffer.buffer, 0x00, report_buffer.buffer_size);
+	ret = hid_hw_raw_request(priv->hdev, report_buffer.report_id, report_buffer.buffer, report_buffer.buffer_size,
 				 HID_FEATURE_REPORT, HID_REQ_GET_REPORT);
 	if (ret < 0)
 		ret = -ENODATA;
@@ -326,20 +335,20 @@ static int aqc_get_ctrl_data(struct aqc_data *priv)
 }
 
 /* Expects the mutex to be locked */
-static int aqc_send_ctrl_data(struct aqc_data *priv)
+static int aqc_send_ctrl_data(struct aqc_data *priv, struct aqc_report_buffer report_buffer)
 {
 	int ret;
 	u16 checksum;
 
 	/* Init and xorout value for CRC-16/USB is 0xffff */
-	checksum = crc16(0xffff, priv->buffer + priv->checksum_start, priv->checksum_length);
+	checksum = crc16(0xffff, report_buffer.buffer + report_buffer.checksum_start, report_buffer.checksum_length);
 	checksum ^= 0xffff;
 
 	/* Place the new checksum at the end of the report */
-	put_unaligned_be16(checksum, priv->buffer + priv->checksum_offset);
+	put_unaligned_be16(checksum, report_buffer.buffer + report_buffer.checksum_offset);
 
 	/* Send the patched up report back to the device */
-	ret = hid_hw_raw_request(priv->hdev, CTRL_REPORT_ID, priv->buffer, priv->buffer_size,
+	ret = hid_hw_raw_request(priv->hdev, report_buffer.report_id, report_buffer.buffer, report_buffer.buffer_size,
 				 HID_FEATURE_REPORT, HID_REQ_SET_REPORT);
 	if (ret < 0)
 		return ret;
@@ -352,22 +361,22 @@ static int aqc_send_ctrl_data(struct aqc_data *priv)
 }
 
 /* Refreshes the control buffer and stores value at offset in val */
-static int aqc_get_ctrl_val(struct aqc_data *priv, int offset, long *val, size_t size)
+static int aqc_get_ctrl_val(struct aqc_data *priv, struct aqc_report_buffer report_buffer, int offset, long *val, size_t size)
 {
 	int ret;
 
 	mutex_lock(&priv->mutex);
 
-	ret = aqc_get_ctrl_data(priv);
+	ret = aqc_get_ctrl_data(priv, report_buffer);
 	if (ret < 0)
 		goto unlock_and_return;
 
 	switch (size) {
 	case 16:
-		*val = (s16) get_unaligned_be16(priv->buffer + offset);
+		*val = (s16) get_unaligned_be16(report_buffer.buffer + offset);
 		break;
 	case 8:
-		*val = priv->buffer[offset];
+		*val = report_buffer.buffer[offset];
 		break;
 	default:
 		ret = -EINVAL;
@@ -380,29 +389,29 @@ unlock_and_return:
 }
 
 /* Refreshes the control buffer, updates value at offset and writes buffer to device */
-static int aqc_set_ctrl_val(struct aqc_data *priv, int offset, long val, size_t size)
+static int aqc_set_ctrl_val(struct aqc_data *priv, struct aqc_report_buffer report_buffer, int offset, long val, size_t size)
 {
 	int ret;
 
 	mutex_lock(&priv->mutex);
 
-	ret = aqc_get_ctrl_data(priv);
+	ret = aqc_get_ctrl_data(priv, report_buffer);
 	if (ret < 0)
 		goto unlock_and_return;
 
 	switch (size) {
 	case 16:
-		put_unaligned_be16((u16) val, priv->buffer + offset);
+		put_unaligned_be16((u16) val, report_buffer.buffer + offset);
 		break;
 	case 8:
-		priv->buffer[offset] = (u8) val;
+		report_buffer.buffer[offset] = (u8) val;
 		break;
 	default:
 		ret = -EINVAL;
 		goto unlock_and_return;
 	}
 
-	ret = aqc_send_ctrl_data(priv);
+	ret = aqc_send_ctrl_data(priv, priv->buffers[0]);
 
 unlock_and_return:
 	mutex_unlock(&priv->mutex);
@@ -502,7 +511,8 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			*val = priv->temp_input[channel];
 			break;
 		case hwmon_temp_offset:
-			ret = aqc_get_ctrl_val(priv, priv->temp_ctrl_offset + channel * AQC_TEMP_SENSOR_SIZE, val, 16);
+			/* todo: samo proslediti idx (enum?) za buffer */
+			ret = aqc_get_ctrl_val(priv, priv->buffers[0], priv->temp_ctrl_offset + channel * AQC_TEMP_SENSOR_SIZE, val, 16);
 			if (ret < 0)
 				return ret;
 			*val *= 10;
@@ -519,7 +529,7 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 	case hwmon_pwm:
 		switch (attr) {
 		case hwmon_pwm_enable:
-			ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel], val, 8);
+			ret = aqc_get_ctrl_val(priv, priv->buffers[0], priv->fan_ctrl_offsets[channel], val, 8);
 			if (ret < 0)
 				return ret;
 
@@ -527,7 +537,7 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			break;
 		case hwmon_pwm_input:
 			ret =
-			    aqc_get_ctrl_val(priv,
+			    aqc_get_ctrl_val(priv, priv->buffers[0],
 					     priv->fan_ctrl_offsets[channel] +
 					     AQC_FAN_CTRL_PWM_OFFSET, val, 16);
 			if (ret < 0)
@@ -537,7 +547,7 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			break;
 		case hwmon_pwm_auto_channels_temp:
 			ret =
-			    aqc_get_ctrl_val(priv,
+			    aqc_get_ctrl_val(priv, priv->buffers[0],
 					     priv->fan_ctrl_offsets[channel] +
 					     AQC_FAN_CTRL_TEMP_SELECT_OFFSET, val, 16);
 			if (ret < 0)
@@ -605,7 +615,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		case hwmon_temp_offset:
 			/* Limit temp offset to +/- 15K as in the official software */
 			val = clamp_val(val, -15000, 15000) / 10;
-			ret = aqc_set_ctrl_val(priv, priv->temp_ctrl_offset + channel * AQC_TEMP_SENSOR_SIZE,
+			ret = aqc_set_ctrl_val(priv, priv->buffers[0], priv->temp_ctrl_offset + channel * AQC_TEMP_SENSOR_SIZE,
 								val, 16);
 			if (ret < 0)
 				return ret;
@@ -637,7 +647,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				 */
 				if (val > 3) {
 					ret =
-					    aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[val - 4],
+					    aqc_get_ctrl_val(priv, priv->buffers[0], priv->fan_ctrl_offsets[val - 4],
 							     &ctrl_mode, 8);
 					if (ret < 0)
 						return ret;
@@ -652,7 +662,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			}
 
 			/* Decrement to convert from hwmon to aqc */
-			ret = aqc_set_ctrl_val(priv, priv->fan_ctrl_offsets[channel], val - 1, 8);
+			ret = aqc_set_ctrl_val(priv, priv->buffers[0], priv->fan_ctrl_offsets[channel], val - 1, 8);
 			if (ret < 0)
 				return ret;
 			break;
@@ -662,7 +672,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				return pwm_value;
 
 			ret =
-			    aqc_set_ctrl_val(priv,
+			    aqc_set_ctrl_val(priv, priv->buffers[0],
 					     priv->fan_ctrl_offsets[channel] +
 					     AQC_FAN_CTRL_PWM_OFFSET, pwm_value, 16);
 			if (ret < 0)
@@ -690,7 +700,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				return -EINVAL;
 
 			ret =
-			    aqc_set_ctrl_val(priv,
+			    aqc_set_ctrl_val(priv, priv->buffers[0],
 					     priv->fan_ctrl_offsets[channel] +
 					     AQC_FAN_CTRL_TEMP_SELECT_OFFSET, temp_sensor, 16);
 			if (ret < 0)
@@ -924,7 +934,7 @@ static void aqc_debugfs_init(struct aqc_data *priv)
 static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 {
 	struct aqc_data *priv;
-	int ret;
+	int ret, i;
 
 	priv = devm_kzalloc(&hdev->dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
@@ -961,8 +971,12 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->virtual_temp_sensor_start_offset = D5NEXT_VIRTUAL_SENSOR_START;
 
 		priv->power_cycle_count_offset = D5NEXT_POWER_CYCLES;
-		priv->buffer_size = D5NEXT_CTRL_REPORT_SIZE;
 		priv->temp_ctrl_offset = D5NEXT_TEMP_CTRL_OFFSET;
+
+		priv->buffers[CTRL_REPORT_BUFFERS_IDX] = (struct aqc_report_buffer) {
+			.report_id = CTRL_REPORT_ID,
+			.buffer_size = D5NEXT_CTRL_REPORT_SIZE
+		};
 
 		priv->temp_label = label_d5next_temp;
 		priv->virtual_temp_label = label_virtual_temp_sensors;
@@ -992,8 +1006,12 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 		priv->num_virtual_temp_sensors = FARBWERK360_NUM_VIRTUAL_SENSORS;
 		priv->virtual_temp_sensor_start_offset = FARBWERK360_VIRTUAL_SENSORS_START;
-		priv->buffer_size = FARBWERK360_CTRL_REPORT_SIZE;
 		priv->temp_ctrl_offset = FARBWERK360_TEMP_CTRL_OFFSET;
+
+		priv->buffers[CTRL_REPORT_BUFFERS_IDX] = (struct aqc_report_buffer) {
+			.report_id = CTRL_REPORT_ID,
+			.buffer_size = FARBWERK360_CTRL_REPORT_SIZE
+		};
 
 		priv->temp_label = label_temp_sensors;
 		priv->virtual_temp_label = label_virtual_temp_sensors;
@@ -1009,13 +1027,23 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->temp_sensor_start_offset = OCTO_SENSOR_START;
 		priv->num_virtual_temp_sensors = OCTO_NUM_VIRTUAL_SENSORS;
 		priv->virtual_temp_sensor_start_offset = OCTO_VIRTUAL_SENSOR_START;
+
 		priv->fan_labels_start_offset = OCTO_FAN_LABELS_START;
 		priv->sensor_labels_start_offset = OCTO_SENSOR_LABELS_START;
 		priv->virtual_sensor_labels_start_offset = OCTO_VIRTUAL_SENSOR_LABELS_START;
 
 		priv->power_cycle_count_offset = OCTO_POWER_CYCLES;
-		priv->buffer_size = OCTO_CTRL_REPORT_SIZE;
 		priv->temp_ctrl_offset = OCTO_TEMP_CTRL_OFFSET;
+
+		priv->buffers[CTRL_REPORT_BUFFERS_IDX] = (struct aqc_report_buffer) {
+			.report_id = CTRL_REPORT_ID,
+			.buffer_size = OCTO_CTRL_REPORT_SIZE
+		};
+
+		priv->buffers[LABELS_REPORT_BUFFERS_IDX] = (struct aqc_report_buffer) {
+			.report_id = LABELS_CTRL_REPORT_ID,
+			.buffer_size = OCTO_LABELS_REPORT_SIZE
+		};
 
 		priv->temp_label = label_temp_sensors;
 		priv->virtual_temp_label = label_virtual_temp_sensors;
@@ -1037,9 +1065,13 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->virtual_temp_sensor_start_offset = QUADRO_VIRTUAL_SENSORS_START;
 
 		priv->power_cycle_count_offset = QUADRO_POWER_CYCLES;
-		priv->buffer_size = QUADRO_CTRL_REPORT_SIZE;
 		priv->flow_sensor_offset = QUADRO_FLOW_SENSOR_OFFSET;
 		priv->temp_ctrl_offset = QUADRO_TEMP_CTRL_OFFSET;
+
+		priv->buffers[CTRL_REPORT_BUFFERS_IDX] = (struct aqc_report_buffer) {
+			.report_id = CTRL_REPORT_ID,
+			.buffer_size = QUADRO_CTRL_REPORT_SIZE
+		};
 
 		priv->temp_label = label_temp_sensors;
 		priv->virtual_temp_label = label_virtual_temp_sensors;
@@ -1052,18 +1084,21 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		break;
 	}
 
-	if (priv->buffer_size != 0) {
-		priv->checksum_start = 0x01;
-		priv->checksum_length = priv->buffer_size - 3;
-		priv->checksum_offset = priv->buffer_size - 2;
-	}
-
 	priv->name = aqc_device_names[priv->kind];
 
-	priv->buffer = devm_kzalloc(&hdev->dev, priv->buffer_size, GFP_KERNEL);
-	if (!priv->buffer) {
-		ret = -ENOMEM;
-		goto fail_and_close;
+	for (i = 0; i < 2; i++) {
+		if (priv->buffers[i].buffer_size != 0)
+		{
+			priv->buffers[i].checksum_start = 0x01;
+			priv->buffers[i].checksum_length = priv->buffers[i].buffer_size - 3;
+			priv->buffers[i].checksum_offset = priv->buffers[i].buffer_size - 2;
+
+			priv->buffers[i].buffer = devm_kzalloc(&hdev->dev, priv->buffers[i].buffer_size, GFP_KERNEL);
+			if (!priv->buffers[i].buffer_size) {
+				ret = -ENOMEM;
+				goto fail_and_close;
+			}
+		}
 	}
 
 	mutex_init(&priv->mutex);
