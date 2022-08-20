@@ -6,11 +6,11 @@ This is a hwmon Linux kernel driver supporting the following Aquacomputer device
 
 |    Device    | Supported since kernel |                       Functionality                       | Microcontroller |
 | :----------: | :--------------------: | :-------------------------------------------------------: | :-------------: |
-|   D5 Next    |          5.15          |                      Various sensors                      |        ?        |
+|   D5 Next    |          5.15          |      Various sensors, direct fan PWM control (6.0+)       |        ?        |
 | Farbwerk 360 |          5.18          |                    Temperature sensors                    |  MCF51JU128VHS  |
 |   Farbwerk   |          5.19          |                    Temperature sensors                    |        ?        |
 |     Octo     |          5.19          |    Temperature and fan sensors, direct fan PWM control    |  MCF51JU128VLH  |
-|    Quadro    |           6.0          | Temperature, flow and fan sensors, direct fan PWM control |  MCF51JU128VHS  |
+|    Quadro    |          6.0           | Temperature, flow and fan sensors, direct fan PWM control |  MCF51JU128VHS  |
 
 The above table shows what devices this driver supports and starting from which kernel version, if applicable. Microcontrollers are noted for general reference, as this driver only communicates through HID reports and does not interact with the device CPU & electronics directly.
 
