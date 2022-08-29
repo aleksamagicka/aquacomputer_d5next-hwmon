@@ -599,7 +599,10 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			*val = priv->temp_input[channel];
 			break;
 		case hwmon_temp_offset:
-			ret = aqc_get_ctrl_val(priv, priv->temp_ctrl_offset + channel * AQC_TEMP_SENSOR_SIZE, val, 16);
+			ret =
+			    aqc_get_ctrl_val(priv,
+					     priv->temp_ctrl_offset +
+					     channel * AQC_TEMP_SENSOR_SIZE, val, 16);
 			if (ret < 0)
 				return ret;
 			*val *= 10;
@@ -702,8 +705,10 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		case hwmon_temp_offset:
 			/* Limit temp offset to +/- 15K as in the official software */
 			val = clamp_val(val, -15000, 15000) / 10;
-			ret = aqc_set_ctrl_val(priv, priv->temp_ctrl_offset + channel * AQC_TEMP_SENSOR_SIZE,
-								val, 16);
+			ret =
+			    aqc_set_ctrl_val(priv,
+					     priv->temp_ctrl_offset +
+					     channel * AQC_TEMP_SENSOR_SIZE, val, 16);
 			if (ret < 0)
 				return ret;
 			break;
@@ -906,7 +911,8 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 
 	/* Info provided with every report */
 	priv->serial_number[0] = get_unaligned_be16(data + priv->serial_number_start_offset);
-	priv->serial_number[1] = get_unaligned_be16(data + priv->serial_number_start_offset + SERIAL_PART_OFFSET);
+	priv->serial_number[1] =
+	    get_unaligned_be16(data + priv->serial_number_start_offset + SERIAL_PART_OFFSET);
 	priv->firmware_version = get_unaligned_be16(data + priv->firmware_version_offset);
 
 	/* Normal temperature sensor readings */
@@ -921,7 +927,7 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 	}
 
 	/* Virtual temperature sensor readings */
-	for (j = 0; j< priv->num_virtual_temp_sensors; j++) {
+	for (j = 0; j < priv->num_virtual_temp_sensors; j++) {
 		sensor_value = get_unaligned_be16(data +
 						  priv->virtual_temp_sensor_start_offset +
 						  j * AQC_TEMP_SENSOR_SIZE);
@@ -935,7 +941,8 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 	/* Fan speed and related readings */
 	for (i = 0; i < priv->num_fans; i++) {
 		priv->speed_input[i] =
-		    get_unaligned_be16(data + priv->fan_sensor_offsets[i] + priv->fan_structure->speed);
+		    get_unaligned_be16(data + priv->fan_sensor_offsets[i] +
+				       priv->fan_structure->speed);
 		priv->power_input[i] =
 		    get_unaligned_be16(data + priv->fan_sensor_offsets[i] +
 				       priv->fan_structure->power) * 10000;
@@ -943,7 +950,8 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 		    get_unaligned_be16(data + priv->fan_sensor_offsets[i] +
 				       priv->fan_structure->voltage) * 10;
 		priv->current_input[i] =
-		    get_unaligned_be16(data + priv->fan_sensor_offsets[i] + priv->fan_structure->curr);
+		    get_unaligned_be16(data + priv->fan_sensor_offsets[i] +
+				       priv->fan_structure->curr);
 	}
 
 	if (priv->power_cycle_count_offset != 0)
@@ -1076,8 +1084,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		 * their respective collections set to 1, while the real device has it set to 0.
 		 */
 
-		if (hdev->collection[1].type != 0)
-		{
+		if (hdev->collection[1].type != 0) {
 			ret = -ENODEV;
 			goto fail_and_close;
 		}
