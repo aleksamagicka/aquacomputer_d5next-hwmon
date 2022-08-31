@@ -936,10 +936,6 @@ static int serial_number_show(struct seq_file *seqf, void *unused)
 
 	seq_printf(seqf, "%05u-%05u\n", priv->serial_number[0], priv->serial_number[1]);
 
-	/* TODO: Development/testing for High Flow Next */
-	if (priv->kind == highflownext)
-		seq_printf(seqf, "High Flow Next power: %08u\n", priv->power_input[0]);
-
 	return 0;
 }
 DEFINE_SHOW_ATTRIBUTE(serial_number);
