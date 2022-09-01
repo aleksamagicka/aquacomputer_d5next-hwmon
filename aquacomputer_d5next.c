@@ -261,7 +261,7 @@ static const char *const label_highflownext_fan_speed[] = {
 };
 
 static const char *const label_highflownext_power[] = {
-	"External sensor power",
+	"Dissipated power",
 };
 
 static const char *const label_highflownext_voltage[] = {
