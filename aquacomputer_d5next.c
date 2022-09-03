@@ -303,7 +303,7 @@ struct aqc_data {
 	u32 power_cycles;
 
 	/* Sensor values */
-	s32 temp_input[20]; /* Max 4 normal and 16 virtual */
+	s32 temp_input[20];	/* Max 4 normal and 16 virtual */
 	u16 speed_input[8];
 	u32 power_input[8];
 	u16 voltage_input[8];
@@ -472,8 +472,7 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 	case hwmon_fan:
 		switch (priv->kind) {
 		case highflownext:
-			/* Special case to support flow sensor, water quality and conductivity
-			 */
+			/* Special case to support flow sensor, water quality and conductivity */
 			if (channel < 3)
 				return 0444;
 			break;
