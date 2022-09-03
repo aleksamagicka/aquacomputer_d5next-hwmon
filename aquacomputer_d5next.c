@@ -906,11 +906,11 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 		priv->speed_input[4] = get_unaligned_be16(data + priv->flow_sensor_offset);
 		break;
 	case highflownext:
-		/* If external temp sensor is not connected, it's power reading is also N/A */
+		/* If external temp sensor is not connected, its power reading is also N/A */
 		if (priv->temp_input[1] == -ENODATA)
 			priv->power_input[0] = -ENODATA;
 		else
-			priv->power_input[0] = get_unaligned_be16(data + HIGHFLOWNEXT_POWER);
+			priv->power_input[0] = get_unaligned_be16(data + HIGHFLOWNEXT_POWER) * 1000000;
 
 		priv->voltage_input[0] = get_unaligned_be16(data + HIGHFLOWNEXT_5V_VOLTAGE) * 10;
 		priv->voltage_input[1] = get_unaligned_be16(data + HIGHFLOWNEXT_5V_VOLTAGE_USB) * 10;
