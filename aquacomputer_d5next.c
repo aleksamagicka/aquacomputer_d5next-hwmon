@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0+
 /*
- * hwmon driver for Aquacomputer devices (D5 Next, Farbwerk, Farbwerk 360, Octo, Quadro)
+ * hwmon driver for Aquacomputer devices (D5 Next, Farbwerk, Farbwerk 360, Octo,
+ * Quadro, High Flow Next)
  *
  * Aquacomputer devices send HID reports (with ID 0x01) every second to report
  * sensor values.
@@ -132,8 +133,8 @@ static u16 quadro_ctrl_fan_offsets[] = { 0x36, 0x8b, 0xe0, 0x135 };
 
 /* Register offsets for the High Flow Next */
 #define HIGHFLOWNEXT_NUM_SENSORS	2
-#define HIGHFLOWNEXT_FLOW	81
 #define HIGHFLOWNEXT_SENSOR_START	85
+#define HIGHFLOWNEXT_FLOW		81
 #define HIGHFLOWNEXT_WATER_QUALITY	89
 #define HIGHFLOWNEXT_POWER		91
 #define HIGHFLOWNEXT_CONDUCTIVITY	95
@@ -471,8 +472,7 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 	case hwmon_fan:
 		switch (priv->kind) {
 		case highflownext:
-			/* Special case to show three sensor readings:
-			 * flow, water quality and conductivity
+			/* Special case to support flow sensor, water quality and conductivity
 			 */
 			if (channel < 3)
 				return 0444;
@@ -882,7 +882,6 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 	for (i = 0; i < priv->num_fans; i++) {
 		priv->speed_input[i] =
 		    get_unaligned_be16(data + priv->fan_sensor_offsets[i] + AQC_FAN_SPEED_OFFSET);
-
 		priv->power_input[i] =
 		    get_unaligned_be16(data + priv->fan_sensor_offsets[i] +
 				       AQC_FAN_POWER_OFFSET) * 10000;
