@@ -35,8 +35,8 @@ sysfs interface. Thus, that task is better suited for userspace tools.
 The Octo exposes four temperature sensors and eight PWM controllable fans, along
 with their speed (in RPM), power, voltage and current.
 
-The Quadro exposes four temperature sensors, a flow sensor and four PWM controllable
-fans, along with their speed (in RPM), power, voltage and current.
+The Quadro exposes four temperature sensors, a flow sensor and four PWM controllable fans,
+along with their speed (in RPM), power, voltage and current.
 
 The High Flow Next exposes +5V voltages, water quality, conductivity and flow readings.
 A temperature sensor can be connected to it, in which case it provides its reading
