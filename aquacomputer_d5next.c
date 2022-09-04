@@ -303,7 +303,7 @@ struct aqc_data {
 	u32 power_cycles;
 
 	/* Sensor values */
-	s32 temp_input[20];	/* Max 4 normal and 16 virtual */
+	s32 temp_input[20];	/* Max 4 physical and 16 virtual */
 	u16 speed_input[8];
 	u32 power_input[8];
 	u16 voltage_input[8];
