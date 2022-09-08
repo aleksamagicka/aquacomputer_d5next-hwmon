@@ -83,9 +83,11 @@ static u8 secondary_ctrl_report[] = {
 /* Register offsets for Aquaero fan controllers */
 #define AQUAERO_SERIAL_START		0x07
 #define AQUAERO_FIRMWARE_VERSION	0x0B
-#define AQUAERO_NUM_FANS			4
+#define AQUAERO_NUM_FANS		4
 #define AQUAERO_NUM_SENSORS		8
 #define AQUAERO_SENSOR_START		0x65
+#define AQUAERO_NUM_VIRTUAL_SENSORS	8
+#define AQUAERO_VIRTUAL_SENSOR_START	0x85
 static u16 aquaero_sensor_fan_offsets[] = { 0x167, 0x173, 0x17f, 0x18B };
 
 #define AQUAERO_FAN_VOLTAGE_OFFSET		0x04
@@ -1096,11 +1098,15 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 		priv->num_fans = AQUAERO_NUM_FANS;
 		priv->fan_sensor_offsets = aquaero_sensor_fan_offsets;
+
 		priv->num_temp_sensors = AQUAERO_NUM_SENSORS;
 		priv->temp_sensor_start_offset = AQUAERO_SENSOR_START;
+		priv->num_virtual_temp_sensors = AQUAERO_NUM_VIRTUAL_SENSORS;
+		priv->virtual_temp_sensor_start_offset = AQUAERO_VIRTUAL_SENSOR_START;
 		priv->fan_structure = &aqc_aquaero_fan_structure;
 
 		priv->temp_label = label_temp_sensors;
+		priv->virtual_temp_label = label_virtual_temp_sensors;
 		priv->speed_label = label_fan_speed;
 		priv->power_label = label_fan_power;
 		priv->voltage_label = label_fan_voltage;
