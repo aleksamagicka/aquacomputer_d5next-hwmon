@@ -133,4 +133,7 @@ make dev
 
 You can then try running `sensors` and your devices should be listed there. If the compilation fails, you probably have
 an older, possibly LTS kernel that does not have the functionality that this driver uses. In that case, you can modify
-it, following what the compiler says, or upgrade to a newer kernel. See #28 for an example.
+it, following what the compiler says, or upgrade to a newer kernel. See [#28][#28] for an example.
+
+
+[#28]: https://github.com/aleksamagicka/aquacomputer_d5next-hwmon/issues/28
