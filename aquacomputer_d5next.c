@@ -76,10 +76,6 @@ static u8 secondary_ctrl_report[] = {
 #define AQC_FAN_CTRL_PWM_OFFSET		0x01
 #define AQC_FAN_CTRL_TEMP_SELECT_OFFSET	0x03
 
-/* Register offsets for most Aquacomputer devices */
-#define AQC_SERIAL_START		0x03
-#define AQC_FIRMWARE_VERSION		0x0D
-
 /* Register offsets for Aquaero fan controllers */
 #define AQUAERO_SERIAL_START		0x07
 #define AQUAERO_FIRMWARE_VERSION	0x0B
