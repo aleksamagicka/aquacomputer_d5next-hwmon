@@ -14,9 +14,12 @@ This is a hwmon Linux kernel driver supporting the following Aquacomputer device
 | High Flow Next |     Available here     |                      Various sensors                      |        /        |
 | Aquaero 5/6    |      Available here    |                Temperature sensors, fan RPM               |  MCF51JM128EVLK |
 
-The above table shows what devices this driver supports and starting from which kernel version, if applicable. Microcontrollers are noted for general reference, as this driver only communicates through HID reports and does not interact with the device CPU & electronics directly.
+The above table shows what devices this driver supports and starting from which kernel version, if applicable.
+Microcontrollers are noted for general reference, as this driver only communicates through HID reports and does not
+interact with the device CPU & electronics directly.
 
-Being a standard `hwmon` driver, it provides readings via `sysfs`, which are easily accessible through `lm-sensors` as usual. Here's example output for some of the devices:
+Being a standard `hwmon` driver, it provides readings via `sysfs`, which are easily accessible through `lm-sensors` as
+usual. Here's example output for some of the devices:
 
 ```shell
 [aleksa@fedora linux]$ sensors
@@ -103,13 +106,31 @@ Fan 4 current:     22.00 mA
 Only notable parts are listed:
 
 * _aquacomputer_d5next.c_ - the driver itself
-* [Reverse engineering docs](re-docs) - WIP, documents explaining how the devices communicate to help understand what the driver does
+* [Reverse engineering docs](re-docs) - WIP, documents explaining how the devices communicate to help understand what
+  the driver does
 
 * [Kernel docs](docs) - driver documentation for the kernel
 
 ## Installation and usage
 
-Ideally, you are on a recent kernel and your distro includes it. If that's the case, you should already have this driver available! Refer to the table in the overview above to check.
+Ideally, you are on a recent kernel and your distro includes it. If that's the case, you should already have this driver
+available! Refer to the table in the overview above to check.
 
-If you're not, or your kernel does not have the driver support for your particular device, you can clone this repository and compile the driver yourself.
+If you're not, or your kernel does not have the driver support for your particular device, you can clone this repository
+and compile the driver yourself.
 
+First, clone the repository by running:
+
+```commandline
+git clone https://github.com/aleksamagicka/aquacomputer_d5next-hwmon.git
+```
+
+Then, compile it and insert it into the running kernel, replacing the existing instance (if needed):
+
+```commandline
+make dev
+```
+
+You can then try running `sensors` and your devices should be listed there. If the compilation fails, you probably have
+an older, possibly LTS kernel that does not have the functionality that this driver uses. In that case, you can modify
+it, following what the compiler says, or upgrade to a newer kernel. See #28 for an example.
