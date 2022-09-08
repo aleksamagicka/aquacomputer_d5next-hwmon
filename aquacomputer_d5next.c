@@ -90,10 +90,10 @@ static u8 secondary_ctrl_report[] = {
 #define AQUAERO_VIRTUAL_SENSOR_START	0x85
 static u16 aquaero_sensor_fan_offsets[] = { 0x167, 0x173, 0x17f, 0x18B };
 
-#define AQUAERO_FAN_VOLTAGE_OFFSET		0x04
-#define AQUAERO_FAN_CURRENT_OFFSET		0x06
-#define AQUAERO_FAN_POWER_OFFSET		0x08
-#define AQUAERO_FAN_SPEED_OFFSET		0x00
+#define AQUAERO_FAN_VOLTAGE_OFFSET	0x04
+#define AQUAERO_FAN_CURRENT_OFFSET	0x06
+#define AQUAERO_FAN_POWER_OFFSET	0x08
+#define AQUAERO_FAN_SPEED_OFFSET	0x00
 
 /* Register offsets for the D5 Next pump */
 #define D5NEXT_POWER_CYCLES		0x18
@@ -122,8 +122,8 @@ static u16 d5next_ctrl_fan_offsets[] = { 0x96, 0x41 };
 #define FARBWERK360_SENSOR_START		0x32
 #define FARBWERK360_NUM_VIRTUAL_SENSORS		16
 #define FARBWERK360_VIRTUAL_SENSORS_START	0x3a
-#define FARBWERK360_CTRL_REPORT_SIZE	0x682
-#define FARBWERK360_TEMP_CTRL_OFFSET	0x8
+#define FARBWERK360_CTRL_REPORT_SIZE		0x682
+#define FARBWERK360_TEMP_CTRL_OFFSET		0x8
 
 /* Register offsets for the Octo fan controller */
 #define OCTO_POWER_CYCLES		0x18
