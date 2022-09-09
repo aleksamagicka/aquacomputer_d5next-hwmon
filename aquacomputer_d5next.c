@@ -48,15 +48,24 @@ static const char *const aqc_device_names[] = {
 #define SERIAL_PART_OFFSET		2
 
 #define CTRL_REPORT_ID			0x03
+#define AQUAERO_CTRL_REPORT_ID	0x0b
 
 /* The HID report that the official software always sends
- * after writing values, currently same for all devices
+ * after writing values, same for all devices except aquaero
  */
 #define SECONDARY_CTRL_REPORT_ID	0x02
 #define SECONDARY_CTRL_REPORT_SIZE	0x0B
 
 static u8 secondary_ctrl_report[] = {
 	0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x34, 0xC6
+};
+
+/* Secondary HID report values for aquaero */
+#define AQUAERO_SECONDARY_CTRL_REPORT_ID	0x06
+#define AQUAERO_SECONDARY_CTRL_REPORT_SIZE	0x07
+
+static u8 aquaero_secondary_ctrl_report[] = {
+	0x06, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00
 };
 
 /* Register offsets for all Aquacomputer devices */
@@ -84,6 +93,8 @@ static u8 secondary_ctrl_report[] = {
 #define AQUAERO_SENSOR_START		0x65
 #define AQUAERO_NUM_VIRTUAL_SENSORS	8
 #define AQUAERO_VIRTUAL_SENSOR_START	0x85
+#define AQUAERO_CTRL_REPORT_SIZE		0xa93
+#define AQUAERO_TEMP_CTRL_OFFSET		0xdb
 static u16 aquaero_sensor_fan_offsets[] = { 0x167, 0x173, 0x17f, 0x18B };
 
 #define AQUAERO_FAN_VOLTAGE_OFFSET	0x04
@@ -324,6 +335,11 @@ struct aqc_data {
 	enum kinds kind;
 	const char *name;
 
+	int ctrl_report_id;
+	int secondary_ctrl_report_id;
+	int secondary_ctrl_report_size;
+	u8 *secondary_ctrl_report;
+
 	int buffer_size;
 	u8 *buffer;
 	int checksum_start;
@@ -391,7 +407,7 @@ static int aqc_get_ctrl_data(struct aqc_data *priv)
 	int ret;
 
 	memset(priv->buffer, 0x00, priv->buffer_size);
-	ret = hid_hw_raw_request(priv->hdev, CTRL_REPORT_ID, priv->buffer, priv->buffer_size,
+	ret = hid_hw_raw_request(priv->hdev, priv->ctrl_report_id, priv->buffer, priv->buffer_size,
 				 HID_FEATURE_REPORT, HID_REQ_GET_REPORT);
 	if (ret < 0)
 		ret = -ENODATA;
@@ -405,22 +421,25 @@ static int aqc_send_ctrl_data(struct aqc_data *priv)
 	int ret;
 	u16 checksum;
 
-	/* Init and xorout value for CRC-16/USB is 0xffff */
-	checksum = crc16(0xffff, priv->buffer + priv->checksum_start, priv->checksum_length);
-	checksum ^= 0xffff;
+	/* Checksum not needed for aquaero */
+	if (priv->kind != aquaero) {
+		/* Init and xorout value for CRC-16/USB is 0xffff */
+		checksum = crc16(0xffff, priv->buffer + priv->checksum_start, priv->checksum_length);
+		checksum ^= 0xffff;
 
-	/* Place the new checksum at the end of the report */
-	put_unaligned_be16(checksum, priv->buffer + priv->checksum_offset);
+		/* Place the new checksum at the end of the report */
+		put_unaligned_be16(checksum, priv->buffer + priv->checksum_offset);
+	}
 
 	/* Send the patched up report back to the device */
-	ret = hid_hw_raw_request(priv->hdev, CTRL_REPORT_ID, priv->buffer, priv->buffer_size,
+	ret = hid_hw_raw_request(priv->hdev, priv->ctrl_report_id, priv->buffer, priv->buffer_size,
 				 HID_FEATURE_REPORT, HID_REQ_SET_REPORT);
 	if (ret < 0)
 		return ret;
 
 	/* The official software sends this report after every change, so do it here as well */
-	ret = hid_hw_raw_request(priv->hdev, SECONDARY_CTRL_REPORT_ID, secondary_ctrl_report,
-				 SECONDARY_CTRL_REPORT_SIZE, HID_FEATURE_REPORT,
+	ret = hid_hw_raw_request(priv->hdev, priv->secondary_ctrl_report_id, priv->secondary_ctrl_report,
+				 priv->secondary_ctrl_report_size, HID_FEATURE_REPORT,
 				 HID_REQ_SET_REPORT);
 	return ret;
 }
@@ -503,7 +522,13 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 		}
 
 		if (channel < priv->num_temp_sensors + priv->num_virtual_temp_sensors)
-			return 0444;
+			switch (attr) {
+			case hwmon_temp_label:
+			case hwmon_temp_input:
+				return 0444;
+			default:
+				break;
+			}
 		break;
 	case hwmon_pwm:
 		if (priv->fan_ctrl_offsets && channel < priv->num_fans) {
@@ -820,10 +845,10 @@ static const struct hwmon_channel_info *aqc_info[] = {
 			   HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_OFFSET,
 			   HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_OFFSET,
 			   HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_OFFSET,
-			   HWMON_T_INPUT | HWMON_T_LABEL,
-			   HWMON_T_INPUT | HWMON_T_LABEL,
-			   HWMON_T_INPUT | HWMON_T_LABEL,
-			   HWMON_T_INPUT | HWMON_T_LABEL,
+			   HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_OFFSET,
+			   HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_OFFSET,
+			   HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_OFFSET,
+			   HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_OFFSET,
 			   HWMON_T_INPUT | HWMON_T_LABEL,
 			   HWMON_T_INPUT | HWMON_T_LABEL,
 			   HWMON_T_INPUT | HWMON_T_LABEL,
@@ -1074,7 +1099,6 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		 * they present. The two other devices have the type of the second element in
 		 * their respective collections set to 1, while the real device has it set to 0.
 		 */
-
 		if (hdev->collection[1].type != 0) {
 			ret = -ENODEV;
 			goto fail_and_close;
@@ -1093,6 +1117,9 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->temp_sensor_start_offset = AQUAERO_SENSOR_START;
 		priv->num_virtual_temp_sensors = AQUAERO_NUM_VIRTUAL_SENSORS;
 		priv->virtual_temp_sensor_start_offset = AQUAERO_VIRTUAL_SENSOR_START;
+
+		priv->buffer_size = AQUAERO_CTRL_REPORT_SIZE;
+		priv->temp_ctrl_offset = AQUAERO_TEMP_CTRL_OFFSET;
 
 		priv->temp_label = label_temp_sensors;
 		priv->virtual_temp_label = label_virtual_temp_sensors;
@@ -1232,6 +1259,18 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		break;
 	default:
 		break;
+	}
+
+	if (priv->kind == aquaero) {
+		priv->ctrl_report_id = AQUAERO_CTRL_REPORT_ID;
+		priv->secondary_ctrl_report_id = AQUAERO_SECONDARY_CTRL_REPORT_ID;
+		priv->secondary_ctrl_report_size = AQUAERO_SECONDARY_CTRL_REPORT_SIZE;
+		priv->secondary_ctrl_report = aquaero_secondary_ctrl_report;
+	} else {
+		priv->ctrl_report_id = CTRL_REPORT_ID;
+		priv->secondary_ctrl_report_id = SECONDARY_CTRL_REPORT_ID;
+		priv->secondary_ctrl_report_size = SECONDARY_CTRL_REPORT_SIZE;
+		priv->secondary_ctrl_report = secondary_ctrl_report;
 	}
 
 	if (priv->buffer_size != 0) {
