@@ -1230,7 +1230,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->num_fans = 0;
 		priv->num_temp_sensors = HIGHFLOWNEXT_NUM_SENSORS;
 		priv->temp_sensor_start_offset = HIGHFLOWNEXT_SENSOR_START;
-		priv->power_cycle_count_offset = QUADRO_POWER_CYCLES;
+		priv->power_cycle_count_offset = AQC_POWER_CYCLES;
 
 		priv->temp_label = label_highflownext_temp_sensors;
 		priv->speed_label = label_highflownext_fan_speed;
