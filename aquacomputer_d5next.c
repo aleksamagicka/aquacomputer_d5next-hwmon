@@ -93,8 +93,8 @@ static u8 aquaero_secondary_ctrl_report[] = {
 #define AQUAERO_SENSOR_START		0x65
 #define AQUAERO_NUM_VIRTUAL_SENSORS	8
 #define AQUAERO_VIRTUAL_SENSOR_START	0x85
-#define AQUAERO_CTRL_REPORT_SIZE		0xa93
-#define AQUAERO_TEMP_CTRL_OFFSET		0xdb
+#define AQUAERO_CTRL_REPORT_SIZE	0xa93
+#define AQUAERO_TEMP_CTRL_OFFSET	0xdb
 static u16 aquaero_sensor_fan_offsets[] = { 0x167, 0x173, 0x17f, 0x18B };
 
 #define AQUAERO_FAN_VOLTAGE_OFFSET	0x04
@@ -424,7 +424,8 @@ static int aqc_send_ctrl_data(struct aqc_data *priv)
 	/* Checksum not needed for aquaero */
 	if (priv->kind != aquaero) {
 		/* Init and xorout value for CRC-16/USB is 0xffff */
-		checksum = crc16(0xffff, priv->buffer + priv->checksum_start, priv->checksum_length);
+		checksum =
+		    crc16(0xffff, priv->buffer + priv->checksum_start, priv->checksum_length);
 		checksum ^= 0xffff;
 
 		/* Place the new checksum at the end of the report */
@@ -438,9 +439,10 @@ static int aqc_send_ctrl_data(struct aqc_data *priv)
 		return ret;
 
 	/* The official software sends this report after every change, so do it here as well */
-	ret = hid_hw_raw_request(priv->hdev, priv->secondary_ctrl_report_id, priv->secondary_ctrl_report,
-				 priv->secondary_ctrl_report_size, HID_FEATURE_REPORT,
-				 HID_REQ_SET_REPORT);
+	ret =
+	    hid_hw_raw_request(priv->hdev, priv->secondary_ctrl_report_id,
+			       priv->secondary_ctrl_report, priv->secondary_ctrl_report_size,
+			       HID_FEATURE_REPORT, HID_REQ_SET_REPORT);
 	return ret;
 }
 
@@ -987,10 +989,12 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 		if (priv->temp_input[1] == -ENODATA)
 			priv->power_input[0] = -ENODATA;
 		else
-			priv->power_input[0] = get_unaligned_be16(data + HIGHFLOWNEXT_POWER) * 1000000;
+			priv->power_input[0] =
+			    get_unaligned_be16(data + HIGHFLOWNEXT_POWER) * 1000000;
 
 		priv->voltage_input[0] = get_unaligned_be16(data + HIGHFLOWNEXT_5V_VOLTAGE) * 10;
-		priv->voltage_input[1] = get_unaligned_be16(data + HIGHFLOWNEXT_5V_VOLTAGE_USB) * 10;
+		priv->voltage_input[1] =
+		    get_unaligned_be16(data + HIGHFLOWNEXT_5V_VOLTAGE_USB) * 10;
 
 		priv->speed_input[0] = get_unaligned_be16(data + HIGHFLOWNEXT_FLOW);
 		priv->speed_input[1] = get_unaligned_be16(data + HIGHFLOWNEXT_WATER_QUALITY);
