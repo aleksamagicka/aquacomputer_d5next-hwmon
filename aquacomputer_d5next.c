@@ -97,10 +97,16 @@ static u8 aquaero_secondary_ctrl_report[] = {
 #define AQUAERO_TEMP_CTRL_OFFSET	0xdb
 static u16 aquaero_sensor_fan_offsets[] = { 0x167, 0x173, 0x17f, 0x18B };
 
+static u16 aquaero_ctrl_fan_offsets[] = { 0x20c, 0x220, 0x234, 0x248 };
+
 #define AQUAERO_FAN_VOLTAGE_OFFSET	0x04
 #define AQUAERO_FAN_CURRENT_OFFSET	0x06
 #define AQUAERO_FAN_POWER_OFFSET	0x08
 #define AQUAERO_FAN_SPEED_OFFSET	0x00
+
+#define AQUAERO_FAN_CTRL_SRC_OFFSET	0x10
+#define AQUAERO_CTRL_PRESET_ID		0x5c
+#define AQUAERO_CTRL_PRESET_OFFSET	0x55c
 
 /* Register offsets for the D5 Next pump */
 #define D5NEXT_POWER_CYCLES		0x18
@@ -534,15 +540,22 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 		break;
 	case hwmon_pwm:
 		if (priv->fan_ctrl_offsets && channel < priv->num_fans) {
-			switch (attr) {
-			case hwmon_pwm_enable:
-				return 0644;
-			case hwmon_pwm_input:
-				return 0644;
-			case hwmon_pwm_auto_channels_temp:
-				return 0644;
-			default:
-				break;
+			if (priv->kind == aquaero) {
+				switch (attr) {
+				case hwmon_pwm_input:
+					return 0644;
+				default:
+					break;
+				}
+			} else {
+				switch (attr) {
+				case hwmon_pwm_enable:
+				case hwmon_pwm_input:
+				case hwmon_pwm_auto_channels_temp:
+					return 0644;
+				default:
+					break;
+				}
 			}
 		}
 		break;
@@ -652,12 +665,20 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			*val = *val + 1;	/* Incrementing to satisfy hwmon rules */
 			break;
 		case hwmon_pwm_input:
-			ret =
-			    aqc_get_ctrl_val(priv,
+			if (priv->kind == aquaero) {
+				ret =
+					aqc_get_ctrl_val(priv,
+					    AQUAERO_CTRL_PRESET_OFFSET + channel * 2, val, 16);
+				if (ret < 0)
+					return ret;
+			} else {
+				ret =
+					aqc_get_ctrl_val(priv,
 					     priv->fan_ctrl_offsets[channel] +
 					     AQC_FAN_CTRL_PWM_OFFSET, val, 16);
-			if (ret < 0)
-				return ret;
+				if (ret < 0)
+					return ret;
+			}
 
 			*val = aqc_percent_to_pwm(*val);
 			break;
@@ -788,13 +809,29 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			pwm_value = aqc_pwm_to_percent(val);
 			if (pwm_value < 0)
 				return pwm_value;
+			if (priv->kind == aquaero) {
+				/* Write pwm value to preset corresponding to the channel */
+				ret =
+					aqc_set_ctrl_val(priv,
+							AQUAERO_CTRL_PRESET_OFFSET + channel * 2, pwm_value, 16);
+				if (ret < 0)
+					return ret;
 
-			ret =
-			    aqc_set_ctrl_val(priv,
-					     priv->fan_ctrl_offsets[channel] +
-					     AQC_FAN_CTRL_PWM_OFFSET, pwm_value, 16);
-			if (ret < 0)
-				return ret;
+				/* Write preset number in fan control source */
+				ret =
+					aqc_set_ctrl_val(priv,
+							priv->fan_ctrl_offsets[channel] +
+							AQUAERO_FAN_CTRL_SRC_OFFSET, AQUAERO_CTRL_PRESET_ID + channel, 16);
+				if (ret < 0)
+					return ret;
+			} else {
+				ret =
+					aqc_set_ctrl_val(priv,
+							priv->fan_ctrl_offsets[channel] +
+							AQC_FAN_CTRL_PWM_OFFSET, pwm_value, 16);
+				if (ret < 0)
+					return ret;
+			}
 			break;
 		case hwmon_pwm_auto_channels_temp:
 			switch (val) {
@@ -1112,6 +1149,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 		priv->num_fans = AQUAERO_NUM_FANS;
 		priv->fan_sensor_offsets = aquaero_sensor_fan_offsets;
+		priv->fan_ctrl_offsets = aquaero_ctrl_fan_offsets;
 
 		priv->num_temp_sensors = AQUAERO_NUM_SENSORS;
 		priv->temp_sensor_start_offset = AQUAERO_SENSOR_START;
