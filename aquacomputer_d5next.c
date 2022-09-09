@@ -60,7 +60,7 @@ static u8 secondary_ctrl_report[] = {
 	0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x34, 0xC6
 };
 
-/* Secondary HID report values for aquaero */
+/* Secondary HID report values for Aquaero */
 #define AQUAERO_SECONDARY_CTRL_REPORT_ID	0x06
 #define AQUAERO_SECONDARY_CTRL_REPORT_SIZE	0x07
 
@@ -419,7 +419,7 @@ static int aqc_send_ctrl_data(struct aqc_data *priv)
 	int ret;
 	u16 checksum;
 
-	/* Checksum not needed for aquaero */
+	/* Checksum is not needed for Aquaero */
 	if (priv->kind != aquaero) {
 		/* Init and xorout value for CRC-16/USB is 0xffff */
 		checksum =
@@ -647,7 +647,8 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			if (ret < 0)
 				return ret;
 
-			*val = *val + 1;	/* Incrementing to satisfy hwmon rules */
+			/* Incrementing to satisfy hwmon rules */
+			*val = *val + 1;
 			break;
 		case hwmon_pwm_input:
 			ret =
@@ -758,8 +759,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 					return -EINVAL;
 
 				/* Check if fan we want to follow is following another one
-				 * currently. Following the official software, this is not
-				 * supported.
+				 * currently. This is disallowed in the official software
 				 */
 				if (val > 3) {
 					ret =
