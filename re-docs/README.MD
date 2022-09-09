@@ -4,4 +4,4 @@ Here you'll find writeups of how the Aquacomputer devices communicate and the st
 
 * [D5 Next (HID reports and structures)](d5next/readme.md)
 * [Quadro (HID reports and structures)](quadro/readme.md)
-
+* [Aquaero (HID reports and structures)](aquaero/readme.md)
