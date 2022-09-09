@@ -51,7 +51,7 @@ static const char *const aqc_device_names[] = {
 #define AQUAERO_CTRL_REPORT_ID	0x0b
 
 /* The HID report that the official software always sends
- * after writing values, same for all devices except aquaero
+ * after writing values, same for all devices, except Aquaero
  */
 #define SECONDARY_CTRL_REPORT_ID	0x02
 #define SECONDARY_CTRL_REPORT_SIZE	0x0B
@@ -71,6 +71,7 @@ static u8 aquaero_secondary_ctrl_report[] = {
 /* Register offsets for all Aquacomputer devices */
 #define AQC_TEMP_SENSOR_SIZE		0x02
 #define AQC_TEMP_SENSOR_DISCONNECTED	0x7FFF
+#define AQC_POWER_CYCLES		0x18
 
 /* Register offsets for most Aquacomputer devices */
 #define AQC_SERIAL_START		0x03
@@ -103,7 +104,6 @@ static u16 aquaero_sensor_fan_offsets[] = { 0x167, 0x173, 0x17f, 0x18B };
 #define AQUAERO_FAN_SPEED_OFFSET	0x00
 
 /* Register offsets for the D5 Next pump */
-#define D5NEXT_POWER_CYCLES		0x18
 #define D5NEXT_COOLANT_TEMP		0x57
 #define D5NEXT_NUM_FANS			2
 #define D5NEXT_NUM_SENSORS		1
@@ -133,7 +133,6 @@ static u16 d5next_ctrl_fan_offsets[] = { 0x96, 0x41 };
 #define FARBWERK360_TEMP_CTRL_OFFSET		0x8
 
 /* Register offsets for the Octo fan controller */
-#define OCTO_POWER_CYCLES		0x18
 #define OCTO_NUM_FANS			8
 #define OCTO_NUM_SENSORS		4
 #define OCTO_SENSOR_START		0x3D
@@ -147,7 +146,6 @@ static u16 octo_sensor_fan_offsets[] = { 0x7D, 0x8A, 0x97, 0xA4, 0xB1, 0xBE, 0xC
 static u16 octo_ctrl_fan_offsets[] = { 0x5A, 0xAF, 0x104, 0x159, 0x1AE, 0x203, 0x258, 0x2AD };
 
 /* Register offsets for the Quadro fan controller */
-#define QUADRO_POWER_CYCLES		0x18
 #define QUADRO_NUM_FANS			4
 #define QUADRO_NUM_SENSORS		4
 #define QUADRO_SENSOR_START		0x34
@@ -1140,7 +1138,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->num_virtual_temp_sensors = D5NEXT_NUM_VIRTUAL_SENSORS;
 		priv->virtual_temp_sensor_start_offset = D5NEXT_VIRTUAL_SENSOR_START;
 
-		priv->power_cycle_count_offset = D5NEXT_POWER_CYCLES;
+		priv->power_cycle_count_offset = AQC_POWER_CYCLES;
 		priv->buffer_size = D5NEXT_CTRL_REPORT_SIZE;
 		priv->temp_ctrl_offset = D5NEXT_TEMP_CTRL_OFFSET;
 
@@ -1191,7 +1189,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->num_virtual_temp_sensors = OCTO_NUM_VIRTUAL_SENSORS;
 		priv->virtual_temp_sensor_start_offset = OCTO_VIRTUAL_SENSOR_START;
 
-		priv->power_cycle_count_offset = OCTO_POWER_CYCLES;
+		priv->power_cycle_count_offset = AQC_POWER_CYCLES;
 		priv->buffer_size = OCTO_CTRL_REPORT_SIZE;
 		priv->temp_ctrl_offset = OCTO_TEMP_CTRL_OFFSET;
 
@@ -1214,7 +1212,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->num_virtual_temp_sensors = QUADRO_NUM_VIRTUAL_SENSORS;
 		priv->virtual_temp_sensor_start_offset = QUADRO_VIRTUAL_SENSORS_START;
 
-		priv->power_cycle_count_offset = QUADRO_POWER_CYCLES;
+		priv->power_cycle_count_offset = AQC_POWER_CYCLES;
 		priv->buffer_size = QUADRO_CTRL_REPORT_SIZE;
 		priv->flow_sensor_offset = QUADRO_FLOW_SENSOR_OFFSET;
 		priv->temp_ctrl_offset = QUADRO_TEMP_CTRL_OFFSET;
