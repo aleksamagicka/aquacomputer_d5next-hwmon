@@ -12,6 +12,7 @@
 
 #include <linux/crc16.h>
 #include <linux/debugfs.h>
+#include <linux/delay.h>
 #include <linux/hid.h>
 #include <linux/hwmon.h>
 #include <linux/jiffies.h>
@@ -19,7 +20,6 @@
 #include <linux/mutex.h>
 #include <linux/seq_file.h>
 #include <asm/unaligned.h>
-#include <linux/delay.h>
 
 #define USB_VENDOR_ID_AQUACOMPUTER	0x0c70
 #define USB_PRODUCT_ID_AQUAERO	 	0xf001
@@ -109,7 +109,8 @@ static u16 aquaero_ctrl_fan_offsets[] = { 0x20c, 0x220, 0x234, 0x248 };
 #define AQUAERO_FAN_CTRL_SRC_OFFSET	0x10
 
 #define AQUAERO_CTRL_PRESET_ID		0x5c
-#define AQUAERO_CTRL_PRESET_OFFSET	0x55c
+#define AQUAERO_CTRL_PRESET_SIZE	0x02
+#define AQUAERO_CTRL_PRESET_START	0x55c
 
 /* Register offsets for the D5 Next pump */
 #define D5NEXT_POWER_CYCLES		0x18
@@ -671,7 +672,7 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			if (priv->kind == aquaero) {
 				ret =
 					aqc_get_ctrl_val(priv,
-					    AQUAERO_CTRL_PRESET_OFFSET + channel * 2, val, 16);
+					    AQUAERO_CTRL_PRESET_START + channel * AQUAERO_CTRL_PRESET_SIZE, val, 16);
 				if (ret < 0)
 					return ret;
 			} else {
@@ -816,7 +817,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				/* Write pwm value to preset corresponding to the channel */
 				ret =
 					aqc_set_ctrl_val(priv,
-							AQUAERO_CTRL_PRESET_OFFSET + channel * 2, pwm_value, 16);
+							AQUAERO_CTRL_PRESET_START + channel * AQUAERO_CTRL_PRESET_SIZE, pwm_value, 16);
 				if (ret < 0)
 					return ret;
 
