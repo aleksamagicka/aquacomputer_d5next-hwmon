@@ -19,6 +19,7 @@
 #include <linux/mutex.h>
 #include <linux/seq_file.h>
 #include <asm/unaligned.h>
+#include <linux/delay.h>
 
 #define USB_VENDOR_ID_AQUACOMPUTER	0x0c70
 #define USB_PRODUCT_ID_AQUAERO	 	0xf001
@@ -104,7 +105,9 @@ static u16 aquaero_ctrl_fan_offsets[] = { 0x20c, 0x220, 0x234, 0x248 };
 #define AQUAERO_FAN_POWER_OFFSET	0x08
 #define AQUAERO_FAN_SPEED_OFFSET	0x00
 
+#define AQUAERO_FAN_CTRL_MIN_PWR_OFFSET	0x04
 #define AQUAERO_FAN_CTRL_SRC_OFFSET	0x10
+
 #define AQUAERO_CTRL_PRESET_ID		0x5c
 #define AQUAERO_CTRL_PRESET_OFFSET	0x55c
 
@@ -817,11 +820,23 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				if (ret < 0)
 					return ret;
 
+				mdelay(50); /* delay as device can not accept multiple reports in quick succession */
+
 				/* Write preset number in fan control source */
 				ret =
 					aqc_set_ctrl_val(priv,
 							priv->fan_ctrl_offsets[channel] +
 							AQUAERO_FAN_CTRL_SRC_OFFSET, AQUAERO_CTRL_PRESET_ID + channel, 16);
+				if (ret < 0)
+					return ret;
+
+				mdelay(50); /* delay as device can not accept multiple reports in quick succession */
+
+				/* Set minimum power to 0 to allow the fan to turn off */
+				ret =
+					aqc_set_ctrl_val(priv,
+							priv->fan_ctrl_offsets[channel] +
+							AQUAERO_FAN_CTRL_MIN_PWR_OFFSET, 0, 16);
 				if (ret < 0)
 					return ret;
 			} else {
