@@ -105,6 +105,8 @@ static u16 aquaero_ctrl_fan_offsets[] = { 0x20c, 0x220, 0x234, 0x248 };
 #define AQUAERO_FAN_POWER_OFFSET	0x08
 #define AQUAERO_FAN_SPEED_OFFSET	0x00
 
+#define AQUAERO_FAN_CTRL_MIN_RPM_OFFSET	0x00
+#define AQUAERO_FAN_CTRL_MAX_RPM_OFFSET	0x02
 #define AQUAERO_FAN_CTRL_MIN_PWR_OFFSET	0x04
 #define AQUAERO_FAN_CTRL_MODE_OFFSET	0x0f
 #define AQUAERO_FAN_CTRL_SRC_OFFSET	0x10
@@ -566,22 +568,34 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 		}
 		break;
 	case hwmon_fan:
-		switch (priv->kind) {
-		case highflownext:
-			/* Special case to support flow sensor, water quality and conductivity */
-			if (channel < 3)
-				return 0444;
-			break;
-		case quadro:
-			/* Special case to support flow sensor */
-			if (channel < priv->num_fans + 1)
-				return 0444;
-			break;
-		default:
-			if (channel < priv->num_fans)
-				return 0444;
-			break;
-		}
+		switch (attr) {
+			case hwmon_fan_input:
+			case hwmon_fan_label:
+				switch (priv->kind) {
+				case highflownext:
+					/* Special case to support flow sensor, water quality and conductivity */
+					if (channel < 3)
+						return 0444;
+					break;
+				case quadro:
+					/* Special case to support flow sensor */
+					if (channel < priv->num_fans + 1)
+						return 0444;
+					break;
+				default:
+					if (channel < priv->num_fans)
+						return 0444;
+					break;
+				}
+				break;
+			case hwmon_fan_min:
+			case hwmon_fan_max:
+				if (priv->kind == aquaero && channel < priv->num_fans)
+					return 0644;
+			default:
+				break;
+			}
+		
 		break;
 	case hwmon_power:
 		switch (priv->kind) {
@@ -656,7 +670,27 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		}
 		break;
 	case hwmon_fan:
-		*val = priv->speed_input[channel];
+		switch (attr) {
+		case hwmon_fan_input:
+			*val = priv->speed_input[channel];
+			break;
+		case hwmon_fan_min:
+			ret =
+				aqc_get_ctrl_val(priv,
+					priv->fan_ctrl_offsets[channel] + AQUAERO_FAN_CTRL_MIN_RPM_OFFSET, val, 16);
+			if (ret < 0)
+				return ret;
+			break;
+		case hwmon_fan_max:
+			ret =
+				aqc_get_ctrl_val(priv,
+					priv->fan_ctrl_offsets[channel] + AQUAERO_FAN_CTRL_MAX_RPM_OFFSET, val, 16);
+			if (ret < 0)
+				return ret;
+			break;
+		default:
+			return -EOPNOTSUPP;
+		}
 		break;
 	case hwmon_power:
 		*val = priv->power_input[channel];
@@ -713,8 +747,9 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			default:
 				break;
 			}
-		default:
 			break;
+		default:
+			return -EOPNOTSUPP;
 		}
 		break;
 	case hwmon_in:
@@ -778,6 +813,26 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			    aqc_set_ctrl_val(priv,
 					     priv->temp_ctrl_offset +
 					     channel * AQC_TEMP_SENSOR_SIZE, val, 16);
+			if (ret < 0)
+				return ret;
+			break;
+		default:
+			return -EOPNOTSUPP;
+		}
+		break;
+	case hwmon_fan:
+		switch (attr) {
+		case hwmon_fan_min:
+			val = clamp_val(val, 0, 15000);
+			ret = aqc_set_ctrl_val(priv, 
+				priv->fan_ctrl_offsets[channel] + AQUAERO_FAN_CTRL_MIN_RPM_OFFSET, val, 16);
+			if (ret < 0)
+				return ret;
+			break;
+		case hwmon_fan_max:
+			val = clamp_val(val, 0, 15000);
+			ret = aqc_set_ctrl_val(priv, 
+				priv->fan_ctrl_offsets[channel] + AQUAERO_FAN_CTRL_MAX_RPM_OFFSET, val, 16);
 			if (ret < 0)
 				return ret;
 			break;
@@ -952,10 +1007,10 @@ static const struct hwmon_channel_info *aqc_info[] = {
 			   HWMON_T_INPUT | HWMON_T_LABEL,
 			   HWMON_T_INPUT | HWMON_T_LABEL),
 	HWMON_CHANNEL_INFO(fan,
-			   HWMON_F_INPUT | HWMON_F_LABEL,
-			   HWMON_F_INPUT | HWMON_F_LABEL,
-			   HWMON_F_INPUT | HWMON_F_LABEL,
-			   HWMON_F_INPUT | HWMON_F_LABEL,
+			   HWMON_F_INPUT | HWMON_F_LABEL | HWMON_F_MIN | HWMON_F_MAX,
+			   HWMON_F_INPUT | HWMON_F_LABEL | HWMON_F_MIN | HWMON_F_MAX,
+			   HWMON_F_INPUT | HWMON_F_LABEL | HWMON_F_MIN | HWMON_F_MAX,
+			   HWMON_F_INPUT | HWMON_F_LABEL | HWMON_F_MIN | HWMON_F_MAX,
 			   HWMON_F_INPUT | HWMON_F_LABEL,
 			   HWMON_F_INPUT | HWMON_F_LABEL,
 			   HWMON_F_INPUT | HWMON_F_LABEL,
