@@ -106,6 +106,7 @@ static u16 aquaero_ctrl_fan_offsets[] = { 0x20c, 0x220, 0x234, 0x248 };
 #define AQUAERO_FAN_SPEED_OFFSET	0x00
 
 #define AQUAERO_FAN_CTRL_MIN_PWR_OFFSET	0x04
+#define AQUAERO_FAN_CTRL_MODE_OFFSET	0x0f
 #define AQUAERO_FAN_CTRL_SRC_OFFSET	0x10
 
 #define AQUAERO_CTRL_PRESET_ID		0x5c
@@ -547,6 +548,7 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 			if (priv->kind == aquaero) {
 				switch (attr) {
 				case hwmon_pwm_input:
+				case hwmon_pwm_mode:
 					return 0644;
 				default:
 					break;
@@ -695,6 +697,22 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				return ret;
 
 			*val = 1 << *val;
+			break;
+		case hwmon_pwm_mode:
+			ret = aqc_get_ctrl_val(priv,
+					priv->fan_ctrl_offsets[channel] +
+					AQUAERO_FAN_CTRL_MODE_OFFSET, val, 8);
+			if (ret < 0)
+				return ret;
+
+			switch (*val) {
+			case 0: /* DC mode */
+				break;
+			case 2: /* PWM mode */
+				*val = 1;
+			default:
+				break;
+			}
 		default:
 			break;
 		}
@@ -876,6 +894,23 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 					     AQC_FAN_CTRL_TEMP_SELECT_OFFSET, temp_sensor, 16);
 			if (ret < 0)
 				return ret;
+			break;
+		case hwmon_pwm_mode:
+			switch (val) {
+			case 0: /* DC mode */
+				ctrl_mode = 0;
+				break;
+			case 1: /* PWM mode */
+				ctrl_mode = 2;
+				break;
+			default:
+				return -EINVAL;
+			}
+			ret = aqc_set_ctrl_val(priv,
+					priv->fan_ctrl_offsets[channel] +
+					AQUAERO_FAN_CTRL_MODE_OFFSET, ctrl_mode, 8);
+			if (ret < 0)
+				return ret;
 		default:
 			break;
 		}
@@ -935,10 +970,10 @@ static const struct hwmon_channel_info *aqc_info[] = {
 			   HWMON_P_INPUT | HWMON_P_LABEL,
 			   HWMON_P_INPUT | HWMON_P_LABEL),
 	HWMON_CHANNEL_INFO(pwm,
-			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE | HWMON_PWM_AUTO_CHANNELS_TEMP,
-			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE | HWMON_PWM_AUTO_CHANNELS_TEMP,
-			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE | HWMON_PWM_AUTO_CHANNELS_TEMP,
-			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE | HWMON_PWM_AUTO_CHANNELS_TEMP,
+			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE | HWMON_PWM_AUTO_CHANNELS_TEMP | HWMON_PWM_MODE,
+			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE | HWMON_PWM_AUTO_CHANNELS_TEMP | HWMON_PWM_MODE,
+			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE | HWMON_PWM_AUTO_CHANNELS_TEMP | HWMON_PWM_MODE,
+			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE | HWMON_PWM_AUTO_CHANNELS_TEMP | HWMON_PWM_MODE,
 			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE | HWMON_PWM_AUTO_CHANNELS_TEMP,
 			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE | HWMON_PWM_AUTO_CHANNELS_TEMP,
 			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE | HWMON_PWM_AUTO_CHANNELS_TEMP,
