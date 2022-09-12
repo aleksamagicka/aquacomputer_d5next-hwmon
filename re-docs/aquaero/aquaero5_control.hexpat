@@ -13,7 +13,7 @@ pwm
 struct Fan {
 be u16 min_rpm;
 be u16 max_rpm;
-be u16 min_percent;
+be u16 min_power;
 be u16 max_power;
 be u16 start_boost_power;
 be u16 start_boost_duration;
