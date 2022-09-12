@@ -22,7 +22,8 @@ This driver exposes hardware sensors of listed Aquacomputer devices, which
 communicate through proprietary USB HID protocols.
 
 The Aquaero devices expose eight temperature sensors and four PWM controllable fans,
-along with their speed (in RPM), power, voltage and current.
+along with their speed (in RPM), power, voltage and current. The PWM fans can be
+controlled directly and can be configured as DC or PWM using pwm[1-4]_mode.
 
 For the D5 Next pump, available sensors are pump and fan speed, power, voltage
 and current, as well as coolant temperature. Also available through debugfs are
@@ -96,6 +97,7 @@ curr[1-8]_input             Pump/fan current (in milli Amperes)
 pwm[1-8]                    Fan PWM (0 - 255)
 pwm[1-8]_enable             Fan control mode
 pwm[1-8]_auto_channels_temp Fan control temperature sensors select
+pwm[1-4]_mode               Fan mode (DC or PWM)
 =========================== ===============================================================
 
 Debugfs entries
