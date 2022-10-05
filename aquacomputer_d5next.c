@@ -29,8 +29,9 @@
 #define USB_PRODUCT_ID_FARBWERK360	0xf010
 #define USB_PRODUCT_ID_OCTO		0xf011
 #define USB_PRODUCT_ID_HIGHFLOWNEXT	0xf012
+#define USB_PRODUCT_ID_LEAKSHIELD   0xf014
 
-enum kinds { aquaero, d5next, farbwerk, farbwerk360, octo, quadro, highflownext };
+enum kinds { aquaero, d5next, farbwerk, farbwerk360, octo, quadro, highflownext, leakshield };
 
 static const char *const aqc_device_names[] = {
 	[aquaero] = "aquaero",
@@ -39,7 +40,8 @@ static const char *const aqc_device_names[] = {
 	[farbwerk360] = "farbwerk360",
 	[octo] = "octo",
 	[quadro] = "quadro",
-	[highflownext] = "highflownext"
+	[highflownext] = "highflownext",
+	[leakshield] = "leakshield",
 };
 
 #define DRIVER_NAME			"aquacomputer_d5next"
@@ -182,6 +184,9 @@ static u16 quadro_ctrl_fan_offsets[] = { 0x36, 0x8b, 0xe0, 0x135 };
 #define HIGHFLOWNEXT_5V_VOLTAGE		97
 #define HIGHFLOWNEXT_5V_VOLTAGE_USB	99
 
+/* Register offsets for Leakshield */
+#define LEAKSHIELD_PRESSURE_ADJUSTED 61
+
 /* Labels for D5 Next */
 static const char *const label_d5next_temp[] = {
 	"Coolant temp"
@@ -313,6 +318,11 @@ static const char *const label_highflownext_power[] = {
 static const char *const label_highflownext_voltage[] = {
 	"+5V voltage",
 	"+5V USB voltage"
+};
+
+/* Labels for Leakshield */
+static const char *const label_leakshield_fan_speed[] = {
+	"Pressure [mbar]",
 };
 
 struct aqc_fan_structure_offsets {
@@ -573,6 +583,11 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 			case highflownext:
 				/* Special case to support flow sensor, water quality and conductivity */
 				if (channel < 3)
+					return 0444;
+				break;
+			case leakshield:
+				/* Special case for leakshield pressure sensor */
+				if (channel < 1)
 					return 0444;
 				break;
 			case quadro:
@@ -1141,6 +1156,9 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 		priv->speed_input[1] = get_unaligned_be16(data + HIGHFLOWNEXT_WATER_QUALITY);
 		priv->speed_input[2] = get_unaligned_be16(data + HIGHFLOWNEXT_CONDUCTIVITY);
 		break;
+	case leakshield:
+		priv->speed_input[0] = get_unaligned_be16(data + LEAKSHIELD_PRESSURE_ADJUSTED) / 10;
+		break;
 	default:
 		break;
 	}
@@ -1381,6 +1399,22 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->power_label = label_highflownext_power;
 		priv->voltage_label = label_highflownext_voltage;
 		break;
+	case USB_PRODUCT_ID_LEAKSHIELD:
+		// Make sure this is the 1.1 device node which reports data
+		// and not the 1.2 device node which acts as a keyboard
+		if (hdev->type != 2) {
+			ret = -ENODEV;
+			goto fail_and_close;
+		}
+
+		priv->kind = leakshield;
+
+		priv->num_fans = 0;
+		priv->num_temp_sensors = 0;
+		priv->temp_ctrl_offset = 0;
+
+		priv->speed_label = label_leakshield_fan_speed;
+		break;
 	default:
 		break;
 	}
@@ -1461,6 +1495,7 @@ static const struct hid_device_id aqc_table[] = {
 	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_OCTO) },
 	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_QUADRO) },
 	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_HIGHFLOWNEXT) },
+	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_LEAKSHIELD) },
 	{ }
 };
 
