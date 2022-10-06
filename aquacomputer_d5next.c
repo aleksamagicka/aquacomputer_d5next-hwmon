@@ -191,6 +191,8 @@ static u16 quadro_ctrl_fan_offsets[] = { 0x36, 0x8b, 0xe0, 0x135 };
 #define LEAKSHIELD_PRESSURE_MIN 291
 #define LEAKSHIELD_PRESSURE_TARGET 293
 #define LEAKSHIELD_PRESSURE_MAX 295
+#define LEAKSHIELD_PUMP_RPM_IN 101
+#define LEAKSHIELD_FLOW_IN 111
 
 /* Labels for D5 Next */
 static const char *const label_d5next_temp[] = {
@@ -335,6 +337,8 @@ static const char *const label_leakshield_fan_speed[] = {
 	"Min Pressure [µbar]",
 	"Target Pressure [µbar]",
 	"Max Pressure [µbar]",
+	"User-Provided Pump Speed",
+	"User-Provided Flow [dL/h]",
 };
 
 struct aqc_fan_structure_offsets {
@@ -599,7 +603,7 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 				break;
 			case leakshield:
 				/* Special case for leakshield pressure sensor */
-				if (channel < 4)
+				if (channel < 6)
 					return 0444;
 				break;
 			case quadro:
@@ -696,6 +700,9 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 	case hwmon_fan:
 		switch (attr) {
 		case hwmon_fan_input:
+			if (priv->speed_input[channel] == -ENODATA)
+				return -ENODATA;
+
 			*val = priv->speed_input[channel];
 			break;
 		case hwmon_fan_min:
@@ -1173,6 +1180,16 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 		priv->speed_input[1] = get_unaligned_be16(data + LEAKSHIELD_PRESSURE_MIN) * 100;
 		priv->speed_input[2] = get_unaligned_be16(data + LEAKSHIELD_PRESSURE_TARGET) * 100;
 		priv->speed_input[3] = get_unaligned_be16(data + LEAKSHIELD_PRESSURE_MAX) * 100;
+
+		priv->speed_input[4] = get_unaligned_be16(data + LEAKSHIELD_PUMP_RPM_IN);
+		if (priv->speed_input[4] == AQC_TEMP_SENSOR_DISCONNECTED) {
+			priv->speed_input[4] = -ENODATA;
+		}
+		priv->speed_input[5] = get_unaligned_be16(data + LEAKSHIELD_FLOW_IN);
+		if (priv->speed_input[5] == AQC_TEMP_SENSOR_DISCONNECTED) {
+			priv->speed_input[5] = -ENODATA;
+		}
+
 		/* code above expects temperature values to be laid out sequentially, but they're not */
 		priv->temp_input[1] = get_unaligned_be16(data + LEAKSHIELD_TEMPERATURE_2) * 10;
 		break;
