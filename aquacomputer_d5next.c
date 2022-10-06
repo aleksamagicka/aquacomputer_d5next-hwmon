@@ -185,7 +185,12 @@ static u16 quadro_ctrl_fan_offsets[] = { 0x36, 0x8b, 0xe0, 0x135 };
 #define HIGHFLOWNEXT_5V_VOLTAGE_USB	99
 
 /* Register offsets for Leakshield */
-#define LEAKSHIELD_PRESSURE_ADJUSTED 61
+#define LEAKSHIELD_PRESSURE_ADJUSTED 285
+#define LEAKSHIELD_TEMPERATURE_1 265
+#define LEAKSHIELD_TEMPERATURE_2 287
+#define LEAKSHIELD_PRESSURE_MIN 291
+#define LEAKSHIELD_PRESSURE_TARGET 293
+#define LEAKSHIELD_PRESSURE_MAX 295
 
 /* Labels for D5 Next */
 static const char *const label_d5next_temp[] = {
@@ -321,8 +326,15 @@ static const char *const label_highflownext_voltage[] = {
 };
 
 /* Labels for Leakshield */
+static const char *const label_leakshield_temp_sensors[] = {
+	"Temperature 1",
+	"Temperature 2"
+};
 static const char *const label_leakshield_fan_speed[] = {
-	"Pressure [mbar]",
+	"Pressure [µbar]",
+	"Min Pressure [µbar]",
+	"Target Pressure [µbar]",
+	"Max Pressure [µbar]",
 };
 
 struct aqc_fan_structure_offsets {
@@ -391,7 +403,7 @@ struct aqc_data {
 
 	/* Sensor values */
 	s32 temp_input[20];	/* Max 4 physical and 16 virtual */
-	u16 speed_input[8];
+	u32 speed_input[8];
 	u32 power_input[8];
 	u16 voltage_input[8];
 	u16 current_input[8];
@@ -587,7 +599,7 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 				break;
 			case leakshield:
 				/* Special case for leakshield pressure sensor */
-				if (channel < 1)
+				if (channel < 4)
 					return 0444;
 				break;
 			case quadro:
@@ -1157,7 +1169,12 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 		priv->speed_input[2] = get_unaligned_be16(data + HIGHFLOWNEXT_CONDUCTIVITY);
 		break;
 	case leakshield:
-		priv->speed_input[0] = get_unaligned_be16(data + LEAKSHIELD_PRESSURE_ADJUSTED) / 10;
+		priv->speed_input[0] = get_unaligned_be16(data + LEAKSHIELD_PRESSURE_ADJUSTED) * 100;
+		priv->speed_input[1] = get_unaligned_be16(data + LEAKSHIELD_PRESSURE_MIN) * 100;
+		priv->speed_input[2] = get_unaligned_be16(data + LEAKSHIELD_PRESSURE_TARGET) * 100;
+		priv->speed_input[3] = get_unaligned_be16(data + LEAKSHIELD_PRESSURE_MAX) * 100;
+		/* code above expects temperature values to be laid out sequentially, but they're not */
+		priv->temp_input[1] = get_unaligned_be16(data + LEAKSHIELD_TEMPERATURE_2) * 10;
 		break;
 	default:
 		break;
@@ -1410,8 +1427,10 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->kind = leakshield;
 
 		priv->num_fans = 0;
-		priv->num_temp_sensors = 0;
+		priv->num_temp_sensors = 2;
+		priv->temp_sensor_start_offset = LEAKSHIELD_TEMPERATURE_1;
 		priv->temp_ctrl_offset = 0;
+		priv->temp_label = label_leakshield_temp_sensors;
 
 		priv->speed_label = label_leakshield_fan_speed;
 		break;
