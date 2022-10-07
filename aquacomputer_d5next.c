@@ -866,10 +866,20 @@ static int aqc_leakshield_send_report(struct aqc_data *priv, int channel, long v
 	int actual_length;
 	int ret;
 	u16 checksum;
+	u16 val16;
 
 	if (priv->kind != leakshield) {
 		return -EINVAL;
 	}
+
+	/* map -1 to N/A and forbid out-of-bounds values */
+	if (val == -1)
+	    /* note: the device will still remember the old value for 5 minutes */
+		val16 = 0x7fff;
+	else if (val < 0 || val >= 0x7fff)
+		return -EINVAL;
+	else
+		val16 = (u16)val;
 
 	/* leakshield_report_template is loaded into priv->buffer during initialization.
 	   if userland provides e.g. pump RPM and then flow rate, we don't want the flow
@@ -877,10 +887,10 @@ static int aqc_leakshield_send_report(struct aqc_data *priv, int channel, long v
 
 	switch (channel) {
 	case 1:
-		put_unaligned_be16(val, priv->buffer + 1);
+		put_unaligned_be16(val16, priv->buffer + 1);
 		break;
 	case 2:
-		put_unaligned_be16(val, priv->buffer + 3);
+		put_unaligned_be16(val16, priv->buffer + 3);
 		break;
 	default:
 		return -EINVAL;
