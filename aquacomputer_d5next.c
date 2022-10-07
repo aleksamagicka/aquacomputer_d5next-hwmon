@@ -74,7 +74,7 @@ static u8 aquaero_secondary_ctrl_report[] = {
 
 /* Register offsets for all Aquacomputer devices */
 #define AQC_TEMP_SENSOR_SIZE		0x02
-#define AQC_TEMP_SENSOR_DISCONNECTED	0x7FFF
+#define AQC_SENSOR_NA	0x7FFF
 #define AQC_POWER_CYCLES		0x18
 
 /* Register offsets for most Aquacomputer devices */
@@ -881,12 +881,12 @@ static int aqc_leakshield_send_report(struct aqc_data *priv, int channel, long v
 	}
 
 	/* forbid out-of-bounds values */
-	if (val < -1 || val >= 0x7fff)
+	if (val < -1 || val >= AQC_SENSOR_NA)
 		return -EINVAL;
 
 	if (val == -1)
 	    /* map -1 to N/A value. note: the device will still remember the old value for 5 minutes */
-		val16 = 0x7fff;
+		val16 = AQC_SENSOR_NA;
 	else
 		val16 = (u16)val;
 
@@ -1209,7 +1209,7 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 		sensor_value = get_unaligned_be16(data +
 						  priv->temp_sensor_start_offset +
 						  i * AQC_TEMP_SENSOR_SIZE);
-		if (sensor_value == AQC_TEMP_SENSOR_DISCONNECTED)
+		if (sensor_value == AQC_SENSOR_NA)
 			priv->temp_input[i] = -ENODATA;
 		else
 			priv->temp_input[i] = sensor_value * 10;
@@ -1220,7 +1220,7 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 		sensor_value = get_unaligned_be16(data +
 						  priv->virtual_temp_sensor_start_offset +
 						  j * AQC_TEMP_SENSOR_SIZE);
-		if (sensor_value == AQC_TEMP_SENSOR_DISCONNECTED)
+		if (sensor_value == AQC_SENSOR_NA)
 			priv->temp_input[i] = -ENODATA;
 		else
 			priv->temp_input[i] = sensor_value * 10;
@@ -1278,11 +1278,11 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 		priv->speed_input_max[0] = get_unaligned_be16(data + LEAKSHIELD_PRESSURE_MAX) * 100;
 
 		priv->speed_input[1] = get_unaligned_be16(data + LEAKSHIELD_PUMP_RPM_IN);
-		if (priv->speed_input[1] == AQC_TEMP_SENSOR_DISCONNECTED) {
+		if (priv->speed_input[1] == AQC_SENSOR_NA) {
 			priv->speed_input[1] = -ENODATA;
 		}
 		priv->speed_input[2] = get_unaligned_be16(data + LEAKSHIELD_FLOW_IN);
-		if (priv->speed_input[2] == AQC_TEMP_SENSOR_DISCONNECTED) {
+		if (priv->speed_input[2] == AQC_SENSOR_NA) {
 			priv->speed_input[2] = -ENODATA;
 		}
 
