@@ -13,6 +13,7 @@ This is a hwmon Linux kernel driver supporting the following Aquacomputer device
 |     Quadro     |          6.0           |  Temperature, flow and fan sensors, direct fan PWM control   |  MCF51JU128VHS  |
 | High Flow Next |          6.1           |                       Various sensors                        |        /        |
 |  Aquaero 5/6   |     Available here     | Temperature sensors, fan sensors, direct fan PWM control, DC/PWM mode setting | MCF51JM128EVLK  |
+|  Leakshield    |     Available here     | Various sensors and setting parameters for higher accuracy | /  |
 
 The above table shows what devices this driver supports and starting from which kernel version, if applicable.
 Microcontrollers are noted for general reference, as this driver only communicates through HID reports and does not

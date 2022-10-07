@@ -198,14 +198,16 @@ static u16 quadro_ctrl_fan_offsets[] = { 0x36, 0x8b, 0xe0, 0x135 };
 #define LEAKSHIELD_RESERVOIR_FILLED 311
 /* USB bulk message to report pump RPM and flow rate for pressure calculations */
 static u8 leakshield_usb_report_template[] = {
-	0x4, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x3, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
+	0x4, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff,
+	    0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff,
+	    0x7f, 0xff, 0x7f, 0xff, 0x3, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
+	    0x0, 0x0, 0x0,
 };
+
 #define LEAKSHIELD_USB_REPORT_LENGTH 49
 #define LEAKSHIELD_USB_REPORT_ENDPOINT 2
 #define LEAKSHIELD_USB_REPORT_PUMP_RPM_OFFSET 1
 #define LEAKSHIELD_USB_REPORT_FLOW_OFFSET 3
-
-
 
 /* Labels for D5 Next */
 static const char *const label_d5next_temp[] = {
@@ -345,6 +347,7 @@ static const char *const label_leakshield_temp_sensors[] = {
 	"Temperature 1",
 	"Temperature 2"
 };
+
 static const char *const label_leakshield_fan_speed[] = {
 	"Pressure [µbar]",
 	"User-Provided Pump Speed",
@@ -730,8 +733,9 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		case hwmon_fan_min:
 			if (priv->kind == aquaero) {
 				ret =
-					aqc_get_ctrl_val(priv,
-						priv->fan_ctrl_offsets[channel] + AQUAERO_FAN_CTRL_MIN_RPM_OFFSET, val, 16);
+				    aqc_get_ctrl_val(priv,
+						     priv->fan_ctrl_offsets[channel] +
+						     AQUAERO_FAN_CTRL_MIN_RPM_OFFSET, val, 16);
 				if (ret < 0)
 					return ret;
 				break;
@@ -742,8 +746,9 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		case hwmon_fan_max:
 			if (priv->kind == aquaero) {
 				ret =
-					aqc_get_ctrl_val(priv,
-						priv->fan_ctrl_offsets[channel] + AQUAERO_FAN_CTRL_MAX_RPM_OFFSET, val, 16);
+				    aqc_get_ctrl_val(priv,
+						     priv->fan_ctrl_offsets[channel] +
+						     AQUAERO_FAN_CTRL_MAX_RPM_OFFSET, val, 16);
 				if (ret < 0)
 					return ret;
 				break;
@@ -774,15 +779,16 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		case hwmon_pwm_input:
 			if (priv->kind == aquaero) {
 				ret =
-					aqc_get_ctrl_val(priv,
-					    AQUAERO_CTRL_PRESET_START + channel * AQUAERO_CTRL_PRESET_SIZE, val, 16);
+				    aqc_get_ctrl_val(priv,
+						     AQUAERO_CTRL_PRESET_START +
+						     channel * AQUAERO_CTRL_PRESET_SIZE, val, 16);
 				if (ret < 0)
 					return ret;
 			} else {
 				ret =
-					aqc_get_ctrl_val(priv,
-					     priv->fan_ctrl_offsets[channel] +
-					     AQC_FAN_CTRL_PWM_OFFSET, val, 16);
+				    aqc_get_ctrl_val(priv,
+						     priv->fan_ctrl_offsets[channel] +
+						     AQC_FAN_CTRL_PWM_OFFSET, val, 16);
 				if (ret < 0)
 					return ret;
 			}
@@ -801,15 +807,15 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			break;
 		case hwmon_pwm_mode:
 			ret = aqc_get_ctrl_val(priv,
-					priv->fan_ctrl_offsets[channel] +
-					AQUAERO_FAN_CTRL_MODE_OFFSET, val, 8);
+					       priv->fan_ctrl_offsets[channel] +
+					       AQUAERO_FAN_CTRL_MODE_OFFSET, val, 8);
 			if (ret < 0)
 				return ret;
 
 			switch (*val) {
-			case 0: /* DC mode */
+			case 0:	/* DC mode */
 				break;
-			case 2: /* PWM mode */
+			case 2:	/* PWM mode */
 				*val = 1;
 				break;
 			default:
@@ -864,8 +870,6 @@ static int aqc_read_string(struct device *dev, enum hwmon_sensor_types type, u32
 	return 0;
 }
 
-
-
 static int aqc_leakshield_send_report(struct aqc_data *priv, int channel, long val)
 {
 	struct usb_interface *intf;
@@ -885,10 +889,10 @@ static int aqc_leakshield_send_report(struct aqc_data *priv, int channel, long v
 		return -EINVAL;
 
 	if (val == -1)
-	    /* map -1 to N/A value. note: the device will still remember the old value for 5 minutes */
+		/* map -1 to N/A value. note: the device will still remember the old value for 5 minutes */
 		val16 = AQC_SENSOR_NA;
 	else
-		val16 = (u16)val;
+		val16 = (u16) val;
 
 	/* leakshield_usb_report_template is loaded into priv->buffer during initialization.
 	   if userland provides e.g. pump RPM and then flow rate, we don't want the flow
@@ -952,14 +956,16 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		case hwmon_fan_min:
 			val = clamp_val(val, 0, 15000);
 			ret = aqc_set_ctrl_val(priv,
-				priv->fan_ctrl_offsets[channel] + AQUAERO_FAN_CTRL_MIN_RPM_OFFSET, val, 16);
+					       priv->fan_ctrl_offsets[channel] +
+					       AQUAERO_FAN_CTRL_MIN_RPM_OFFSET, val, 16);
 			if (ret < 0)
 				return ret;
 			break;
 		case hwmon_fan_max:
 			val = clamp_val(val, 0, 15000);
 			ret = aqc_set_ctrl_val(priv,
-				priv->fan_ctrl_offsets[channel] + AQUAERO_FAN_CTRL_MAX_RPM_OFFSET, val, 16);
+					       priv->fan_ctrl_offsets[channel] +
+					       AQUAERO_FAN_CTRL_MAX_RPM_OFFSET, val, 16);
 			if (ret < 0)
 				return ret;
 			break;
@@ -1017,35 +1023,38 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			if (priv->kind == aquaero) {
 				/* Write pwm value to preset corresponding to the channel */
 				ret =
-					aqc_set_ctrl_val(priv,
-							AQUAERO_CTRL_PRESET_START + channel * AQUAERO_CTRL_PRESET_SIZE, pwm_value, 16);
+				    aqc_set_ctrl_val(priv,
+						     AQUAERO_CTRL_PRESET_START +
+						     channel * AQUAERO_CTRL_PRESET_SIZE, pwm_value,
+						     16);
 				if (ret < 0)
 					return ret;
 
-				mdelay(50); /* delay as device can not accept multiple reports in quick succession */
+				mdelay(50);	/* delay as device can not accept multiple reports in quick succession */
 
 				/* Write preset number in fan control source */
 				ret =
-					aqc_set_ctrl_val(priv,
-							priv->fan_ctrl_offsets[channel] +
-							AQUAERO_FAN_CTRL_SRC_OFFSET, AQUAERO_CTRL_PRESET_ID + channel, 16);
+				    aqc_set_ctrl_val(priv,
+						     priv->fan_ctrl_offsets[channel] +
+						     AQUAERO_FAN_CTRL_SRC_OFFSET,
+						     AQUAERO_CTRL_PRESET_ID + channel, 16);
 				if (ret < 0)
 					return ret;
 
-				mdelay(50); /* delay as device can not accept multiple reports in quick succession */
+				mdelay(50);	/* delay as device can not accept multiple reports in quick succession */
 
 				/* Set minimum power to 0 to allow the fan to turn off */
 				ret =
-					aqc_set_ctrl_val(priv,
-							priv->fan_ctrl_offsets[channel] +
-							AQUAERO_FAN_CTRL_MIN_PWR_OFFSET, 0, 16);
+				    aqc_set_ctrl_val(priv,
+						     priv->fan_ctrl_offsets[channel] +
+						     AQUAERO_FAN_CTRL_MIN_PWR_OFFSET, 0, 16);
 				if (ret < 0)
 					return ret;
 			} else {
 				ret =
-					aqc_set_ctrl_val(priv,
-							priv->fan_ctrl_offsets[channel] +
-							AQC_FAN_CTRL_PWM_OFFSET, pwm_value, 16);
+				    aqc_set_ctrl_val(priv,
+						     priv->fan_ctrl_offsets[channel] +
+						     AQC_FAN_CTRL_PWM_OFFSET, pwm_value, 16);
 				if (ret < 0)
 					return ret;
 			}
@@ -1080,18 +1089,18 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			break;
 		case hwmon_pwm_mode:
 			switch (val) {
-			case 0: /* DC mode */
+			case 0:	/* DC mode */
 				ctrl_mode = 0;
 				break;
-			case 1: /* PWM mode */
+			case 1:	/* PWM mode */
 				ctrl_mode = 2;
 				break;
 			default:
 				return -EINVAL;
 			}
 			ret = aqc_set_ctrl_val(priv,
-					priv->fan_ctrl_offsets[channel] +
-					AQUAERO_FAN_CTRL_MODE_OFFSET, ctrl_mode, 8);
+					       priv->fan_ctrl_offsets[channel] +
+					       AQUAERO_FAN_CTRL_MODE_OFFSET, ctrl_mode, 8);
 			if (ret < 0)
 				return ret;
 		default:
@@ -1135,7 +1144,8 @@ static const struct hwmon_channel_info *aqc_info[] = {
 			   HWMON_T_INPUT | HWMON_T_LABEL,
 			   HWMON_T_INPUT | HWMON_T_LABEL),
 	HWMON_CHANNEL_INFO(fan,
-			   HWMON_F_INPUT | HWMON_F_LABEL | HWMON_F_MIN | HWMON_F_MAX | HWMON_F_TARGET,
+			   HWMON_F_INPUT | HWMON_F_LABEL | HWMON_F_MIN | HWMON_F_MAX |
+			   HWMON_F_TARGET,
 			   HWMON_F_INPUT | HWMON_F_LABEL | HWMON_F_MIN | HWMON_F_MAX,
 			   HWMON_F_INPUT | HWMON_F_LABEL | HWMON_F_MIN | HWMON_F_MAX,
 			   HWMON_F_INPUT | HWMON_F_LABEL | HWMON_F_MIN | HWMON_F_MAX,
@@ -1153,10 +1163,14 @@ static const struct hwmon_channel_info *aqc_info[] = {
 			   HWMON_P_INPUT | HWMON_P_LABEL,
 			   HWMON_P_INPUT | HWMON_P_LABEL),
 	HWMON_CHANNEL_INFO(pwm,
-			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE | HWMON_PWM_AUTO_CHANNELS_TEMP | HWMON_PWM_MODE,
-			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE | HWMON_PWM_AUTO_CHANNELS_TEMP | HWMON_PWM_MODE,
-			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE | HWMON_PWM_AUTO_CHANNELS_TEMP | HWMON_PWM_MODE,
-			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE | HWMON_PWM_AUTO_CHANNELS_TEMP | HWMON_PWM_MODE,
+			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE | HWMON_PWM_AUTO_CHANNELS_TEMP |
+			   HWMON_PWM_MODE,
+			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE | HWMON_PWM_AUTO_CHANNELS_TEMP |
+			   HWMON_PWM_MODE,
+			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE | HWMON_PWM_AUTO_CHANNELS_TEMP |
+			   HWMON_PWM_MODE,
+			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE | HWMON_PWM_AUTO_CHANNELS_TEMP |
+			   HWMON_PWM_MODE,
 			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE | HWMON_PWM_AUTO_CHANNELS_TEMP,
 			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE | HWMON_PWM_AUTO_CHANNELS_TEMP,
 			   HWMON_PWM_INPUT | HWMON_PWM_ENABLE | HWMON_PWM_AUTO_CHANNELS_TEMP,
@@ -1272,9 +1286,11 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 		priv->speed_input[2] = get_unaligned_be16(data + HIGHFLOWNEXT_CONDUCTIVITY);
 		break;
 	case leakshield:
-		priv->speed_input[0] = get_unaligned_be16(data + LEAKSHIELD_PRESSURE_ADJUSTED) * 100;
+		priv->speed_input[0] =
+		    get_unaligned_be16(data + LEAKSHIELD_PRESSURE_ADJUSTED) * 100;
 		priv->speed_input_min[0] = get_unaligned_be16(data + LEAKSHIELD_PRESSURE_MIN) * 100;
-		priv->speed_input_target[0] = get_unaligned_be16(data + LEAKSHIELD_PRESSURE_TARGET) * 100;
+		priv->speed_input_target[0] =
+		    get_unaligned_be16(data + LEAKSHIELD_PRESSURE_TARGET) * 100;
 		priv->speed_input_max[0] = get_unaligned_be16(data + LEAKSHIELD_PRESSURE_MAX) * 100;
 
 		priv->speed_input[1] = get_unaligned_be16(data + LEAKSHIELD_PUMP_RPM_IN);
