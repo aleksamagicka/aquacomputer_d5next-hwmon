@@ -336,9 +336,6 @@ static const char *const label_leakshield_temp_sensors[] = {
 };
 static const char *const label_leakshield_fan_speed[] = {
 	"Pressure [µbar]",
-	"Min Pressure [µbar]",
-	"Target Pressure [µbar]",
-	"Max Pressure [µbar]",
 	"User-Provided Pump Speed",
 	"User-Provided Flow [dL/h]",
 	"Reservoir Volume [ml]",
@@ -412,6 +409,9 @@ struct aqc_data {
 	/* Sensor values */
 	s32 temp_input[20];	/* Max 4 physical and 16 virtual */
 	u32 speed_input[8];
+	u32 speed_input_min[8];
+	u32 speed_input_target[8];
+	u32 speed_input_max[8];
 	u32 power_input[8];
 	u16 voltage_input[8];
 	u16 current_input[8];
@@ -607,7 +607,7 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 				break;
 			case leakshield:
 				/* Special case for leakshield pressure sensor */
-				if (channel < 8)
+				if (channel < 5)
 					return 0444;
 				break;
 			case quadro:
@@ -625,6 +625,10 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 		case hwmon_fan_max:
 			if (priv->kind == aquaero && channel < priv->num_fans)
 				return 0644;
+			fallthrough;
+		case hwmon_fan_target:
+			if (priv->kind == leakshield && channel == 0)
+				return 0444;
 		default:
 			break;
 		}
@@ -710,18 +714,31 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			*val = priv->speed_input[channel];
 			break;
 		case hwmon_fan_min:
-			ret =
-				aqc_get_ctrl_val(priv,
-					priv->fan_ctrl_offsets[channel] + AQUAERO_FAN_CTRL_MIN_RPM_OFFSET, val, 16);
-			if (ret < 0)
-				return ret;
+			if (priv->kind == aquaero) {
+				ret =
+					aqc_get_ctrl_val(priv,
+						priv->fan_ctrl_offsets[channel] + AQUAERO_FAN_CTRL_MIN_RPM_OFFSET, val, 16);
+				if (ret < 0)
+					return ret;
+				break;
+			}
+
+			*val = priv->speed_input_min[channel];
 			break;
 		case hwmon_fan_max:
-			ret =
-				aqc_get_ctrl_val(priv,
-					priv->fan_ctrl_offsets[channel] + AQUAERO_FAN_CTRL_MAX_RPM_OFFSET, val, 16);
-			if (ret < 0)
-				return ret;
+			if (priv->kind == aquaero) {
+				ret =
+					aqc_get_ctrl_val(priv,
+						priv->fan_ctrl_offsets[channel] + AQUAERO_FAN_CTRL_MAX_RPM_OFFSET, val, 16);
+				if (ret < 0)
+					return ret;
+				break;
+			}
+
+			*val = priv->speed_input_max[channel];
+			break;
+		case hwmon_fan_target:
+			*val = priv->speed_input_target[channel];
 			break;
 		default:
 			return -EOPNOTSUPP;
@@ -1043,7 +1060,7 @@ static const struct hwmon_channel_info *aqc_info[] = {
 			   HWMON_T_INPUT | HWMON_T_LABEL,
 			   HWMON_T_INPUT | HWMON_T_LABEL),
 	HWMON_CHANNEL_INFO(fan,
-			   HWMON_F_INPUT | HWMON_F_LABEL | HWMON_F_MIN | HWMON_F_MAX,
+			   HWMON_F_INPUT | HWMON_F_LABEL | HWMON_F_MIN | HWMON_F_MAX | HWMON_F_TARGET,
 			   HWMON_F_INPUT | HWMON_F_LABEL | HWMON_F_MIN | HWMON_F_MAX,
 			   HWMON_F_INPUT | HWMON_F_LABEL | HWMON_F_MIN | HWMON_F_MAX,
 			   HWMON_F_INPUT | HWMON_F_LABEL | HWMON_F_MIN | HWMON_F_MAX,
@@ -1181,21 +1198,21 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 		break;
 	case leakshield:
 		priv->speed_input[0] = get_unaligned_be16(data + LEAKSHIELD_PRESSURE_ADJUSTED) * 100;
-		priv->speed_input[1] = get_unaligned_be16(data + LEAKSHIELD_PRESSURE_MIN) * 100;
-		priv->speed_input[2] = get_unaligned_be16(data + LEAKSHIELD_PRESSURE_TARGET) * 100;
-		priv->speed_input[3] = get_unaligned_be16(data + LEAKSHIELD_PRESSURE_MAX) * 100;
+		priv->speed_input_min[0] = get_unaligned_be16(data + LEAKSHIELD_PRESSURE_MIN) * 100;
+		priv->speed_input_target[0] = get_unaligned_be16(data + LEAKSHIELD_PRESSURE_TARGET) * 100;
+		priv->speed_input_max[0] = get_unaligned_be16(data + LEAKSHIELD_PRESSURE_MAX) * 100;
 
-		priv->speed_input[4] = get_unaligned_be16(data + LEAKSHIELD_PUMP_RPM_IN);
-		if (priv->speed_input[4] == AQC_TEMP_SENSOR_DISCONNECTED) {
-			priv->speed_input[4] = -ENODATA;
+		priv->speed_input[1] = get_unaligned_be16(data + LEAKSHIELD_PUMP_RPM_IN);
+		if (priv->speed_input[1] == AQC_TEMP_SENSOR_DISCONNECTED) {
+			priv->speed_input[1] = -ENODATA;
 		}
-		priv->speed_input[5] = get_unaligned_be16(data + LEAKSHIELD_FLOW_IN);
-		if (priv->speed_input[5] == AQC_TEMP_SENSOR_DISCONNECTED) {
-			priv->speed_input[5] = -ENODATA;
+		priv->speed_input[2] = get_unaligned_be16(data + LEAKSHIELD_FLOW_IN);
+		if (priv->speed_input[2] == AQC_TEMP_SENSOR_DISCONNECTED) {
+			priv->speed_input[2] = -ENODATA;
 		}
 
-		priv->speed_input[6] = get_unaligned_be16(data + LEAKSHIELD_RESERVOIR_VOLUME);
-		priv->speed_input[7] = get_unaligned_be16(data + LEAKSHIELD_RESERVOIR_FILLED);
+		priv->speed_input[3] = get_unaligned_be16(data + LEAKSHIELD_RESERVOIR_VOLUME);
+		priv->speed_input[4] = get_unaligned_be16(data + LEAKSHIELD_RESERVOIR_FILLED);
 
 		/* code above expects temperature values to be laid out sequentially, but they're not */
 		priv->temp_input[1] = get_unaligned_be16(data + LEAKSHIELD_TEMPERATURE_2) * 10;
