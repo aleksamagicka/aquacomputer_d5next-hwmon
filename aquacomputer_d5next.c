@@ -196,6 +196,16 @@ static u16 quadro_ctrl_fan_offsets[] = { 0x36, 0x8b, 0xe0, 0x135 };
 #define LEAKSHIELD_FLOW_IN 111
 #define LEAKSHIELD_RESERVOIR_VOLUME 313
 #define LEAKSHIELD_RESERVOIR_FILLED 311
+/* USB bulk message to report pump RPM and flow rate for pressure calculations */
+static u8 leakshield_usb_report_template[] = {
+	0x4, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x3, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
+};
+#define LEAKSHIELD_USB_REPORT_LENGTH 49
+#define LEAKSHIELD_USB_REPORT_ENDPOINT 2
+#define LEAKSHIELD_USB_REPORT_PUMP_RPM_OFFSET 1
+#define LEAKSHIELD_USB_REPORT_FLOW_OFFSET 3
+
+
 
 /* Labels for D5 Next */
 static const char *const label_d5next_temp[] = {
@@ -607,7 +617,7 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 					return 0444;
 				break;
 			case leakshield:
-				/* Special case for leakshield sensors */
+				/* Special case for user-provided leakshield sensors */
 				if (channel == 1 || channel == 2)
 					return 0644;
 				if (channel < 5)
@@ -630,6 +640,7 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 				return 0644;
 			fallthrough;
 		case hwmon_fan_target:
+			/* Special case for leakshield pressure sensor */
 			if (priv->kind == leakshield && channel == 0)
 				return 0444;
 		default:
@@ -853,9 +864,6 @@ static int aqc_read_string(struct device *dev, enum hwmon_sensor_types type, u32
 	return 0;
 }
 
-static u8 leakshield_report_template[] = {
-	0x4, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x3, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
-};
 
 
 static int aqc_leakshield_send_report(struct aqc_data *priv, int channel, long val)
@@ -872,40 +880,41 @@ static int aqc_leakshield_send_report(struct aqc_data *priv, int channel, long v
 		return -EINVAL;
 	}
 
-	/* map -1 to N/A and forbid out-of-bounds values */
-	if (val == -1)
-	    /* note: the device will still remember the old value for 5 minutes */
-		val16 = 0x7fff;
-	else if (val < 0 || val >= 0x7fff)
+	/* forbid out-of-bounds values */
+	if (val < -1 || val >= 0x7fff)
 		return -EINVAL;
+
+	if (val == -1)
+	    /* map -1 to N/A value. note: the device will still remember the old value for 5 minutes */
+		val16 = 0x7fff;
 	else
 		val16 = (u16)val;
 
-	/* leakshield_report_template is loaded into priv->buffer during initialization.
+	/* leakshield_usb_report_template is loaded into priv->buffer during initialization.
 	   if userland provides e.g. pump RPM and then flow rate, we don't want the flow
 	   rate update to clear the pump RPM, so we just keep the values saved in the buffer */
 
 	switch (channel) {
 	case 1:
-		put_unaligned_be16(val16, priv->buffer + 1);
+		put_unaligned_be16(val16, priv->buffer + LEAKSHIELD_USB_REPORT_PUMP_RPM_OFFSET);
 		break;
 	case 2:
-		put_unaligned_be16(val16, priv->buffer + 3);
+		put_unaligned_be16(val16, priv->buffer + LEAKSHIELD_USB_REPORT_FLOW_OFFSET);
 		break;
 	default:
 		return -EINVAL;
 	}
 
 	/* Init and xorout value for CRC-16/USB is 0xffff */
-	checksum = crc16(0xffff, priv->buffer, sizeof(leakshield_report_template));
+	checksum = crc16(0xffff, priv->buffer, LEAKSHIELD_USB_REPORT_LENGTH);
 	checksum ^= 0xffff;
 
 	/* Place the new checksum at the end of the report */
-	put_unaligned_be16(checksum, priv->buffer + sizeof(leakshield_report_template));
+	put_unaligned_be16(checksum, priv->buffer + LEAKSHIELD_USB_REPORT_LENGTH);
 
 	intf = to_usb_interface(priv->hdev->dev.parent);
 	usb_dev = interface_to_usbdev(intf);
-	pipe = usb_sndbulkpipe(usb_dev, 2);
+	pipe = usb_sndbulkpipe(usb_dev, LEAKSHIELD_USB_REPORT_ENDPOINT);
 	ret = usb_bulk_msg(usb_dev, pipe, priv->buffer, priv->buffer_size, &actual_length, 1000);
 
 	if (actual_length != priv->buffer_size) {
@@ -1542,7 +1551,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->speed_label = label_leakshield_fan_speed;
 
 		/* plus two bytes checksum */
-		priv->buffer_size = sizeof(leakshield_report_template) + 2;
+		priv->buffer_size = LEAKSHIELD_USB_REPORT_LENGTH + 2;
 		break;
 	default:
 		break;
@@ -1585,7 +1594,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	}
 
 	if (priv->kind == leakshield) {
-		memcpy(priv->buffer, leakshield_report_template, sizeof(leakshield_report_template));
+		memcpy(priv->buffer, leakshield_usb_report_template, LEAKSHIELD_USB_REPORT_LENGTH);
 	}
 
 	mutex_init(&priv->mutex);
