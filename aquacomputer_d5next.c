@@ -23,14 +23,14 @@
 #include <asm/unaligned.h>
 
 #define USB_VENDOR_ID_AQUACOMPUTER	0x0c70
-#define USB_PRODUCT_ID_AQUAERO	 	0xf001
-#define USB_PRODUCT_ID_FARBWERK 	0xf00a
-#define USB_PRODUCT_ID_QUADRO 		0xf00d
+#define USB_PRODUCT_ID_AQUAERO		0xf001
+#define USB_PRODUCT_ID_FARBWERK		0xf00a
+#define USB_PRODUCT_ID_QUADRO		0xf00d
 #define USB_PRODUCT_ID_D5NEXT		0xf00e
 #define USB_PRODUCT_ID_FARBWERK360	0xf010
 #define USB_PRODUCT_ID_OCTO		0xf011
 #define USB_PRODUCT_ID_HIGHFLOWNEXT	0xf012
-#define USB_PRODUCT_ID_LEAKSHIELD   0xf014
+#define USB_PRODUCT_ID_LEAKSHIELD	0xf014
 
 enum kinds { aquaero, d5next, farbwerk, farbwerk360, octo, quadro, highflownext, leakshield };
 
@@ -52,7 +52,7 @@ static const char *const aqc_device_names[] = {
 #define SERIAL_PART_OFFSET		2
 
 #define CTRL_REPORT_ID			0x03
-#define AQUAERO_CTRL_REPORT_ID	0x0b
+#define AQUAERO_CTRL_REPORT_ID		0x0b
 
 /* The HID report that the official software always sends
  * after writing values, same for all devices, except Aquaero
@@ -74,7 +74,7 @@ static u8 aquaero_secondary_ctrl_report[] = {
 
 /* Register offsets for all Aquacomputer devices */
 #define AQC_TEMP_SENSOR_SIZE		0x02
-#define AQC_SENSOR_NA	0x7FFF
+#define AQC_SENSOR_NA			0x7FFF
 #define AQC_POWER_CYCLES		0x18
 
 /* Register offsets for most Aquacomputer devices */
@@ -186,16 +186,16 @@ static u16 quadro_ctrl_fan_offsets[] = { 0x36, 0x8b, 0xe0, 0x135 };
 #define HIGHFLOWNEXT_5V_VOLTAGE_USB	99
 
 /* Register offsets for Leakshield */
-#define LEAKSHIELD_PRESSURE_ADJUSTED 285
-#define LEAKSHIELD_TEMPERATURE_1 265
-#define LEAKSHIELD_TEMPERATURE_2 287
-#define LEAKSHIELD_PRESSURE_MIN 291
-#define LEAKSHIELD_PRESSURE_TARGET 293
-#define LEAKSHIELD_PRESSURE_MAX 295
-#define LEAKSHIELD_PUMP_RPM_IN 101
-#define LEAKSHIELD_FLOW_IN 111
-#define LEAKSHIELD_RESERVOIR_VOLUME 313
-#define LEAKSHIELD_RESERVOIR_FILLED 311
+#define LEAKSHIELD_PRESSURE_ADJUSTED	285
+#define LEAKSHIELD_TEMPERATURE_1	265
+#define LEAKSHIELD_TEMPERATURE_2	287
+#define LEAKSHIELD_PRESSURE_MIN		291
+#define LEAKSHIELD_PRESSURE_TARGET	293
+#define LEAKSHIELD_PRESSURE_MAX		295
+#define LEAKSHIELD_PUMP_RPM_IN		101
+#define LEAKSHIELD_FLOW_IN		111
+#define LEAKSHIELD_RESERVOIR_VOLUME	313
+#define LEAKSHIELD_RESERVOIR_FILLED	311
 /* USB bulk message to report pump RPM and flow rate for pressure calculations */
 static u8 leakshield_usb_report_template[] = {
 	0x4, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff,
@@ -204,10 +204,10 @@ static u8 leakshield_usb_report_template[] = {
 	    0x0, 0x0, 0x0,
 };
 
-#define LEAKSHIELD_USB_REPORT_LENGTH 49
-#define LEAKSHIELD_USB_REPORT_ENDPOINT 2
-#define LEAKSHIELD_USB_REPORT_PUMP_RPM_OFFSET 1
-#define LEAKSHIELD_USB_REPORT_FLOW_OFFSET 3
+#define LEAKSHIELD_USB_REPORT_LENGTH		49
+#define LEAKSHIELD_USB_REPORT_ENDPOINT		2
+#define LEAKSHIELD_USB_REPORT_PUMP_RPM_OFFSET	1
+#define LEAKSHIELD_USB_REPORT_FLOW_OFFSET	3
 
 /* Labels for D5 Next */
 static const char *const label_d5next_temp[] = {
@@ -620,7 +620,7 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 					return 0444;
 				break;
 			case leakshield:
-				/* Special case for user-provided leakshield sensors */
+				/* Special case for user-provided Leakshield sensors */
 				if (channel == 1 || channel == 2)
 					return 0644;
 				if (channel < 5)
@@ -643,7 +643,7 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 				return 0644;
 			fallthrough;
 		case hwmon_fan_target:
-			/* Special case for leakshield pressure sensor */
+			/* Special case for Leakshield pressure sensor */
 			if (priv->kind == leakshield && channel == 0)
 				return 0444;
 		default:
@@ -880,24 +880,22 @@ static int aqc_leakshield_send_report(struct aqc_data *priv, int channel, long v
 	u16 checksum;
 	u16 val16;
 
-	if (priv->kind != leakshield) {
-		return -EINVAL;
-	}
+	if (priv->kind != leakshield)
+		return -EOPNOTSUPP;
 
-	/* forbid out-of-bounds values */
+	/* Forbid out-of-bounds values */
 	if (val < -1 || val >= AQC_SENSOR_NA)
 		return -EINVAL;
 
 	if (val == -1)
-		/* map -1 to N/A value. note: the device will still remember the old value for 5 minutes */
+		/* Map -1 to N/A value. The device will still remember the old value for 5 minutes */
 		val16 = AQC_SENSOR_NA;
 	else
 		val16 = (u16) val;
 
 	/* leakshield_usb_report_template is loaded into priv->buffer during initialization.
-	   if userland provides e.g. pump RPM and then flow rate, we don't want the flow
-	   rate update to clear the pump RPM, so we just keep the values saved in the buffer */
-
+	 * Modify only the requested value (pump RPM or flow) without resetting the other one
+	 */
 	switch (channel) {
 	case 1:
 		put_unaligned_be16(val16, priv->buffer + LEAKSHIELD_USB_REPORT_PUMP_RPM_OFFSET);
@@ -921,9 +919,9 @@ static int aqc_leakshield_send_report(struct aqc_data *priv, int channel, long v
 	pipe = usb_sndbulkpipe(usb_dev, LEAKSHIELD_USB_REPORT_ENDPOINT);
 	ret = usb_bulk_msg(usb_dev, pipe, priv->buffer, priv->buffer_size, &actual_length, 1000);
 
-	if (actual_length != priv->buffer_size) {
+	if (actual_length != priv->buffer_size)
 		return -EIO;
-	}
+
 	return ret;
 }
 
@@ -1030,7 +1028,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				if (ret < 0)
 					return ret;
 
-				mdelay(50);	/* delay as device can not accept multiple reports in quick succession */
+				mdelay(50);	/* Delay as device can not accept multiple reports in quick succession */
 
 				/* Write preset number in fan control source */
 				ret =
@@ -1041,7 +1039,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				if (ret < 0)
 					return ret;
 
-				mdelay(50);	/* delay as device can not accept multiple reports in quick succession */
+				mdelay(50);	/* Delay again */
 
 				/* Set minimum power to 0 to allow the fan to turn off */
 				ret =
@@ -1294,18 +1292,17 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 		priv->speed_input_max[0] = get_unaligned_be16(data + LEAKSHIELD_PRESSURE_MAX) * 100;
 
 		priv->speed_input[1] = get_unaligned_be16(data + LEAKSHIELD_PUMP_RPM_IN);
-		if (priv->speed_input[1] == AQC_SENSOR_NA) {
+		if (priv->speed_input[1] == AQC_SENSOR_NA)
 			priv->speed_input[1] = -ENODATA;
-		}
+
 		priv->speed_input[2] = get_unaligned_be16(data + LEAKSHIELD_FLOW_IN);
-		if (priv->speed_input[2] == AQC_SENSOR_NA) {
+		if (priv->speed_input[2] == AQC_SENSOR_NA)
 			priv->speed_input[2] = -ENODATA;
-		}
 
 		priv->speed_input[3] = get_unaligned_be16(data + LEAKSHIELD_RESERVOIR_VOLUME);
 		priv->speed_input[4] = get_unaligned_be16(data + LEAKSHIELD_RESERVOIR_FILLED);
 
-		/* code above expects temperature values to be laid out sequentially, but they're not */
+		/* Second temp sensor is not positioned after the first one, read it here */
 		priv->temp_input[1] = get_unaligned_be16(data + LEAKSHIELD_TEMPERATURE_2) * 10;
 		break;
 	default:
@@ -1549,8 +1546,9 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->voltage_label = label_highflownext_voltage;
 		break;
 	case USB_PRODUCT_ID_LEAKSHIELD:
-		// Make sure this is the 1.1 device node which reports data
-		// and not the 1.2 device node which acts as a keyboard
+		/* Choose the right Leakshield device, because the other one acts
+		 * as a keyboard
+		 */
 		if (hdev->type != 2) {
 			ret = -ENODEV;
 			goto fail_and_close;
@@ -1566,8 +1564,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 		priv->speed_label = label_leakshield_fan_speed;
 
-		/* plus two bytes checksum */
-		priv->buffer_size = LEAKSHIELD_USB_REPORT_LENGTH + 2;
+		priv->buffer_size = LEAKSHIELD_USB_REPORT_LENGTH + 2;	/* Plus two bytes for checksum */
 		break;
 	default:
 		break;
@@ -1609,9 +1606,8 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		goto fail_and_close;
 	}
 
-	if (priv->kind == leakshield) {
+	if (priv->kind == leakshield)
 		memcpy(priv->buffer, leakshield_usb_report_template, LEAKSHIELD_USB_REPORT_LENGTH);
-	}
 
 	mutex_init(&priv->mutex);
 
