@@ -88,7 +88,7 @@ Fan 4 current:     22.00 mA
 
 ## Overview
 
-The following devices are supported by this driver:
+The following devices are supported by this driver, and from which kernel version (if applicable):
 
 |     Device     | Supported since kernel |                        Functionality                         | Microcontroller |
 | :------------: | :--------------------: | :----------------------------------------------------------: | :-------------: |
@@ -101,7 +101,6 @@ The following devices are supported by this driver:
 |  Aquaero 5/6   |     Available here     | Temperature sensors, fan sensors, direct fan PWM control, DC/PWM mode setting | MCF51JM128EVLK  |
 |  Leakshield    |     Available here     | Various sensors and setting parameters for higher accuracy | /  |
 
-The above table shows what devices this driver supports and starting from which kernel version, if applicable.
 Microcontrollers are noted for general reference, as this driver only communicates through HID reports and does not
 interact with the device CPU & electronics directly.
 
@@ -142,3 +141,7 @@ an older, possibly LTS kernel that does not have the functionality that this dri
 
 
 [#28]: https://github.com/aleksamagicka/aquacomputer_d5next-hwmon/issues/28
+
+## Contributing
+
+Contributions in form of reporting issues and sending bug fixes and new functionality are very welcome! Without contributors, this driver would never be as feature rich as it is today. Please use the issue tracker and PR functionality for any feedback and patches. Code contributions must follow the [Linux code style rules](https://www.kernel.org/doc/html/v4.10/process/coding-style.html).
