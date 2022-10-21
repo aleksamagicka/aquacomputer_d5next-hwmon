@@ -515,7 +515,7 @@ static int aqc_get_ctrl_val(struct aqc_data *priv, int offset, long *val, size_t
 
 	switch (size) {
 	case 16:
-		*val = (s16) get_unaligned_be16(priv->buffer + offset);
+		*val = (s16)get_unaligned_be16(priv->buffer + offset);
 		break;
 	case 8:
 		*val = priv->buffer[offset];
@@ -543,10 +543,10 @@ static int aqc_set_ctrl_val(struct aqc_data *priv, int offset, long val, size_t 
 
 	switch (size) {
 	case 16:
-		put_unaligned_be16((u16) val, priv->buffer + offset);
+		put_unaligned_be16((u16)val, priv->buffer + offset);
 		break;
 	case 8:
-		priv->buffer[offset] = (u8) val;
+		priv->buffer[offset] = (u8)val;
 		break;
 	default:
 		ret = -EINVAL;
@@ -616,7 +616,10 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 		case hwmon_fan_label:
 			switch (priv->kind) {
 			case highflownext:
-				/* Special case to support flow sensor, water quality and conductivity */
+				/*
+				 * Special case to support flow sensor, water quality
+				 * and conductivity
+				 */
 				if (channel < 3)
 					return 0444;
 				break;
@@ -889,10 +892,13 @@ static int aqc_leakshield_send_report(struct aqc_data *priv, int channel, long v
 		return -EINVAL;
 
 	if (val == -1)
-		/* Map -1 to N/A value. The device will still remember the old value for 5 minutes */
+		/*
+		 * Map -1 to N/A value. The device will still remember the
+		 * old value for 5 minutes
+		 */
 		val16 = AQC_SENSOR_NA;
 	else
-		val16 = (u16) val;
+		val16 = (u16)val;
 
 	/*
 	 * leakshield_usb_report_template is loaded into priv->buffer during initialization.
@@ -1031,7 +1037,11 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				if (ret < 0)
 					return ret;
 
-				mdelay(50);	/* Delay as device can not accept multiple reports in quick succession */
+				/*
+				 * Delay as device can not accept multiple
+				 * reports in quick succession
+				 */
+				mdelay(50);
 
 				/* Write preset number in fan control source */
 				ret =
@@ -1568,7 +1578,8 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 		priv->speed_label = label_leakshield_fan_speed;
 
-		priv->buffer_size = LEAKSHIELD_USB_REPORT_LENGTH + 2;	/* Plus two bytes for checksum */
+		/* Plus two bytes for checksum */
+		priv->buffer_size = LEAKSHIELD_USB_REPORT_LENGTH + 2;
 		break;
 	default:
 		break;
