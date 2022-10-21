@@ -2,7 +2,7 @@
 
 _Hwmon Linux kernel driver for monitoring and configuring Aquacomputer PC watercooling devices_
 
-[![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/6592/badge)](https://bestpractices.coreinfrastructure.org/projects/6592)
+[![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/6592/badge)](https://bestpractices.coreinfrastructure.org/projects/6592) [![checkpatch](https://github.com/aleksamagicka/aquacomputer_d5next-hwmon/actions/workflows/checkpatch.yaml/badge.svg)](https://github.com/aleksamagicka/aquacomputer_d5next-hwmon/actions/workflows/checkpatch.yaml) [![compile-driver](https://github.com/aleksamagicka/aquacomputer_d5next-hwmon/actions/workflows/compile-driver.yaml/badge.svg)](https://github.com/aleksamagicka/aquacomputer_d5next-hwmon/actions/workflows/compile-driver.yaml)
 
 ```shell
 [aleksa@fedora linux]$ sensors
