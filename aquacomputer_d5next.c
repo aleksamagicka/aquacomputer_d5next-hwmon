@@ -54,7 +54,8 @@ static const char *const aqc_device_names[] = {
 #define CTRL_REPORT_ID			0x03
 #define AQUAERO_CTRL_REPORT_ID		0x0b
 
-/* The HID report that the official software always sends
+/*
+ * The HID report that the official software always sends
  * after writing values, same for all devices, except Aquaero
  */
 #define SECONDARY_CTRL_REPORT_ID	0x02
@@ -893,7 +894,8 @@ static int aqc_leakshield_send_report(struct aqc_data *priv, int channel, long v
 	else
 		val16 = (u16) val;
 
-	/* leakshield_usb_report_template is loaded into priv->buffer during initialization.
+	/*
+	 * leakshield_usb_report_template is loaded into priv->buffer during initialization.
 	 * Modify only the requested value (pump RPM or flow) without resetting the other one
 	 */
 	switch (channel) {
@@ -990,7 +992,8 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				if (val == channel + 4)
 					return -EINVAL;
 
-				/* Check if fan we want to follow is following another one
+				/*
+				 * Check if fan we want to follow is following another one
 				 * currently. This is disallowed in the official software
 				 */
 				if (val > 3) {
@@ -1546,7 +1549,8 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->voltage_label = label_highflownext_voltage;
 		break;
 	case USB_PRODUCT_ID_LEAKSHIELD:
-		/* Choose the right Leakshield device, because the other one acts
+		/*
+		 * Choose the right Leakshield device, because the other one acts
 		 * as a keyboard
 		 */
 		if (hdev->type != 2) {
