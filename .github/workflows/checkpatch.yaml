@@ -1,0 +1,17 @@
+name: checkpatch
+
+on: [push, pull_request]
+
+jobs:
+  checkpatch:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          path: src
+      - uses: actions/checkout@v2
+        with:
+          repository: torvalds/linux
+          path: linux
+      - run: make KDIR="${{ github.workspace }}/linux" checkpatch
+        working-directory: src
