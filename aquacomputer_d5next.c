@@ -204,6 +204,7 @@ static u8 leakshield_usb_report_template[] = {
 	    0x7f, 0xff, 0x7f, 0xff, 0x3, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
 	    0x0, 0x0, 0x0,
 };
+#define LEAKSHIELD_USB_REPORT_FLOW_UNIT_OFFSET 34
 
 #define LEAKSHIELD_USB_REPORT_LENGTH		49
 #define LEAKSHIELD_USB_REPORT_ENDPOINT		2
@@ -909,6 +910,7 @@ static int aqc_leakshield_send_report(struct aqc_data *priv, int channel, long v
 		put_unaligned_be16(val16, priv->buffer + LEAKSHIELD_USB_REPORT_PUMP_RPM_OFFSET);
 		break;
 	case 2:
+		priv->buffer[LEAKSHIELD_USB_REPORT_FLOW_UNIT_OFFSET] = (val16 == AQC_SENSOR_NA) ? 0 : 0x0C;
 		put_unaligned_be16(val16, priv->buffer + LEAKSHIELD_USB_REPORT_FLOW_OFFSET);
 		break;
 	default:
