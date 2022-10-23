@@ -171,6 +171,7 @@ static u16 octo_ctrl_fan_offsets[] = { 0x5A, 0xAF, 0x104, 0x159, 0x1AE, 0x203, 0
 #define QUADRO_CTRL_REPORT_SIZE		0x3c1
 #define QUADRO_FLOW_SENSOR_OFFSET	0x6e
 #define QUADRO_TEMP_CTRL_OFFSET		0xa
+#define QUADRO_CTRL_FLOW_PULSES_OFFSET	0x6
 static u16 quadro_sensor_fan_offsets[] = { 0x70, 0x7D, 0x8A, 0x97 };
 
 /* Fan speed registers in Quadro control report (from 0-100%) */
@@ -409,6 +410,7 @@ struct aqc_data {
 	u16 temp_ctrl_offset;
 	u16 power_cycle_count_offset;
 	u8 flow_sensor_offset;
+	u8 flow_pulses_ctrl_offset;
 	struct aqc_fan_structure_offsets *fan_structure;
 
 	u8 serial_number_start_offset;
@@ -650,6 +652,11 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 			/* Special case for Leakshield pressure sensor */
 			if (priv->kind == leakshield && channel == 0)
 				return 0444;
+			break;
+		case hwmon_fan_pulses:
+			/* Special case for flow sensor */
+			if (priv->kind == quadro && channel == priv->num_fans)
+				return 0644;
 		default:
 			break;
 		}
@@ -762,6 +769,11 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			break;
 		case hwmon_fan_target:
 			*val = priv->speed_input_target[channel];
+			break;
+		case hwmon_fan_pulses:
+			ret = aqc_get_ctrl_val(priv, priv->flow_pulses_ctrl_offset, val, 16);
+			if (ret < 0)
+				return ret;
 			break;
 		default:
 			return -EOPNOTSUPP;
@@ -977,6 +989,12 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			break;
 		case hwmon_fan_input:
 			return aqc_leakshield_send_report(priv, channel, val);
+		case hwmon_fan_pulses:
+			val = clamp_val(val, 10, 1000);
+			ret = aqc_set_ctrl_val(priv, priv->flow_pulses_ctrl_offset, val, 16);
+			if (ret < 0)
+				return ret;
+			break;
 		default:
 			return -EOPNOTSUPP;
 		}
@@ -1160,7 +1178,7 @@ static const struct hwmon_channel_info *aqc_info[] = {
 			   HWMON_F_INPUT | HWMON_F_LABEL | HWMON_F_MIN | HWMON_F_MAX,
 			   HWMON_F_INPUT | HWMON_F_LABEL | HWMON_F_MIN | HWMON_F_MAX,
 			   HWMON_F_INPUT | HWMON_F_LABEL | HWMON_F_MIN | HWMON_F_MAX,
-			   HWMON_F_INPUT | HWMON_F_LABEL,
+			   HWMON_F_INPUT | HWMON_F_LABEL | HWMON_F_PULSES,
 			   HWMON_F_INPUT | HWMON_F_LABEL,
 			   HWMON_F_INPUT | HWMON_F_LABEL,
 			   HWMON_F_INPUT | HWMON_F_LABEL),
@@ -1537,6 +1555,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->buffer_size = QUADRO_CTRL_REPORT_SIZE;
 		priv->flow_sensor_offset = QUADRO_FLOW_SENSOR_OFFSET;
 		priv->temp_ctrl_offset = QUADRO_TEMP_CTRL_OFFSET;
+		priv->flow_pulses_ctrl_offset = QUADRO_CTRL_FLOW_PULSES_OFFSET;
 
 		priv->temp_label = label_temp_sensors;
 		priv->virtual_temp_label = label_virtual_temp_sensors;
