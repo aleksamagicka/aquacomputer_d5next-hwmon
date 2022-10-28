@@ -537,15 +537,18 @@ unlock_and_return:
 }
 
 /* Refreshes the control buffer, updates value at offset and writes buffer to device */
-static int aqc_set_ctrl_val(struct aqc_data *priv, int offset, long val, size_t size)
+static int aqc_set_ctrl_val(struct aqc_data *priv, int offset, long val, size_t size,
+			    bool read_dev, bool write_dev)
 {
 	int ret;
 
 	mutex_lock(&priv->mutex);
 
-	ret = aqc_get_ctrl_data(priv);
-	if (ret < 0)
-		goto unlock_and_return;
+	if (read_dev) {
+		ret = aqc_get_ctrl_data(priv);
+		if (ret < 0)
+			goto unlock_and_return;
+	}
 
 	switch (size) {
 	case 16:
@@ -559,7 +562,8 @@ static int aqc_set_ctrl_val(struct aqc_data *priv, int offset, long val, size_t 
 		goto unlock_and_return;
 	}
 
-	ret = aqc_send_ctrl_data(priv);
+	if (write_dev)
+		ret = aqc_send_ctrl_data(priv);
 
 unlock_and_return:
 	mutex_unlock(&priv->mutex);
@@ -969,7 +973,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			ret =
 			    aqc_set_ctrl_val(priv,
 					     priv->temp_ctrl_offset +
-					     channel * AQC_TEMP_SENSOR_SIZE, val, 16);
+					     channel * AQC_TEMP_SENSOR_SIZE, val, 16, true, true);
 			if (ret < 0)
 				return ret;
 			break;
@@ -983,7 +987,8 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			val = clamp_val(val, 0, 15000);
 			ret = aqc_set_ctrl_val(priv,
 					       priv->fan_ctrl_offsets[channel] +
-					       AQUAERO_FAN_CTRL_MIN_RPM_OFFSET, val, 16);
+					       AQUAERO_FAN_CTRL_MIN_RPM_OFFSET, val,
+					       16, true, true);
 			if (ret < 0)
 				return ret;
 			break;
@@ -991,7 +996,8 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			val = clamp_val(val, 0, 15000);
 			ret = aqc_set_ctrl_val(priv,
 					       priv->fan_ctrl_offsets[channel] +
-					       AQUAERO_FAN_CTRL_MAX_RPM_OFFSET, val, 16);
+					       AQUAERO_FAN_CTRL_MAX_RPM_OFFSET, val,
+					       16, true, true);
 			if (ret < 0)
 				return ret;
 			break;
@@ -999,7 +1005,8 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			return aqc_leakshield_send_report(priv, channel, val);
 		case hwmon_fan_pulses:
 			val = clamp_val(val, 10, 1000);
-			ret = aqc_set_ctrl_val(priv, priv->flow_pulses_ctrl_offset, val, 16);
+			ret = aqc_set_ctrl_val(priv, priv->flow_pulses_ctrl_offset, val,
+					       16, true, true);
 			if (ret < 0)
 				return ret;
 			break;
@@ -1045,7 +1052,8 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			}
 
 			/* Decrement to convert from hwmon to aqc */
-			ret = aqc_set_ctrl_val(priv, priv->fan_ctrl_offsets[channel], val - 1, 8);
+			ret = aqc_set_ctrl_val(priv, priv->fan_ctrl_offsets[channel], val - 1,
+					       8, true, true);
 			if (ret < 0)
 				return ret;
 			break;
@@ -1059,39 +1067,34 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				    aqc_set_ctrl_val(priv,
 						     AQUAERO_CTRL_PRESET_START +
 						     channel * AQUAERO_CTRL_PRESET_SIZE, pwm_value,
-						     16);
+						     16, true, false);
 				if (ret < 0)
 					return ret;
-
-				/*
-				 * Delay as device can not accept multiple
-				 * reports in quick succession
-				 */
-				mdelay(50);
 
 				/* Write preset number in fan control source */
 				ret =
 				    aqc_set_ctrl_val(priv,
 						     priv->fan_ctrl_offsets[channel] +
 						     AQUAERO_FAN_CTRL_SRC_OFFSET,
-						     AQUAERO_CTRL_PRESET_ID + channel, 16);
+						     AQUAERO_CTRL_PRESET_ID + channel,
+						     16, false, false);
 				if (ret < 0)
 					return ret;
-
-				mdelay(50);	/* Delay again */
 
 				/* Set minimum power to 0 to allow the fan to turn off */
 				ret =
 				    aqc_set_ctrl_val(priv,
 						     priv->fan_ctrl_offsets[channel] +
-						     AQUAERO_FAN_CTRL_MIN_PWR_OFFSET, 0, 16);
+						     AQUAERO_FAN_CTRL_MIN_PWR_OFFSET, 0,
+						     16, false,  true);
 				if (ret < 0)
 					return ret;
 			} else {
 				ret =
 				    aqc_set_ctrl_val(priv,
 						     priv->fan_ctrl_offsets[channel] +
-						     AQC_FAN_CTRL_PWM_OFFSET, pwm_value, 16);
+						     AQC_FAN_CTRL_PWM_OFFSET, pwm_value,
+						     16, true, true);
 				if (ret < 0)
 					return ret;
 			}
@@ -1120,7 +1123,8 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			ret =
 			    aqc_set_ctrl_val(priv,
 					     priv->fan_ctrl_offsets[channel] +
-					     AQC_FAN_CTRL_TEMP_SELECT_OFFSET, temp_sensor, 16);
+					     AQC_FAN_CTRL_TEMP_SELECT_OFFSET, temp_sensor,
+					     16, true, true);
 			if (ret < 0)
 				return ret;
 			break;
@@ -1137,7 +1141,8 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			}
 			ret = aqc_set_ctrl_val(priv,
 					       priv->fan_ctrl_offsets[channel] +
-					       AQUAERO_FAN_CTRL_MODE_OFFSET, ctrl_mode, 8);
+					       AQUAERO_FAN_CTRL_MODE_OFFSET, ctrl_mode,
+					       8, true, true);
 			if (ret < 0)
 				return ret;
 		default:
