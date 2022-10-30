@@ -31,8 +31,10 @@
 #define USB_PRODUCT_ID_OCTO		0xf011
 #define USB_PRODUCT_ID_HIGHFLOWNEXT	0xf012
 #define USB_PRODUCT_ID_LEAKSHIELD	0xf014
+#define USB_PRODUCT_ID_AQUASTREAMXT	0xf0b6
 
-enum kinds { aquaero, d5next, farbwerk, farbwerk360, octo, quadro, highflownext, leakshield };
+enum kinds { aquaero, d5next, farbwerk, farbwerk360, octo, quadro, highflownext, leakshield,
+	     aquastreamxt };
 
 static const char *const aqc_device_names[] = {
 	[aquaero] = "aquaero",
@@ -43,6 +45,7 @@ static const char *const aqc_device_names[] = {
 	[quadro] = "quadro",
 	[highflownext] = "highflownext",
 	[leakshield] = "leakshield",
+	[aquastreamxt] = "aquastreamxt",
 };
 
 #define DRIVER_NAME			"aquacomputer_d5next"
@@ -72,6 +75,9 @@ static u8 secondary_ctrl_report[] = {
 static u8 aquaero_secondary_ctrl_report[] = {
 	0x06, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00
 };
+
+/* Sensor report ID for legacy devices */
+#define AQC_LEGACY_STATUS_REPORT_ID	0x04
 
 /* Register offsets for all Aquacomputer devices */
 #define AQC_TEMP_SENSOR_SIZE		0x02
@@ -214,6 +220,13 @@ static u8 leakshield_usb_report_template[] = {
 #define LEAKSHIELD_USB_REPORT_FLOW_UNIT_OFFSET	34
 #define LEAKSHIELD_USB_REPORT_UNIT_RPM		0x03
 #define LEAKSHIELD_USB_REPORT_UNIT_DL_PER_H	0x0C
+
+/* Register offsets for Aquastream XT */
+#define AQUASTREAMXT_SERIAL_START	0x3a
+#define AQUASTREAMXT_FIRMWARE_VERSION	0x32
+#define AQUASTREAMXT_NUM_SENSORS	3
+#define AQUASTREAMXT_SENSOR_START	0xe
+#define AQUASTREAMXT_SENSOR_REPORT_SIZE	0xaa
 
 /* Labels for D5 Next */
 static const char *const label_d5next_temp[] = {
@@ -360,6 +373,13 @@ static const char *const label_leakshield_fan_speed[] = {
 	"User-Provided Flow [dL/h]",
 	"Reservoir Volume [ml]",
 	"Reservoir Filled [ml]",
+};
+
+/* Labels for AquastreamXT */
+static const char *const label_temp_sensors_aquastreamxt[] = {
+	"Fan IC temp",
+	"External sensor",
+	"Coolant temp"
 };
 
 struct aqc_fan_structure_offsets {
@@ -707,14 +727,52 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 	return 0;
 }
 
+static int aqc_legacy_read(struct aqc_data *priv)
+{
+	int ret, i, sensor_value;
+
+	mutex_lock(&priv->mutex);
+
+	memset(priv->buffer, 0x00, priv->buffer_size);
+	ret = hid_hw_raw_request(priv->hdev, AQC_LEGACY_STATUS_REPORT_ID, priv->buffer,
+				 priv->buffer_size, HID_FEATURE_REPORT, HID_REQ_GET_REPORT);
+	if (ret < 0)
+		goto unlock_and_return;
+
+	/* Info provided with every report */
+	priv->serial_number[0] = get_unaligned_le16(priv->buffer +
+						    priv->serial_number_start_offset);
+	priv->firmware_version = get_unaligned_le16(priv->buffer + priv->firmware_version_offset);
+
+	/* Temperature sensor readings */
+	for (i = 0; i < priv->num_temp_sensors; i++) {
+		sensor_value = get_unaligned_be16(priv->buffer + priv->temp_sensor_start_offset +
+						  i * AQC_TEMP_SENSOR_SIZE);
+		if (sensor_value == AQC_SENSOR_NA)
+			priv->temp_input[i] = -ENODATA;
+		else
+			priv->temp_input[i] = sensor_value * 10;
+	}
+
+unlock_and_return:
+	mutex_unlock(&priv->mutex);
+	return ret;
+}
+
 static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		    int channel, long *val)
 {
 	int ret;
 	struct aqc_data *priv = dev_get_drvdata(dev);
 
-	if (time_after(jiffies, priv->updated + STATUS_UPDATE_INTERVAL))
-		return -ENODATA;
+	if (time_after(jiffies, priv->updated + STATUS_UPDATE_INTERVAL)) {
+		if (priv->kind == aquastreamxt) {
+			aqc_legacy_read(priv);
+			priv->updated = jiffies;
+		} else {
+			return -ENODATA;
+		}
+	}
 
 	switch (type) {
 	case hwmon_temp:
@@ -1608,6 +1666,16 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		/* Plus two bytes for checksum */
 		priv->buffer_size = LEAKSHIELD_USB_REPORT_LENGTH + 2;
 		break;
+	case USB_PRODUCT_ID_AQUASTREAMXT:
+		priv->kind = aquastreamxt;
+
+		priv->num_fans = 0;
+		priv->num_temp_sensors = AQUASTREAMXT_NUM_SENSORS;
+		priv->temp_sensor_start_offset = AQUASTREAMXT_SENSOR_START;
+		priv->buffer_size = AQUASTREAMXT_SENSOR_REPORT_SIZE;
+
+		priv->temp_label = label_temp_sensors_aquastreamxt;
+		break;
 	default:
 		break;
 	}
@@ -1622,6 +1690,9 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->secondary_ctrl_report_id = AQUAERO_SECONDARY_CTRL_REPORT_ID;
 		priv->secondary_ctrl_report_size = AQUAERO_SECONDARY_CTRL_REPORT_SIZE;
 		priv->secondary_ctrl_report = aquaero_secondary_ctrl_report;
+	} else if (priv->kind == aquastreamxt) {
+		priv->serial_number_start_offset = AQUASTREAMXT_SERIAL_START;
+		priv->firmware_version_offset = AQUASTREAMXT_FIRMWARE_VERSION;
 	} else {
 		priv->serial_number_start_offset = AQC_SERIAL_START;
 		priv->firmware_version_offset = AQC_FIRMWARE_VERSION;
@@ -1692,6 +1763,7 @@ static const struct hid_device_id aqc_table[] = {
 	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_QUADRO) },
 	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_HIGHFLOWNEXT) },
 	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_LEAKSHIELD) },
+	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_AQUASTREAMXT) },
 	{ }
 };
 
