@@ -99,10 +99,10 @@ The following devices are supported by this driver, and from which kernel versio
 |     Quadro     |          6.0           |  Temperature, flow and fan sensors, direct fan PWM control   |  MCF51JU128VHS  |
 | High Flow Next |          6.1           |                       Various sensors                        |        /        |
 |  Aquaero 5/6   |     Available here     | Temperature sensors, fan sensors, direct fan PWM control, DC/PWM mode setting | MCF51JM128EVLK  |
-|  Leakshield    |     Available here     | Various sensors and setting parameters for higher accuracy | /  |
+|   Leakshield   |     Available here     |  Various sensors and setting parameters for higher accuracy  |        /        |
 | Aquastream XT  |     Available here     |                     Temperature sensors                      |        /        |
-Microcontrollers are noted for general reference, as this driver only communicates through HID reports and does not
-interact with the device CPU & electronics directly.
+
+Microcontrollers are noted for general reference, as this driver only communicates through HID reports and does not interact with the device CPU & electronics directly.
 
 Being a standard `hwmon` driver, it provides readings via `sysfs`, which are easily accessible through `lm-sensors` as usual.
 
