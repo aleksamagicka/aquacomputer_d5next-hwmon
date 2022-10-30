@@ -100,7 +100,7 @@ The following devices are supported by this driver, and from which kernel versio
 | High Flow Next |          6.1           |                       Various sensors                        |        /        |
 |  Aquaero 5/6   |     Available here     | Temperature sensors, fan sensors, direct fan PWM control, DC/PWM mode setting | MCF51JM128EVLK  |
 |  Leakshield    |     Available here     | Various sensors and setting parameters for higher accuracy | /  |
-
+| Aquastream XT  |     Available here     |                     Temperature sensors                      |        /        |
 Microcontrollers are noted for general reference, as this driver only communicates through HID reports and does not
 interact with the device CPU & electronics directly.
 
