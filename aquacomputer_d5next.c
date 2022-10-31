@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0+
 /*
  * hwmon driver for Aquacomputer devices (D5 Next, Farbwerk, Farbwerk 360, Octo,
- * Quadro, High Flow Next)
+ * Quadro, High Flow Next, Aquaero, Leakshield, Aquastream XT)
  *
  * Aquacomputer devices send HID reports (with ID 0x01) every second to report
- * sensor values.
+ * sensor values, with the exception of Aquastream XT.
  *
  * Copyright 2021 Aleksa Savic <savicaleksa83@gmail.com>
  * Copyright 2022 Jack Doan <me@jackdoan.com>
@@ -207,19 +207,19 @@ static u16 quadro_ctrl_fan_offsets[] = { 0x36, 0x8b, 0xe0, 0x135 };
 /* USB bulk message to report pump RPM and flow rate for pressure calculations */
 static u8 leakshield_usb_report_template[] = {
 	0x4, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff,
-	    0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff,
-	    0x7f, 0xff, 0x7f, 0xff, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
-	    0x0, 0x0, 0x0,
+	0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff,
+	0x7f, 0xff, 0x7f, 0xff, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
+	0x0, 0x0, 0x0, 0x0
 };
 
-#define LEAKSHIELD_USB_REPORT_LENGTH		49
-#define LEAKSHIELD_USB_REPORT_ENDPOINT		2
-#define LEAKSHIELD_USB_REPORT_PUMP_RPM_OFFSET	1
+#define LEAKSHIELD_USB_REPORT_LENGTH			49
+#define LEAKSHIELD_USB_REPORT_ENDPOINT			2
+#define LEAKSHIELD_USB_REPORT_PUMP_RPM_OFFSET		1
 #define LEAKSHIELD_USB_REPORT_FLOW_RPM_UNIT_OFFSET	33
-#define LEAKSHIELD_USB_REPORT_FLOW_OFFSET	3
-#define LEAKSHIELD_USB_REPORT_FLOW_UNIT_OFFSET	34
-#define LEAKSHIELD_USB_REPORT_UNIT_RPM		0x03
-#define LEAKSHIELD_USB_REPORT_UNIT_DL_PER_H	0x0C
+#define LEAKSHIELD_USB_REPORT_FLOW_OFFSET		3
+#define LEAKSHIELD_USB_REPORT_FLOW_UNIT_OFFSET		34
+#define LEAKSHIELD_USB_REPORT_UNIT_RPM			0x03
+#define LEAKSHIELD_USB_REPORT_UNIT_DL_PER_H		0x0C
 
 /* Register offsets for Aquastream XT */
 #define AQUASTREAMXT_SERIAL_START	0x3a
