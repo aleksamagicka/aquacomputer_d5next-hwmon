@@ -12,7 +12,6 @@
 
 #include <linux/crc16.h>
 #include <linux/debugfs.h>
-#include <linux/delay.h>
 #include <linux/hid.h>
 #include <linux/hwmon.h>
 #include <linux/jiffies.h>
@@ -556,6 +555,20 @@ unlock_and_return:
 	return ret;
 }
 
+static int aqc_set_buffer_val(u8 buffer[], int offset, long val, size_t size)
+{
+	switch (size) {
+	case 16:
+		put_unaligned_be16((u16)val, buffer + offset);
+		return 0;
+	case 8:
+		buffer[offset] = (u8)val;
+		return 0;
+	default:
+		return -EINVAL;
+	}
+}
+
 /* Refreshes the control buffer, updates value at offset and writes buffer to device */
 static int aqc_set_ctrl_val(struct aqc_data *priv, int offset, long val, size_t size)
 {
@@ -567,16 +580,33 @@ static int aqc_set_ctrl_val(struct aqc_data *priv, int offset, long val, size_t 
 	if (ret < 0)
 		goto unlock_and_return;
 
-	switch (size) {
-	case 16:
-		put_unaligned_be16((u16)val, priv->buffer + offset);
-		break;
-	case 8:
-		priv->buffer[offset] = (u8)val;
-		break;
-	default:
-		ret = -EINVAL;
+	ret = aqc_set_buffer_val(priv->buffer, offset, val, size);
+	if (ret < 0)
 		goto unlock_and_return;
+
+	ret = aqc_send_ctrl_data(priv);
+
+unlock_and_return:
+	mutex_unlock(&priv->mutex);
+	return ret;
+}
+
+/* Refreshes the control buffer, updates values at offsets and writes buffer to device */
+static int aqc_set_ctrl_vals(struct aqc_data *priv, int offset[], long val[],
+			     size_t size[], int len)
+{
+	int ret, i;
+
+	mutex_lock(&priv->mutex);
+
+	ret = aqc_get_ctrl_data(priv);
+	if (ret < 0)
+		goto unlock_and_return;
+
+	for (i = 0; i < len; i++) {
+		ret = aqc_set_buffer_val(priv->buffer, offset[i], val[i], size[i]);
+		if (ret < 0)
+			goto unlock_and_return;
 	}
 
 	ret = aqc_send_ctrl_data(priv);
@@ -1016,6 +1046,9 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 {
 	int ret, pwm_value, temp_sensor;
 	long ctrl_mode;
+	int offset[3];
+	long value[3];
+	size_t size[3];
 	struct aqc_data *priv = dev_get_drvdata(dev);
 
 	switch (type) {
@@ -1113,36 +1146,24 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				return pwm_value;
 			if (priv->kind == aquaero) {
 				/* Write pwm value to preset corresponding to the channel */
-				ret =
-				    aqc_set_ctrl_val(priv,
-						     AQUAERO_CTRL_PRESET_START +
-						     channel * AQUAERO_CTRL_PRESET_SIZE, pwm_value,
-						     16);
-				if (ret < 0)
-					return ret;
-
-				/*
-				 * Delay as device can not accept multiple
-				 * reports in quick succession
-				 */
-				mdelay(50);
+				offset[0] = AQUAERO_CTRL_PRESET_START +
+					    channel * AQUAERO_CTRL_PRESET_SIZE;
+				value[0] = pwm_value;
+				size[0] = 16;
 
 				/* Write preset number in fan control source */
-				ret =
-				    aqc_set_ctrl_val(priv,
-						     priv->fan_ctrl_offsets[channel] +
-						     AQUAERO_FAN_CTRL_SRC_OFFSET,
-						     AQUAERO_CTRL_PRESET_ID + channel, 16);
-				if (ret < 0)
-					return ret;
-
-				mdelay(50);	/* Delay again */
+				offset[1] = priv->fan_ctrl_offsets[channel] +
+					    AQUAERO_FAN_CTRL_SRC_OFFSET;
+				value[1] = AQUAERO_CTRL_PRESET_ID + channel;
+				size[1] = 16;
 
 				/* Set minimum power to 0 to allow the fan to turn off */
-				ret =
-				    aqc_set_ctrl_val(priv,
-						     priv->fan_ctrl_offsets[channel] +
-						     AQUAERO_FAN_CTRL_MIN_PWR_OFFSET, 0, 16);
+				offset[2] = priv->fan_ctrl_offsets[channel] +
+					    AQUAERO_FAN_CTRL_MIN_PWR_OFFSET;
+				value[2] = 0;
+				size[2] = 16;
+
+				ret = aqc_set_ctrl_vals(priv, offset, value, size, 3);
 				if (ret < 0)
 					return ret;
 			} else {
