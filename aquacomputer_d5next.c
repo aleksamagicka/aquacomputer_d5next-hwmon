@@ -1046,9 +1046,10 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 {
 	int ret, pwm_value, temp_sensor;
 	long ctrl_mode;
-	int offset[3];
-	long value[3];
-	size_t size[3];
+	/* Arrays for setting multiple values at once in the control report */
+	int ctrl_values_offsets[3];
+	long ctrl_values[3];
+	size_t ctrl_values_sizes[3];
 	struct aqc_data *priv = dev_get_drvdata(dev);
 
 	switch (type) {
@@ -1146,24 +1147,25 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				return pwm_value;
 			if (priv->kind == aquaero) {
 				/* Write pwm value to preset corresponding to the channel */
-				offset[0] = AQUAERO_CTRL_PRESET_START +
-					    channel * AQUAERO_CTRL_PRESET_SIZE;
-				value[0] = pwm_value;
-				size[0] = 16;
+				ctrl_values_offsets[0] = AQUAERO_CTRL_PRESET_START +
+							 channel * AQUAERO_CTRL_PRESET_SIZE;
+				ctrl_values[0] = pwm_value;
+				ctrl_values_sizes[0] = 16;
 
 				/* Write preset number in fan control source */
-				offset[1] = priv->fan_ctrl_offsets[channel] +
-					    AQUAERO_FAN_CTRL_SRC_OFFSET;
-				value[1] = AQUAERO_CTRL_PRESET_ID + channel;
-				size[1] = 16;
+				ctrl_values_offsets[1] = priv->fan_ctrl_offsets[channel] +
+							 AQUAERO_FAN_CTRL_SRC_OFFSET;
+				ctrl_values[1] = AQUAERO_CTRL_PRESET_ID + channel;
+				ctrl_values_sizes[1] = 16;
 
 				/* Set minimum power to 0 to allow the fan to turn off */
-				offset[2] = priv->fan_ctrl_offsets[channel] +
-					    AQUAERO_FAN_CTRL_MIN_PWR_OFFSET;
-				value[2] = 0;
-				size[2] = 16;
+				ctrl_values_offsets[2] = priv->fan_ctrl_offsets[channel] +
+							 AQUAERO_FAN_CTRL_MIN_PWR_OFFSET;
+				ctrl_values[2] = 0;
+				ctrl_values_sizes[2] = 16;
 
-				ret = aqc_set_ctrl_vals(priv, offset, value, size, 3);
+				ret = aqc_set_ctrl_vals(priv, ctrl_values_offsets, ctrl_values,
+							ctrl_values_sizes, 3);
 				if (ret < 0)
 					return ret;
 			} else {
