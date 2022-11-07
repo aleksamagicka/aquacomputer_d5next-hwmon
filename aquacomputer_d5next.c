@@ -555,7 +555,7 @@ unlock_and_return:
 	return ret;
 }
 
-static int aqc_set_buffer_val(u8 buffer[], int offset, long val, size_t size)
+static int aqc_set_buffer_val(u8 *buffer, int offset, long val, size_t size)
 {
 	switch (size) {
 	case 16:
@@ -569,31 +569,9 @@ static int aqc_set_buffer_val(u8 buffer[], int offset, long val, size_t size)
 	}
 }
 
-/* Refreshes the control buffer, updates value at offset and writes buffer to device */
-static int aqc_set_ctrl_val(struct aqc_data *priv, int offset, long val, size_t size)
-{
-	int ret;
-
-	mutex_lock(&priv->mutex);
-
-	ret = aqc_get_ctrl_data(priv);
-	if (ret < 0)
-		goto unlock_and_return;
-
-	ret = aqc_set_buffer_val(priv->buffer, offset, val, size);
-	if (ret < 0)
-		goto unlock_and_return;
-
-	ret = aqc_send_ctrl_data(priv);
-
-unlock_and_return:
-	mutex_unlock(&priv->mutex);
-	return ret;
-}
-
 /* Refreshes the control buffer, updates values at offsets and writes buffer to device */
-static int aqc_set_ctrl_vals(struct aqc_data *priv, int offset[], long val[],
-			     size_t size[], int len)
+static int aqc_set_ctrl_vals(struct aqc_data *priv, int *offsets, long *values,
+			     size_t *sizes, int len)
 {
 	int ret, i;
 
@@ -604,7 +582,7 @@ static int aqc_set_ctrl_vals(struct aqc_data *priv, int offset[], long val[],
 		goto unlock_and_return;
 
 	for (i = 0; i < len; i++) {
-		ret = aqc_set_buffer_val(priv->buffer, offset[i], val[i], size[i]);
+		ret = aqc_set_buffer_val(priv->buffer, offsets[i], values[i], sizes[i]);
 		if (ret < 0)
 			goto unlock_and_return;
 	}
@@ -614,6 +592,12 @@ static int aqc_set_ctrl_vals(struct aqc_data *priv, int offset[], long val[],
 unlock_and_return:
 	mutex_unlock(&priv->mutex);
 	return ret;
+}
+
+/* Refreshes the control buffer, updates value at offset and writes buffer to device */
+static int aqc_set_ctrl_val(struct aqc_data *priv, int offset, long val, size_t size)
+{
+	return aqc_set_ctrl_vals(priv, &offset, &val, &size, 1);
 }
 
 static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u32 attr, int channel)
