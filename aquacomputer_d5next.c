@@ -449,7 +449,7 @@ struct aqc_data {
 
 	/* Sensor values */
 	s32 temp_input[20];	/* Max 4 physical and 16 virtual */
-	u32 speed_input[8];
+	s32 speed_input[8];
 	u32 speed_input_min[8];
 	u32 speed_input_target[8];
 	u32 speed_input_max[8];
@@ -1382,7 +1382,7 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 		break;
 	case leakshield:
 		priv->speed_input[0] =
-		    get_unaligned_be16(data + LEAKSHIELD_PRESSURE_ADJUSTED) * 100;
+		    ((s16)get_unaligned_be16(data + LEAKSHIELD_PRESSURE_ADJUSTED)) * 100;
 		priv->speed_input_min[0] = get_unaligned_be16(data + LEAKSHIELD_PRESSURE_MIN) * 100;
 		priv->speed_input_target[0] =
 		    get_unaligned_be16(data + LEAKSHIELD_PRESSURE_TARGET) * 100;
