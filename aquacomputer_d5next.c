@@ -223,9 +223,13 @@ static u8 leakshield_usb_report_template[] = {
 /* Register offsets for Aquastream XT */
 #define AQUASTREAMXT_SERIAL_START	0x3a
 #define AQUASTREAMXT_FIRMWARE_VERSION	0x32
+#define AQUASTREAMXT_NUM_FANS		2
 #define AQUASTREAMXT_NUM_SENSORS	3
 #define AQUASTREAMXT_SENSOR_START	0xe
-#define AQUASTREAMXT_SENSOR_REPORT_SIZE	0xaa
+#define AQUASTREAMXT_SENSOR_REPORT_SIZE	0x42
+#define AQUASTREAMXT_FAN_VOLTAGE_OFFSET	0x7
+#define AQUASTREAMXT_PUMP_CURR_OFFSET	0xb
+static u16 aquastreamxt_sensor_fan_offsets[] = { 0x13, 0x1b };
 
 /* Labels for D5 Next */
 static const char *const label_d5next_temp[] = {
@@ -482,6 +486,22 @@ static int aqc_pwm_to_percent(long val)
 	return DIV_ROUND_CLOSEST(val * 100 * 100, 255);
 }
 
+/* Converts raw value for Aquastream XT pump speed to rpm*/
+static int aquastream_convert_pump_rpm(s16 val)
+{
+	if (val > 0)
+		return DIV_ROUND_CLOSEST(45000000, val);
+	return 0;
+}
+
+/* Converts raw value for Aquastream XT fan speed to rpm*/
+static int aquastream_convert_fan_rpm(s16 val)
+{
+	if (val > 300)
+		return DIV_ROUND_CLOSEST(5646000, val);
+	return 0;
+}
+
 /* Expects the mutex to be locked */
 static int aqc_get_ctrl_data(struct aqc_data *priv)
 {
@@ -630,7 +650,8 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 		break;
 	case hwmon_pwm:
 		if (priv->fan_ctrl_offsets && channel < priv->num_fans) {
-			if (priv->kind == aquaero) {
+			switch (priv->kind) {
+			case aquaero:
 				switch (attr) {
 				case hwmon_pwm_input:
 				case hwmon_pwm_mode:
@@ -638,7 +659,10 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 				default:
 					break;
 				}
-			} else {
+				break;
+			case aquastreamxt:
+				break;
+			default:
 				switch (attr) {
 				case hwmon_pwm_enable:
 				case hwmon_pwm_input:
@@ -647,6 +671,7 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 				default:
 					break;
 				}
+				break;
 			}
 		}
 		break;
@@ -706,6 +731,8 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 			if (channel == 0)
 				return 0444;
 			break;
+		case aquastreamxt:
+			break;
 		default:
 			if (channel < priv->num_fans)
 				return 0444;
@@ -713,8 +740,17 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 		}
 		break;
 	case hwmon_curr:
-		if (channel < priv->num_fans)
-			return 0444;
+		switch (priv->kind) {
+		case aquastreamxt:
+			/* Current only reported for pump */
+			if (channel == 0)
+				return 0444;
+			break;
+		default:
+			if (channel < priv->num_fans)
+				return 0444;
+			break;
+		}
 		break;
 	case hwmon_in:
 		switch (priv->kind) {
@@ -726,6 +762,11 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 		case highflownext:
 			/* Special case to support two voltage sensors */
 			if (channel < 2)
+				return 0444;
+			break;
+		case aquastreamxt:
+			/* Voltage reading currently only supported for fan*/
+			if (channel == 1)
 				return 0444;
 			break;
 		default:
@@ -767,6 +808,18 @@ static int aqc_legacy_read(struct aqc_data *priv)
 		else
 			priv->temp_input[i] = sensor_value * 10;
 	}
+
+	sensor_value = (s16)get_unaligned_le16(priv->buffer + priv->fan_sensor_offsets[0]);
+	priv->speed_input[0] = aquastream_convert_pump_rpm(sensor_value);
+
+	sensor_value = (s16)get_unaligned_le16(priv->buffer + priv->fan_sensor_offsets[1]);
+	priv->speed_input[1] = aquastream_convert_fan_rpm(sensor_value);
+
+	/* Calculation derived from linear regression */
+	priv->current_input[0] = get_unaligned_le16(priv->buffer + AQUASTREAMXT_PUMP_CURR_OFFSET)
+				 * 176 / 100 - 52;
+	priv->voltage_input[1] = get_unaligned_le16(priv->buffer + AQUASTREAMXT_FAN_VOLTAGE_OFFSET)
+				 * 1000 / 63;
 
 unlock_and_return:
 	mutex_unlock(&priv->mutex);
@@ -1676,12 +1729,17 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	case USB_PRODUCT_ID_AQUASTREAMXT:
 		priv->kind = aquastreamxt;
 
-		priv->num_fans = 0;
+		priv->num_fans = AQUASTREAMXT_NUM_FANS;
+		priv->fan_sensor_offsets = aquastreamxt_sensor_fan_offsets;
 		priv->num_temp_sensors = AQUASTREAMXT_NUM_SENSORS;
 		priv->temp_sensor_start_offset = AQUASTREAMXT_SENSOR_START;
 		priv->buffer_size = AQUASTREAMXT_SENSOR_REPORT_SIZE;
 
 		priv->temp_label = label_temp_sensors_aquastreamxt;
+		priv->speed_label = label_d5next_speeds;
+		priv->power_label = label_d5next_power;
+		priv->voltage_label = label_d5next_voltages;
+		priv->current_label = label_d5next_current;
 		break;
 	default:
 		break;
