@@ -230,15 +230,16 @@ static u8 leakshield_usb_report_template[] = {
 #define LEAKSHIELD_USB_REPORT_UNIT_DL_PER_H		0x0C
 
 /* Register offsets for Aquastream XT */
-#define AQUASTREAMXT_SERIAL_START	0x3a
-#define AQUASTREAMXT_FIRMWARE_VERSION	0x32
-#define AQUASTREAMXT_NUM_FANS		2
-#define AQUASTREAMXT_NUM_SENSORS	3
-#define AQUASTREAMXT_SENSOR_START	0xd
-#define AQUASTREAMXT_SENSOR_REPORT_SIZE	0x42
-#define AQUASTREAMXT_CTRL_REPORT_SIZE	0x34
-#define AQUASTREAMXT_FAN_VOLTAGE_OFFSET	0x7
-#define AQUASTREAMXT_PUMP_CURR_OFFSET	0xb
+#define AQUASTREAMXT_SERIAL_START		0x3a
+#define AQUASTREAMXT_FIRMWARE_VERSION		0x32
+#define AQUASTREAMXT_NUM_FANS			2
+#define AQUASTREAMXT_NUM_SENSORS		3
+#define AQUASTREAMXT_SENSOR_START		0xd
+#define AQUASTREAMXT_SENSOR_REPORT_SIZE		0x42
+#define AQUASTREAMXT_CTRL_REPORT_SIZE		0x34
+#define AQUASTREAMXT_FAN_VOLTAGE_OFFSET		0x7
+#define AQUASTREAMXT_PUMP_VOLTAGE_OFFSET	0x9
+#define AQUASTREAMXT_PUMP_CURR_OFFSET		0xb
 static u16 aquastreamxt_sensor_fan_offsets[] = { 0x13, 0x1b };
 
 static u16 aquastreamxt_ctrl_fan_offsets[] = { 0x8, 0x1b };
@@ -495,7 +496,7 @@ static int aqc_pwm_to_percent(long val)
 	return DIV_ROUND_CLOSEST(val * 100 * 100, 255);
 }
 
-/* Converts raw value for Aquastream XT pump speed to rpm*/
+/* Converts raw value for Aquastream XT pump speed to rpm */
 static int aquastream_convert_pump_rpm(s16 val)
 {
 	if (val > 0)
@@ -503,7 +504,7 @@ static int aquastream_convert_pump_rpm(s16 val)
 	return 0;
 }
 
-/* Converts raw value for Aquastream XT fan speed to rpm*/
+/* Converts raw value for Aquastream XT fan speed to rpm */
 static int aquastream_convert_fan_rpm(s16 val)
 {
 	if (val > 300)
@@ -785,11 +786,6 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 			if (channel < 2)
 				return 0444;
 			break;
-		case aquastreamxt:
-			/* Voltage reading currently only supported for fan*/
-			if (channel == 1)
-				return 0444;
-			break;
 		default:
 			if (channel < priv->num_fans)
 				return 0444;
@@ -839,8 +835,12 @@ static int aqc_legacy_read(struct aqc_data *priv)
 	/* Calculation derived from linear regression */
 	priv->current_input[0] = get_unaligned_le16(priv->buffer + AQUASTREAMXT_PUMP_CURR_OFFSET)
 				 * 176 / 100 - 52;
-	priv->voltage_input[1] = get_unaligned_le16(priv->buffer + AQUASTREAMXT_FAN_VOLTAGE_OFFSET)
-				 * 1000 / 63;
+
+	sensor_value = get_unaligned_le16(priv->buffer + AQUASTREAMXT_PUMP_VOLTAGE_OFFSET);
+	priv->voltage_input[0] = sensor_value * 1000 / 61;
+
+	sensor_value = get_unaligned_le16(priv->buffer + AQUASTREAMXT_FAN_VOLTAGE_OFFSET);
+	priv->voltage_input[1] = sensor_value * 1000 / 63;
 
 unlock_and_return:
 	mutex_unlock(&priv->mutex);
