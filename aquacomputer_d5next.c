@@ -234,7 +234,7 @@ static u8 leakshield_usb_report_template[] = {
 #define AQUASTREAMXT_FIRMWARE_VERSION	0x32
 #define AQUASTREAMXT_NUM_FANS		2
 #define AQUASTREAMXT_NUM_SENSORS	3
-#define AQUASTREAMXT_SENSOR_START	0xe
+#define AQUASTREAMXT_SENSOR_START	0xd
 #define AQUASTREAMXT_SENSOR_REPORT_SIZE	0x42
 #define AQUASTREAMXT_CTRL_REPORT_SIZE	0x34
 #define AQUASTREAMXT_FAN_VOLTAGE_OFFSET	0x7
@@ -822,7 +822,7 @@ static int aqc_legacy_read(struct aqc_data *priv)
 
 	/* Temperature sensor readings */
 	for (i = 0; i < priv->num_temp_sensors; i++) {
-		sensor_value = get_unaligned_be16(priv->buffer + priv->temp_sensor_start_offset +
+		sensor_value = get_unaligned_le16(priv->buffer + priv->temp_sensor_start_offset +
 						  i * AQC_TEMP_SENSOR_SIZE);
 		if (sensor_value == AQC_SENSOR_NA)
 			priv->temp_input[i] = -ENODATA;
