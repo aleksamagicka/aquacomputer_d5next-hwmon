@@ -820,10 +820,7 @@ static int aqc_legacy_read(struct aqc_data *priv)
 	for (i = 0; i < priv->num_temp_sensors; i++) {
 		sensor_value = get_unaligned_le16(priv->buffer + priv->temp_sensor_start_offset +
 						  i * AQC_TEMP_SENSOR_SIZE);
-		if (sensor_value == AQC_SENSOR_NA)
-			priv->temp_input[i] = -ENODATA;
-		else
-			priv->temp_input[i] = sensor_value * 10;
+		priv->temp_input[i] = sensor_value * 10;
 	}
 
 	sensor_value = (s16)get_unaligned_le16(priv->buffer + priv->fan_sensor_offsets[0]);
