@@ -240,6 +240,12 @@ static u8 leakshield_usb_report_template[] = {
 #define AQUASTREAMXT_FAN_VOLTAGE_OFFSET		0x7
 #define AQUASTREAMXT_PUMP_VOLTAGE_OFFSET	0x9
 #define AQUASTREAMXT_PUMP_CURR_OFFSET		0xb
+#define AQUASTREAMXT_CTRL_PUMP_MODE_OFFSET	0x3
+#define AQUASTREAMXT_CTRL_PUMP_MODE_MANUAL	0x14
+#define AQUASTREAMXT_CTRL_FAN_MODE_OFFSET	0x1a
+#define AQUASTREAMXT_CTRL_FAN_MODE_MANUAL	0x1
+#define AQUASTREAMXT_PUMP_CONVERSION_CONST	45000000
+#define AQUASTREAMXT_FAN_CONVERSION_CONST	5646000
 static u16 aquastreamxt_sensor_fan_offsets[] = { 0x13, 0x1b };
 
 static u16 aquastreamxt_ctrl_fan_offsets[] = { 0x8, 0x1b };
@@ -500,7 +506,7 @@ static int aqc_pwm_to_percent(long val)
 static int aquastream_convert_pump_rpm(s16 val)
 {
 	if (val > 0)
-		return DIV_ROUND_CLOSEST(45000000, val);
+		return DIV_ROUND_CLOSEST(AQUASTREAMXT_PUMP_CONVERSION_CONST, val);
 	return 0;
 }
 
@@ -508,7 +514,7 @@ static int aquastream_convert_pump_rpm(s16 val)
 static int aquastream_convert_fan_rpm(s16 val)
 {
 	if (val > 300)
-		return DIV_ROUND_CLOSEST(5646000, val);
+		return DIV_ROUND_CLOSEST(AQUASTREAMXT_FAN_CONVERSION_CONST, val);
 	return 0;
 }
 
@@ -1254,8 +1260,8 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 					ctrl_values_sizes[0] = 32;
 
 					/* Enable manual speed control */
-					ctrl_values_offsets[1] = 0x3;
-					ctrl_values[1] = 0x14;
+					ctrl_values_offsets[1] = AQUASTREAMXT_CTRL_PUMP_MODE_OFFSET;
+					ctrl_values[1] = AQUASTREAMXT_CTRL_PUMP_MODE_MANUAL;
 					ctrl_values_sizes[1] = 8;
 				} else {
 					ctrl_values_offsets[0] = priv->fan_ctrl_offsets[channel];
@@ -1263,8 +1269,8 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 					ctrl_values_sizes[0] = 8;
 
 					/* Enable manual speed control */
-					ctrl_values_offsets[1] = 0x1a;
-					ctrl_values[1] = 1;
+					ctrl_values_offsets[1] = AQUASTREAMXT_CTRL_FAN_MODE_OFFSET;
+					ctrl_values[1] = AQUASTREAMXT_CTRL_FAN_MODE_MANUAL;
 					ctrl_values_sizes[1] = 8;
 				}
 				ret = aqc_set_ctrl_vals(priv, ctrl_values_offsets, ctrl_values,
