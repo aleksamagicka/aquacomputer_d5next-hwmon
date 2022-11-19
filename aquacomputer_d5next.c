@@ -849,14 +849,14 @@ static int aqc_legacy_read(struct aqc_data *priv)
 	priv->speed_input[1] = aquastream_convert_fan_rpm(sensor_value);
 
 	/* Calculation derived from linear regression */
-	priv->current_input[0] = get_unaligned_le16(priv->buffer + AQUASTREAMXT_PUMP_CURR_OFFSET)
-				 * 176 / 100 - 52;
+	sensor_value = get_unaligned_le16(priv->buffer + AQUASTREAMXT_PUMP_CURR_OFFSET);
+	priv->current_input[0] = DIV_ROUND_CLOSEST(sensor_value * 176, 100) - 52;
 
 	sensor_value = get_unaligned_le16(priv->buffer + AQUASTREAMXT_PUMP_VOLTAGE_OFFSET);
-	priv->voltage_input[0] = sensor_value * 1000 / 61;
+	priv->voltage_input[0] = DIV_ROUND_CLOSEST(sensor_value * 1000, 61);
 
 	sensor_value = get_unaligned_le16(priv->buffer + AQUASTREAMXT_FAN_VOLTAGE_OFFSET);
-	priv->voltage_input[1] = sensor_value * 1000 / 63;
+	priv->voltage_input[1] = DIV_ROUND_CLOSEST(sensor_value * 1000, 63);
 
 unlock_and_return:
 	mutex_unlock(&priv->mutex);
