@@ -246,6 +246,7 @@ static u8 leakshield_usb_report_template[] = {
 #define AQUASTREAMXT_CTRL_FAN_MODE_MANUAL	0x1
 #define AQUASTREAMXT_PUMP_CONVERSION_CONST	45000000
 #define AQUASTREAMXT_FAN_CONVERSION_CONST	5646000
+#define AQUASTREAMXT_PUMP_MIN_RPM		3000
 static u16 aquastreamxt_sensor_fan_offsets[] = { 0x13, 0x1b };
 
 static u16 aquastreamxt_ctrl_fan_offsets[] = { 0x8, 0x1b };
@@ -500,6 +501,18 @@ static int aqc_percent_to_pwm(u16 val)
 static int aqc_pwm_to_percent(long val)
 {
 	return DIV_ROUND_CLOSEST(val * 100 * 100, 255);
+}
+
+/* Converts rpm to pwm */
+static int aquastream_rpm_to_pwm(long val)
+{
+	return DIV_ROUND_CLOSEST((val - AQUASTREAMXT_PUMP_MIN_RPM) * 255, 3000);
+}
+
+/* Converts to rpm between 3000 and 6000, where the output is a multiple of 60 */
+static int aquastream_pwm_to_rpm(long val)
+{
+	return DIV_ROUND_CLOSEST(val * 50, 255) * 60 + AQUASTREAMXT_PUMP_MIN_RPM;
 }
 
 /* Converts raw value for Aquastream XT pump speed to rpm */
@@ -964,7 +977,7 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 					if (ret < 0)
 						return ret;
 					*val = aquastream_convert_pump_rpm(*val);
-					*val = (*val - 3000) * 255 / 3000;
+					*val = aquastream_rpm_to_pwm(*val);
 				} else {
 					ret =
 					    aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel],
@@ -1254,8 +1267,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				break;
 			case aquastreamxt:
 				if (channel == 0) {
-					/* Pump speed can be controlled between 3000 and 6000 rpm */
-					pwm_value = DIV_ROUND_CLOSEST(val * 50, 255) * 60 + 3000;
+					pwm_value = aquastream_pwm_to_rpm(val);
 					pwm_value = aquastream_convert_pump_rpm(pwm_value);
 					ctrl_values_offsets[0] = priv->fan_ctrl_offsets[channel];
 					ctrl_values[0] = pwm_value;
