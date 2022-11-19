@@ -1223,7 +1223,9 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				return ret;
 			break;
 		case hwmon_pwm_input:
-			val = clamp_val(val, 0, 255);
+			if (val < 0 || val > 255)
+				return -EINVAL;
+
 			switch (priv->kind) {
 			case aquaero:
 				pwm_value = aqc_pwm_to_percent(val);
