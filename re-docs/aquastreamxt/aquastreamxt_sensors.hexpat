@@ -9,3 +9,4 @@ le u16 fan_voltage @ 0x7;
 le u16 pump_curr @ 0xb;
 le u16 pump_speed @ 0x13;
 le u16 fan_speed @ 0x1b;
+le u16 fan_status @ 0x1d;

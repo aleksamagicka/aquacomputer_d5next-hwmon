@@ -243,6 +243,8 @@ static u8 leakshield_usb_report_template[] = {
 #define AQUASTREAMXT_SENSOR_REPORT_SIZE		0x42
 #define AQUASTREAMXT_CTRL_REPORT_SIZE		0x34
 #define AQUASTREAMXT_FAN_VOLTAGE_OFFSET		0x7
+#define AQUASTREAMXT_FAN_STATUS_OFFSET		0x1d
+#define AQUASTREAMXT_FAN_STOPPED			0x4
 #define AQUASTREAMXT_PUMP_VOLTAGE_OFFSET	0x9
 #define AQUASTREAMXT_PUMP_CURR_OFFSET		0xb
 #define AQUASTREAMXT_CTRL_PUMP_MODE_OFFSET	0x3
@@ -529,9 +531,9 @@ static int aquastream_convert_pump_rpm(s16 val)
 }
 
 /* Converts raw value for Aquastream XT fan speed to rpm */
-static int aquastream_convert_fan_rpm(s16 val)
+static int aquastream_convert_fan_rpm(u16 val)
 {
-	if (val > 300)
+	if (val > 0)
 		return DIV_ROUND_CLOSEST(AQUASTREAMXT_FAN_CONVERSION_CONST, val);
 	return 0;
 }
@@ -850,8 +852,13 @@ static int aqc_legacy_read(struct aqc_data *priv)
 	sensor_value = (s16)get_unaligned_le16(priv->buffer + priv->fan_sensor_offsets[0]);
 	priv->speed_input[0] = aquastream_convert_pump_rpm(sensor_value);
 
-	sensor_value = (s16)get_unaligned_le16(priv->buffer + priv->fan_sensor_offsets[1]);
-	priv->speed_input[1] = aquastream_convert_fan_rpm(sensor_value);
+	sensor_value = get_unaligned_le16(priv->buffer + AQUASTREAMXT_FAN_STATUS_OFFSET);
+	if (sensor_value == AQUASTREAMXT_FAN_STOPPED) {
+		priv->speed_input[1] = 0;
+	} else {
+		sensor_value = get_unaligned_le16(priv->buffer + priv->fan_sensor_offsets[1]);
+		priv->speed_input[1] = aquastream_convert_fan_rpm(sensor_value);
+	}
 
 	/* Calculation derived from linear regression */
 	sensor_value = get_unaligned_le16(priv->buffer + AQUASTREAMXT_PUMP_CURR_OFFSET);
