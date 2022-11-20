@@ -523,7 +523,7 @@ static int aquastream_pwm_to_rpm(long val)
 }
 
 /* Converts raw value for Aquastream XT pump speed to rpm */
-static int aquastream_convert_pump_rpm(s16 val)
+static int aquastream_convert_pump_rpm(u16 val)
 {
 	if (val > 0)
 		return DIV_ROUND_CLOSEST(AQUASTREAMXT_PUMP_CONVERSION_CONST, val);
@@ -849,7 +849,7 @@ static int aqc_legacy_read(struct aqc_data *priv)
 		priv->temp_input[i] = sensor_value * 10;
 	}
 
-	sensor_value = (s16)get_unaligned_le16(priv->buffer + priv->fan_sensor_offsets[0]);
+	sensor_value = get_unaligned_le16(priv->buffer + priv->fan_sensor_offsets[0]);
 	priv->speed_input[0] = aquastream_convert_pump_rpm(sensor_value);
 
 	sensor_value = get_unaligned_le16(priv->buffer + AQUASTREAMXT_FAN_STATUS_OFFSET);
