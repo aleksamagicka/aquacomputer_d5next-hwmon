@@ -254,6 +254,7 @@ static u8 leakshield_usb_report_template[] = {
 #define AQUASTREAMXT_PUMP_CONVERSION_CONST	45000000
 #define AQUASTREAMXT_FAN_CONVERSION_CONST	5646000
 #define AQUASTREAMXT_PUMP_MIN_RPM		3000
+#define AQUASTREAMXT_PUMP_MAX_RPM		6000
 static u16 aquastreamxt_sensor_fan_offsets[] = { 0x13, 0x1b };
 
 static u16 aquastreamxt_ctrl_fan_offsets[] = { 0x8, 0x1b };
@@ -513,7 +514,8 @@ static int aqc_pwm_to_percent(long val)
 /* Converts rpm to pwm */
 static int aquastream_rpm_to_pwm(long val)
 {
-	return DIV_ROUND_CLOSEST((val - AQUASTREAMXT_PUMP_MIN_RPM) * 255, 3000);
+	return DIV_ROUND_CLOSEST((val - AQUASTREAMXT_PUMP_MIN_RPM) * 255,
+				  AQUASTREAMXT_PUMP_MAX_RPM - AQUASTREAMXT_PUMP_MIN_RPM);
 }
 
 /* Converts to rpm between 3000 and 6000, where the output is a multiple of 60 */
