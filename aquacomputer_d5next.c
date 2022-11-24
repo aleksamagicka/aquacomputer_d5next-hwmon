@@ -75,8 +75,22 @@ static u8 aquaero_secondary_ctrl_report[] = {
 	0x06, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00
 };
 
+/* Secondary HID report values for Aquastream XT */
+#define AQUASTREAMXT_SECONDARY_CTRL_REPORT_ID	0x02
+#define AQUASTREAMXT_SECONDARY_CTRL_REPORT_SIZE	0x04
+
+static u8 aquastreamxt_secondary_ctrl_report[] = {
+	0x02, 0x05, 0x00, 0x00
+};
+
+/* Data types for reading and writing control reports */
+#define AQC_8		0
+#define AQC_BE16	1
+#define AQC_LE16	2
+
 /* Sensor report ID for legacy devices */
 #define AQC_LEGACY_STATUS_REPORT_ID	0x04
+#define AQC_LEGACY_CTRL_REPORT_ID	0x06
 
 /* Register offsets for all Aquacomputer devices */
 #define AQC_TEMP_SENSOR_SIZE		0x02
@@ -221,11 +235,29 @@ static u8 leakshield_usb_report_template[] = {
 #define LEAKSHIELD_USB_REPORT_UNIT_DL_PER_H		0x0C
 
 /* Register offsets for Aquastream XT */
-#define AQUASTREAMXT_SERIAL_START	0x3a
-#define AQUASTREAMXT_FIRMWARE_VERSION	0x32
-#define AQUASTREAMXT_NUM_SENSORS	3
-#define AQUASTREAMXT_SENSOR_START	0xe
-#define AQUASTREAMXT_SENSOR_REPORT_SIZE	0xaa
+#define AQUASTREAMXT_SERIAL_START		0x3a
+#define AQUASTREAMXT_FIRMWARE_VERSION		0x32
+#define AQUASTREAMXT_NUM_FANS			2
+#define AQUASTREAMXT_NUM_SENSORS		3
+#define AQUASTREAMXT_SENSOR_START		0xd
+#define AQUASTREAMXT_SENSOR_REPORT_SIZE		0x42
+#define AQUASTREAMXT_CTRL_REPORT_SIZE		0x34
+#define AQUASTREAMXT_FAN_VOLTAGE_OFFSET		0x7
+#define AQUASTREAMXT_FAN_STATUS_OFFSET		0x1d
+#define AQUASTREAMXT_FAN_STOPPED		0x4
+#define AQUASTREAMXT_PUMP_VOLTAGE_OFFSET	0x9
+#define AQUASTREAMXT_PUMP_CURR_OFFSET		0xb
+#define AQUASTREAMXT_CTRL_PUMP_MODE_OFFSET	0x3
+#define AQUASTREAMXT_CTRL_PUMP_MODE_MANUAL	0x14
+#define AQUASTREAMXT_CTRL_FAN_MODE_OFFSET	0x1a
+#define AQUASTREAMXT_CTRL_FAN_MODE_MANUAL	0x1
+#define AQUASTREAMXT_PUMP_CONVERSION_CONST	45000000
+#define AQUASTREAMXT_FAN_CONVERSION_CONST	5646000
+#define AQUASTREAMXT_PUMP_MIN_RPM		3000
+#define AQUASTREAMXT_PUMP_MAX_RPM		6000
+static u16 aquastreamxt_sensor_fan_offsets[] = { 0x13, 0x1b };
+
+static u16 aquastreamxt_ctrl_fan_offsets[] = { 0x8, 0x1b };
 
 /* Labels for D5 Next */
 static const char *const label_d5next_temp[] = {
@@ -476,10 +508,36 @@ static int aqc_percent_to_pwm(u16 val)
 /* Converts to centi-percent */
 static int aqc_pwm_to_percent(long val)
 {
-	if (val < 0 || val > 255)
-		return -EINVAL;
-
 	return DIV_ROUND_CLOSEST(val * 100 * 100, 255);
+}
+
+/* Converts rpm to pwm */
+static int aquastream_rpm_to_pwm(long val)
+{
+	return DIV_ROUND_CLOSEST((val - AQUASTREAMXT_PUMP_MIN_RPM) * 255,
+				  AQUASTREAMXT_PUMP_MAX_RPM - AQUASTREAMXT_PUMP_MIN_RPM);
+}
+
+/* Converts to rpm between 3000 and 6000, where the output is a multiple of 60 */
+static int aquastream_pwm_to_rpm(long val)
+{
+	return DIV_ROUND_CLOSEST(val * 50, 255) * 60 + AQUASTREAMXT_PUMP_MIN_RPM;
+}
+
+/* Converts raw value for Aquastream XT pump speed to rpm */
+static int aquastream_convert_pump_rpm(u16 val)
+{
+	if (val > 0)
+		return DIV_ROUND_CLOSEST(AQUASTREAMXT_PUMP_CONVERSION_CONST, val);
+	return 0;
+}
+
+/* Converts raw value for Aquastream XT fan speed to rpm */
+static int aquastream_convert_fan_rpm(u16 val)
+{
+	if (val > 0)
+		return DIV_ROUND_CLOSEST(AQUASTREAMXT_FAN_CONVERSION_CONST, val);
+	return 0;
 }
 
 /* Expects the mutex to be locked */
@@ -502,8 +560,8 @@ static int aqc_send_ctrl_data(struct aqc_data *priv)
 	int ret;
 	u16 checksum;
 
-	/* Checksum is not needed for Aquaero */
-	if (priv->kind != aquaero) {
+	/* Checksum is not needed for Aquaero and Aquastream XT*/
+	if (priv->kind != aquaero && priv->kind != aquastreamxt) {
 		/* Init and xorout value for CRC-16/USB is 0xffff */
 		checksum =
 		    crc16(0xffff, priv->buffer + priv->checksum_start, priv->checksum_length);
@@ -528,7 +586,7 @@ static int aqc_send_ctrl_data(struct aqc_data *priv)
 }
 
 /* Refreshes the control buffer and stores value at offset in val */
-static int aqc_get_ctrl_val(struct aqc_data *priv, int offset, long *val, size_t size)
+static int aqc_get_ctrl_val(struct aqc_data *priv, int offset, long *val, int type)
 {
 	int ret;
 
@@ -538,11 +596,14 @@ static int aqc_get_ctrl_val(struct aqc_data *priv, int offset, long *val, size_t
 	if (ret < 0)
 		goto unlock_and_return;
 
-	switch (size) {
-	case 16:
+	switch (type) {
+	case AQC_LE16:
+		*val = (s16)get_unaligned_le16(priv->buffer + offset);
+		break;
+	case AQC_BE16:
 		*val = (s16)get_unaligned_be16(priv->buffer + offset);
 		break;
-	case 8:
+	case AQC_8:
 		*val = priv->buffer[offset];
 		break;
 	default:
@@ -555,13 +616,16 @@ unlock_and_return:
 	return ret;
 }
 
-static int aqc_set_buffer_val(u8 *buffer, int offset, long val, size_t size)
+static int aqc_set_buffer_val(u8 *buffer, int offset, long val, int type)
 {
-	switch (size) {
-	case 16:
+	switch (type) {
+	case AQC_LE16:
+		put_unaligned_le16((u16)val, buffer + offset);
+		return 0;
+	case AQC_BE16:
 		put_unaligned_be16((u16)val, buffer + offset);
 		return 0;
-	case 8:
+	case AQC_8:
 		buffer[offset] = (u8)val;
 		return 0;
 	default:
@@ -571,7 +635,7 @@ static int aqc_set_buffer_val(u8 *buffer, int offset, long val, size_t size)
 
 /* Refreshes the control buffer, updates values at offsets and writes buffer to device */
 static int aqc_set_ctrl_vals(struct aqc_data *priv, int *offsets, long *values,
-			     size_t *sizes, int len)
+			     int *types, int len)
 {
 	int ret, i;
 
@@ -582,7 +646,7 @@ static int aqc_set_ctrl_vals(struct aqc_data *priv, int *offsets, long *values,
 		goto unlock_and_return;
 
 	for (i = 0; i < len; i++) {
-		ret = aqc_set_buffer_val(priv->buffer, offsets[i], values[i], sizes[i]);
+		ret = aqc_set_buffer_val(priv->buffer, offsets[i], values[i], types[i]);
 		if (ret < 0)
 			goto unlock_and_return;
 	}
@@ -595,9 +659,9 @@ unlock_and_return:
 }
 
 /* Refreshes the control buffer, updates value at offset and writes buffer to device */
-static int aqc_set_ctrl_val(struct aqc_data *priv, int offset, long val, size_t size)
+static int aqc_set_ctrl_val(struct aqc_data *priv, int offset, long val, int type)
 {
-	return aqc_set_ctrl_vals(priv, &offset, &val, &size, 1);
+	return aqc_set_ctrl_vals(priv, &offset, &val, &type, 1);
 }
 
 static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u32 attr, int channel)
@@ -630,7 +694,8 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 		break;
 	case hwmon_pwm:
 		if (priv->fan_ctrl_offsets && channel < priv->num_fans) {
-			if (priv->kind == aquaero) {
+			switch (priv->kind) {
+			case aquaero:
 				switch (attr) {
 				case hwmon_pwm_input:
 				case hwmon_pwm_mode:
@@ -638,7 +703,16 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 				default:
 					break;
 				}
-			} else {
+				break;
+			case aquastreamxt:
+				switch (attr) {
+				case hwmon_pwm_input:
+					return 0644;
+				default:
+					break;
+				}
+				break;
+			default:
 				switch (attr) {
 				case hwmon_pwm_enable:
 				case hwmon_pwm_input:
@@ -647,6 +721,7 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 				default:
 					break;
 				}
+				break;
 			}
 		}
 		break;
@@ -706,6 +781,8 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 			if (channel == 0)
 				return 0444;
 			break;
+		case aquastreamxt:
+			break;
 		default:
 			if (channel < priv->num_fans)
 				return 0444;
@@ -713,8 +790,17 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 		}
 		break;
 	case hwmon_curr:
-		if (channel < priv->num_fans)
-			return 0444;
+		switch (priv->kind) {
+		case aquastreamxt:
+			/* Current only reported for pump */
+			if (channel == 0)
+				return 0444;
+			break;
+		default:
+			if (channel < priv->num_fans)
+				return 0444;
+			break;
+		}
 		break;
 	case hwmon_in:
 		switch (priv->kind) {
@@ -760,13 +846,31 @@ static int aqc_legacy_read(struct aqc_data *priv)
 
 	/* Temperature sensor readings */
 	for (i = 0; i < priv->num_temp_sensors; i++) {
-		sensor_value = get_unaligned_be16(priv->buffer + priv->temp_sensor_start_offset +
+		sensor_value = get_unaligned_le16(priv->buffer + priv->temp_sensor_start_offset +
 						  i * AQC_TEMP_SENSOR_SIZE);
-		if (sensor_value == AQC_SENSOR_NA)
-			priv->temp_input[i] = -ENODATA;
-		else
-			priv->temp_input[i] = sensor_value * 10;
+		priv->temp_input[i] = sensor_value * 10;
 	}
+
+	sensor_value = get_unaligned_le16(priv->buffer + priv->fan_sensor_offsets[0]);
+	priv->speed_input[0] = aquastream_convert_pump_rpm(sensor_value);
+
+	sensor_value = get_unaligned_le16(priv->buffer + AQUASTREAMXT_FAN_STATUS_OFFSET);
+	if (sensor_value == AQUASTREAMXT_FAN_STOPPED) {
+		priv->speed_input[1] = 0;
+	} else {
+		sensor_value = get_unaligned_le16(priv->buffer + priv->fan_sensor_offsets[1]);
+		priv->speed_input[1] = aquastream_convert_fan_rpm(sensor_value);
+	}
+
+	/* Calculation derived from linear regression */
+	sensor_value = get_unaligned_le16(priv->buffer + AQUASTREAMXT_PUMP_CURR_OFFSET);
+	priv->current_input[0] = DIV_ROUND_CLOSEST(sensor_value * 176, 100) - 52;
+
+	sensor_value = get_unaligned_le16(priv->buffer + AQUASTREAMXT_PUMP_VOLTAGE_OFFSET);
+	priv->voltage_input[0] = DIV_ROUND_CLOSEST(sensor_value * 1000, 61);
+
+	sensor_value = get_unaligned_le16(priv->buffer + AQUASTREAMXT_FAN_VOLTAGE_OFFSET);
+	priv->voltage_input[1] = DIV_ROUND_CLOSEST(sensor_value * 1000, 63);
 
 unlock_and_return:
 	mutex_unlock(&priv->mutex);
@@ -801,7 +905,7 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			ret =
 			    aqc_get_ctrl_val(priv,
 					     priv->temp_ctrl_offset +
-					     channel * AQC_TEMP_SENSOR_SIZE, val, 16);
+					     channel * AQC_TEMP_SENSOR_SIZE, val, AQC_BE16);
 			if (ret < 0)
 				return ret;
 			*val *= 10;
@@ -822,7 +926,8 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				ret =
 				    aqc_get_ctrl_val(priv,
 						     priv->fan_ctrl_offsets[channel] +
-						     AQUAERO_FAN_CTRL_MIN_RPM_OFFSET, val, 16);
+						     AQUAERO_FAN_CTRL_MIN_RPM_OFFSET,
+						     val, AQC_BE16);
 				if (ret < 0)
 					return ret;
 				break;
@@ -835,7 +940,8 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				ret =
 				    aqc_get_ctrl_val(priv,
 						     priv->fan_ctrl_offsets[channel] +
-						     AQUAERO_FAN_CTRL_MAX_RPM_OFFSET, val, 16);
+						     AQUAERO_FAN_CTRL_MAX_RPM_OFFSET,
+						     val, AQC_BE16);
 				if (ret < 0)
 					return ret;
 				break;
@@ -847,7 +953,7 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			*val = priv->speed_input_target[channel];
 			break;
 		case hwmon_fan_pulses:
-			ret = aqc_get_ctrl_val(priv, priv->flow_pulses_ctrl_offset, val, 16);
+			ret = aqc_get_ctrl_val(priv, priv->flow_pulses_ctrl_offset, val, AQC_BE16);
 			if (ret < 0)
 				return ret;
 			break;
@@ -861,7 +967,7 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 	case hwmon_pwm:
 		switch (attr) {
 		case hwmon_pwm_enable:
-			ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel], val, 8);
+			ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel], val, AQC_8);
 			if (ret < 0)
 				return ret;
 
@@ -869,29 +975,51 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			*val = *val + 1;
 			break;
 		case hwmon_pwm_input:
-			if (priv->kind == aquaero) {
+			switch (priv->kind) {
+			case aquaero:
 				ret =
 				    aqc_get_ctrl_val(priv,
 						     AQUAERO_CTRL_PRESET_START +
-						     channel * AQUAERO_CTRL_PRESET_SIZE, val, 16);
+						     channel * AQUAERO_CTRL_PRESET_SIZE,
+						     val, AQC_BE16);
 				if (ret < 0)
 					return ret;
-			} else {
+				*val = aqc_percent_to_pwm(*val);
+				break;
+			case aquastreamxt:
+				if (channel == 0) {
+					ret =
+					    aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel],
+							     val, AQC_LE16);
+					if (ret < 0)
+						return ret;
+					*val = aquastream_convert_pump_rpm(*val);
+					*val = aquastream_rpm_to_pwm(*val);
+				} else {
+					ret =
+					    aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel],
+							     val, AQC_8);
+					if (ret < 0)
+						return ret;
+				}
+				break;
+			default:
 				ret =
 				    aqc_get_ctrl_val(priv,
-						     priv->fan_ctrl_offsets[channel] +
-						     AQC_FAN_CTRL_PWM_OFFSET, val, 16);
+						     AQUAERO_CTRL_PRESET_START +
+						     channel * AQUAERO_CTRL_PRESET_SIZE,
+						     val, AQC_BE16);
 				if (ret < 0)
 					return ret;
+				*val = aqc_percent_to_pwm(*val);
+				break;
 			}
-
-			*val = aqc_percent_to_pwm(*val);
 			break;
 		case hwmon_pwm_auto_channels_temp:
 			ret =
 			    aqc_get_ctrl_val(priv,
 					     priv->fan_ctrl_offsets[channel] +
-					     AQC_FAN_CTRL_TEMP_SELECT_OFFSET, val, 16);
+					     AQC_FAN_CTRL_TEMP_SELECT_OFFSET, val, AQC_BE16);
 			if (ret < 0)
 				return ret;
 
@@ -900,7 +1028,7 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		case hwmon_pwm_mode:
 			ret = aqc_get_ctrl_val(priv,
 					       priv->fan_ctrl_offsets[channel] +
-					       AQUAERO_FAN_CTRL_MODE_OFFSET, val, 8);
+					       AQUAERO_FAN_CTRL_MODE_OFFSET, val, AQC_8);
 			if (ret < 0)
 				return ret;
 
@@ -1033,7 +1161,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 	/* Arrays for setting multiple values at once in the control report */
 	int ctrl_values_offsets[3];
 	long ctrl_values[3];
-	size_t ctrl_values_sizes[3];
+	int ctrl_values_types[3];
 	struct aqc_data *priv = dev_get_drvdata(dev);
 
 	switch (type) {
@@ -1045,7 +1173,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			ret =
 			    aqc_set_ctrl_val(priv,
 					     priv->temp_ctrl_offset +
-					     channel * AQC_TEMP_SENSOR_SIZE, val, 16);
+					     channel * AQC_TEMP_SENSOR_SIZE, val, AQC_BE16);
 			if (ret < 0)
 				return ret;
 			break;
@@ -1059,7 +1187,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			val = clamp_val(val, 0, 15000);
 			ret = aqc_set_ctrl_val(priv,
 					       priv->fan_ctrl_offsets[channel] +
-					       AQUAERO_FAN_CTRL_MIN_RPM_OFFSET, val, 16);
+					       AQUAERO_FAN_CTRL_MIN_RPM_OFFSET, val, AQC_BE16);
 			if (ret < 0)
 				return ret;
 			break;
@@ -1067,7 +1195,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			val = clamp_val(val, 0, 15000);
 			ret = aqc_set_ctrl_val(priv,
 					       priv->fan_ctrl_offsets[channel] +
-					       AQUAERO_FAN_CTRL_MAX_RPM_OFFSET, val, 16);
+					       AQUAERO_FAN_CTRL_MAX_RPM_OFFSET, val, AQC_BE16);
 			if (ret < 0)
 				return ret;
 			break;
@@ -1075,7 +1203,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			return aqc_leakshield_send_report(priv, channel, val);
 		case hwmon_fan_pulses:
 			val = clamp_val(val, 10, 1000);
-			ret = aqc_set_ctrl_val(priv, priv->flow_pulses_ctrl_offset, val, 16);
+			ret = aqc_set_ctrl_val(priv, priv->flow_pulses_ctrl_offset, val, AQC_BE16);
 			if (ret < 0)
 				return ret;
 			break;
@@ -1107,7 +1235,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				if (val > 3) {
 					ret =
 					    aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[val - 4],
-							     &ctrl_mode, 8);
+							     &ctrl_mode, AQC_8);
 					if (ret < 0)
 						return ret;
 
@@ -1121,44 +1249,77 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			}
 
 			/* Decrement to convert from hwmon to aqc */
-			ret = aqc_set_ctrl_val(priv, priv->fan_ctrl_offsets[channel], val - 1, 8);
+			ret = aqc_set_ctrl_val(priv,
+					       priv->fan_ctrl_offsets[channel], val - 1, AQC_8);
 			if (ret < 0)
 				return ret;
 			break;
 		case hwmon_pwm_input:
-			pwm_value = aqc_pwm_to_percent(val);
-			if (pwm_value < 0)
-				return pwm_value;
-			if (priv->kind == aquaero) {
+			if (val < 0 || val > 255)
+				return -EINVAL;
+
+			switch (priv->kind) {
+			case aquaero:
+				pwm_value = aqc_pwm_to_percent(val);
 				/* Write pwm value to preset corresponding to the channel */
 				ctrl_values_offsets[0] = AQUAERO_CTRL_PRESET_START +
 							 channel * AQUAERO_CTRL_PRESET_SIZE;
 				ctrl_values[0] = pwm_value;
-				ctrl_values_sizes[0] = 16;
+				ctrl_values_types[0] = AQC_BE16;
 
 				/* Write preset number in fan control source */
 				ctrl_values_offsets[1] = priv->fan_ctrl_offsets[channel] +
 							 AQUAERO_FAN_CTRL_SRC_OFFSET;
 				ctrl_values[1] = AQUAERO_CTRL_PRESET_ID + channel;
-				ctrl_values_sizes[1] = 16;
+				ctrl_values_types[1] = AQC_BE16;
 
 				/* Set minimum power to 0 to allow the fan to turn off */
 				ctrl_values_offsets[2] = priv->fan_ctrl_offsets[channel] +
 							 AQUAERO_FAN_CTRL_MIN_PWR_OFFSET;
 				ctrl_values[2] = 0;
-				ctrl_values_sizes[2] = 16;
+				ctrl_values_types[2] = AQC_BE16;
 
 				ret = aqc_set_ctrl_vals(priv, ctrl_values_offsets, ctrl_values,
-							ctrl_values_sizes, 3);
+							ctrl_values_types, 3);
 				if (ret < 0)
 					return ret;
-			} else {
+				break;
+			case aquastreamxt:
+				if (channel == 0) {
+					pwm_value = aquastream_pwm_to_rpm(val);
+					pwm_value = aquastream_convert_pump_rpm(pwm_value);
+					ctrl_values_offsets[0] = priv->fan_ctrl_offsets[channel];
+					ctrl_values[0] = pwm_value;
+					ctrl_values_types[0] = AQC_LE16;
+
+					/* Enable manual speed control */
+					ctrl_values_offsets[1] = AQUASTREAMXT_CTRL_PUMP_MODE_OFFSET;
+					ctrl_values[1] = AQUASTREAMXT_CTRL_PUMP_MODE_MANUAL;
+					ctrl_values_types[1] = AQC_8;
+				} else {
+					ctrl_values_offsets[0] = priv->fan_ctrl_offsets[channel];
+					ctrl_values[0] = val;
+					ctrl_values_types[0] = AQC_8;
+
+					/* Enable manual speed control */
+					ctrl_values_offsets[1] = AQUASTREAMXT_CTRL_FAN_MODE_OFFSET;
+					ctrl_values[1] = AQUASTREAMXT_CTRL_FAN_MODE_MANUAL;
+					ctrl_values_types[1] = AQC_8;
+				}
+				ret = aqc_set_ctrl_vals(priv, ctrl_values_offsets, ctrl_values,
+							ctrl_values_types, 2);
+				if (ret < 0)
+					return ret;
+				break;
+			default:
+				pwm_value = aqc_pwm_to_percent(val);
 				ret =
 				    aqc_set_ctrl_val(priv,
 						     priv->fan_ctrl_offsets[channel] +
-						     AQC_FAN_CTRL_PWM_OFFSET, pwm_value, 16);
+						     AQC_FAN_CTRL_PWM_OFFSET, pwm_value, AQC_BE16);
 				if (ret < 0)
 					return ret;
+				break;
 			}
 			break;
 		case hwmon_pwm_auto_channels_temp:
@@ -1185,7 +1346,8 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			ret =
 			    aqc_set_ctrl_val(priv,
 					     priv->fan_ctrl_offsets[channel] +
-					     AQC_FAN_CTRL_TEMP_SELECT_OFFSET, temp_sensor, 16);
+					     AQC_FAN_CTRL_TEMP_SELECT_OFFSET, temp_sensor,
+					     AQC_BE16);
 			if (ret < 0)
 				return ret;
 			break;
@@ -1202,7 +1364,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			}
 			ret = aqc_set_ctrl_val(priv,
 					       priv->fan_ctrl_offsets[channel] +
-					       AQUAERO_FAN_CTRL_MODE_OFFSET, ctrl_mode, 8);
+					       AQUAERO_FAN_CTRL_MODE_OFFSET, ctrl_mode, AQC_8);
 			if (ret < 0)
 				return ret;
 		default:
@@ -1676,12 +1838,19 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	case USB_PRODUCT_ID_AQUASTREAMXT:
 		priv->kind = aquastreamxt;
 
-		priv->num_fans = 0;
+		priv->num_fans = AQUASTREAMXT_NUM_FANS;
+		priv->fan_sensor_offsets = aquastreamxt_sensor_fan_offsets;
+		priv->fan_ctrl_offsets = aquastreamxt_ctrl_fan_offsets;
+
 		priv->num_temp_sensors = AQUASTREAMXT_NUM_SENSORS;
 		priv->temp_sensor_start_offset = AQUASTREAMXT_SENSOR_START;
 		priv->buffer_size = AQUASTREAMXT_SENSOR_REPORT_SIZE;
 
 		priv->temp_label = label_temp_sensors_aquastreamxt;
+		priv->speed_label = label_d5next_speeds;
+		priv->power_label = label_d5next_power;
+		priv->voltage_label = label_d5next_voltages;
+		priv->current_label = label_d5next_current;
 		break;
 	default:
 		break;
@@ -1700,6 +1869,11 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	} else if (priv->kind == aquastreamxt) {
 		priv->serial_number_start_offset = AQUASTREAMXT_SERIAL_START;
 		priv->firmware_version_offset = AQUASTREAMXT_FIRMWARE_VERSION;
+
+		priv->ctrl_report_id = AQC_LEGACY_CTRL_REPORT_ID;
+		priv->secondary_ctrl_report_id = AQUASTREAMXT_SECONDARY_CTRL_REPORT_ID;
+		priv->secondary_ctrl_report_size = AQUASTREAMXT_SECONDARY_CTRL_REPORT_SIZE;
+		priv->secondary_ctrl_report = aquastreamxt_secondary_ctrl_report;
 	} else {
 		priv->serial_number_start_offset = AQC_SERIAL_START;
 		priv->firmware_version_offset = AQC_FIRMWARE_VERSION;
