@@ -113,7 +113,7 @@ static u8 aquastreamxt_secondary_ctrl_report[] = {
 /* Register offsets for Aquaero fan controllers */
 #define AQUAERO_SERIAL_START		0x07
 #define AQUAERO_FIRMWARE_VERSION	0x0B
-#define AQUAERO_NUM_FANS		5
+#define AQUAERO_NUM_FANS		4
 #define AQUAERO_NUM_SENSORS		8
 #define AQUAERO_SENSOR_START		0x65
 #define AQUAERO_NUM_VIRTUAL_SENSORS	8
@@ -755,6 +755,7 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 				if (channel < 5)
 					return 0444;
 				break;
+			case aquaero:
 			case quadro:
 				/* Special case to support flow sensor */
 				if (channel < priv->num_fans + 1)
@@ -1536,13 +1537,11 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 
 	/* Special-case sensor readings */
 	switch (priv->kind) {
-	case aquaero:
-		priv->speed_input[4] = get_unaligned_be16(data + AQUAERO_FIRST_FLOW_SENSOR);
-		break;
 	case d5next:
 		priv->voltage_input[2] = get_unaligned_be16(data + D5NEXT_5V_VOLTAGE) * 10;
 		priv->voltage_input[3] = get_unaligned_be16(data + D5NEXT_12V_VOLTAGE) * 10;
 		break;
+	case aquaero:
 	case quadro:
 		priv->speed_input[4] = get_unaligned_be16(data + priv->flow_sensor_offset);
 		break;
@@ -1705,6 +1704,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 		priv->buffer_size = AQUAERO_CTRL_REPORT_SIZE;
 		priv->temp_ctrl_offset = AQUAERO_TEMP_CTRL_OFFSET;
+		priv->flow_sensor_offset = AQUAERO_FIRST_FLOW_SENSOR;
 
 		priv->temp_label = label_temp_sensors;
 		priv->virtual_temp_label = label_virtual_temp_sensors;
