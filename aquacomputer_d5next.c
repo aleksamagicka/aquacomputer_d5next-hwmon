@@ -113,11 +113,12 @@ static u8 aquastreamxt_secondary_ctrl_report[] = {
 /* Register offsets for Aquaero fan controllers */
 #define AQUAERO_SERIAL_START		0x07
 #define AQUAERO_FIRMWARE_VERSION	0x0B
-#define AQUAERO_NUM_FANS		4
+#define AQUAERO_NUM_FANS		5
 #define AQUAERO_NUM_SENSORS		8
 #define AQUAERO_SENSOR_START		0x65
 #define AQUAERO_NUM_VIRTUAL_SENSORS	8
 #define AQUAERO_VIRTUAL_SENSOR_START	0x85
+#define AQUAERO_FIRST_FLOW_SENSOR	0xF9
 #define AQUAERO_CTRL_REPORT_SIZE	0xa93
 #define AQUAERO_TEMP_CTRL_OFFSET	0xdb
 static u16 aquaero_sensor_fan_offsets[] = { 0x167, 0x173, 0x17f, 0x18B };
@@ -369,6 +370,15 @@ static const char *const label_quadro_speeds[] = {
 	"Fan 3 speed",
 	"Fan 4 speed",
 	"Flow speed [dL/h]"
+};
+
+/* Labels for Aquaero fan speeds */
+static const char *const label_aquaero_speeds[] = {
+	"Fan 1 speed",
+	"Fan 2 speed",
+	"Fan 3 speed",
+	"Fan 4 speed",
+	"Flow sensor 1 [dl/h]"
 };
 
 /* Labels for High Flow Next */
@@ -1526,6 +1536,9 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 
 	/* Special-case sensor readings */
 	switch (priv->kind) {
+	case aquaero:
+		priv->speed_input[4] = get_unaligned_be16(data + AQUAERO_FIRST_FLOW_SENSOR);
+		break;
 	case d5next:
 		priv->voltage_input[2] = get_unaligned_be16(data + D5NEXT_5V_VOLTAGE) * 10;
 		priv->voltage_input[3] = get_unaligned_be16(data + D5NEXT_12V_VOLTAGE) * 10;
@@ -1695,7 +1708,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 		priv->temp_label = label_temp_sensors;
 		priv->virtual_temp_label = label_virtual_temp_sensors;
-		priv->speed_label = label_fan_speed;
+		priv->speed_label = label_aquaero_speeds;
 		priv->power_label = label_fan_power;
 		priv->voltage_label = label_fan_voltage;
 		priv->current_label = label_fan_current;
