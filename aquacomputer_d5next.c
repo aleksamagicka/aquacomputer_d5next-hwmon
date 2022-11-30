@@ -31,10 +31,12 @@
 #define USB_PRODUCT_ID_HIGHFLOWNEXT	0xf012
 #define USB_PRODUCT_ID_LEAKSHIELD	0xf014
 #define USB_PRODUCT_ID_AQUASTREAMXT	0xf0b6
+#define USB_PRODUCT_ID_AQUASTREAMULT	0xf00b
 
 enum kinds {
 	aquaero, d5next, farbwerk, farbwerk360, octo,
-	quadro, highflownext, leakshield, aquastreamxt
+	quadro, highflownext, leakshield, aquastreamxt,
+	aquastreamult
 };
 
 static const char *const aqc_device_names[] = {
@@ -47,6 +49,7 @@ static const char *const aqc_device_names[] = {
 	[highflownext] = "highflownext",
 	[leakshield] = "leakshield",
 	[aquastreamxt] = "aquastreamxt",
+	[aquastreamult] = "aquastreamultimate"
 };
 
 #define DRIVER_NAME			"aquacomputer_d5next"
@@ -162,6 +165,18 @@ static u16 d5next_sensor_fan_offsets[] = { D5NEXT_PUMP_OFFSET, D5NEXT_FAN_OFFSET
 /* Control report offsets for the D5 Next pump */
 #define D5NEXT_TEMP_CTRL_OFFSET		0x2D	/* Temperature sensor offsets location */
 static u16 d5next_ctrl_fan_offsets[] = { 0x96, 0x41 };	/* Pump and fan speed (from 0-100%) */
+
+/* Specs of the Aquastream Ultimate pump */
+#define AQUASTREAMULT_NUM_SENSORS	1
+
+/* Sensor report offsets for the Aquastream Ultimate pump */
+#define AQUASTREAMULT_COOLANT_TEMP	0x2D
+#define AQUASTREAMULT_PUMP_OFFSET	0x51
+#define AQUASTREAMULT_PUMP_VOLTAGE	0x3D
+#define AQUASTREAMULT_PUMP_CURRENT	0x53
+#define AQUASTREAMULT_PUMP_POWER	0x55
+#define AQUASTREAMULT_FAN_VOLTAGE	0x43
+#define AQUASTREAMULT_PRESSURE_OFFSET	0x57
 
 /* Spec and sensor report offset for the Farbwerk RGB controller */
 #define FARBWERK_NUM_SENSORS		4
@@ -456,6 +471,25 @@ static const char *const label_aquastreamxt_temp_sensors[] = {
 	"Fan IC temp",
 	"External sensor",
 	"Coolant temp"
+};
+
+/* Labels for Aquastream Ultimate */
+static const char *const label_aquastreamult_speeds[] = {
+	"Pump speed",
+	"Pressure [mbar]"
+};
+
+static const char *const label_aquastreamult_power[] = {
+	"Pump power"
+};
+
+static const char *const label_aquastreamult_voltages[] = {
+	"Pump +12V",
+	"Fan +12V"
+};
+
+static const char *const label_aquastreamult_current[] = {
+	"Pump current"
 };
 
 struct aqc_fan_structure_offsets {
@@ -779,6 +813,11 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 		case hwmon_fan_input:
 		case hwmon_fan_label:
 			switch (priv->kind) {
+			case aquastreamult:
+				/* Special case to support pump RPM and pressure */
+				if (channel < 2)
+					return 0444;
+				break;
 			case highflownext:
 				/*
 				 * Special case to support flow sensor, water quality
@@ -826,6 +865,7 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 		break;
 	case hwmon_power:
 		switch (priv->kind) {
+		case aquastreamult:
 		case highflownext:
 			/* Special case to support one power sensor */
 			if (channel == 0)
@@ -842,6 +882,7 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 	case hwmon_curr:
 		switch (priv->kind) {
 		case aquastreamxt:
+		case aquastreamult:
 			/* Current only reported for pump */
 			if (channel == 0)
 				return 0444;
@@ -859,6 +900,7 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 			if (channel < priv->num_fans + 2)
 				return 0444;
 			break;
+		case aquastreamult:
 		case highflownext:
 			/* Special case to support two voltage sensors */
 			if (channel < 2)
@@ -1609,6 +1651,19 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 			i++;
 		}
 		break;
+	case aquastreamult:
+		priv->temp_input[0] = get_unaligned_be16(data + AQUASTREAMULT_COOLANT_TEMP) * 10;
+
+		priv->speed_input[0] = get_unaligned_be16(data + AQUASTREAMULT_PUMP_OFFSET);
+		priv->speed_input[1] = get_unaligned_be16(data + AQUASTREAMULT_PRESSURE_OFFSET);
+
+		priv->power_input[0] = get_unaligned_be16(data + AQUASTREAMULT_PUMP_POWER) * 10000;
+
+		priv->voltage_input[0] = get_unaligned_be16(data + AQUASTREAMULT_PUMP_VOLTAGE) * 10;
+		priv->voltage_input[1] = get_unaligned_be16(data + AQUASTREAMULT_FAN_VOLTAGE) * 10;
+
+		priv->current_input[0] = get_unaligned_be16(data + AQUASTREAMULT_PUMP_CURRENT);
+		break;
 	case d5next:
 		priv->voltage_input[2] = get_unaligned_be16(data + D5NEXT_5V_VOLTAGE) * 10;
 		priv->voltage_input[3] = get_unaligned_be16(data + D5NEXT_12V_VOLTAGE) * 10;
@@ -1936,6 +1991,18 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->voltage_label = label_d5next_voltages;
 		priv->current_label = label_d5next_current;
 		break;
+	case USB_PRODUCT_ID_AQUASTREAMULT:
+		priv->kind = aquastreamult;
+
+		priv->num_fans = 0;
+		priv->num_temp_sensors = AQUASTREAMULT_NUM_SENSORS;
+
+		priv->temp_label = label_d5next_temp;
+		priv->speed_label = label_aquastreamult_speeds;
+		priv->power_label = label_aquastreamult_power;
+		priv->voltage_label = label_aquastreamult_voltages;
+		priv->current_label = label_aquastreamult_current;
+		break;
 	default:
 		break;
 	}
@@ -2029,6 +2096,7 @@ static const struct hid_device_id aqc_table[] = {
 	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_HIGHFLOWNEXT) },
 	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_LEAKSHIELD) },
 	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_AQUASTREAMXT) },
+	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_AQUASTREAMULT) },
 	{ }
 };
 
