@@ -271,10 +271,10 @@ static u8 leakshield_usb_report_template[] = {
 static u16 aquastreamxt_sensor_fan_offsets[] = { 0x13, 0x1b };
 
 /* Control report offsets for Aquastream XT */
-#define AQUASTREAMXT_CTRL_PUMP_MODE_OFFSET	0x3
-#define AQUASTREAMXT_CTRL_PUMP_MODE_MANUAL	0x14
-#define AQUASTREAMXT_CTRL_FAN_MODE_OFFSET	0x1a
-#define AQUASTREAMXT_CTRL_FAN_MODE_MANUAL	0x1
+#define AQUASTREAMXT_PUMP_MODE_CTRL_OFFSET	0x3
+#define AQUASTREAMXT_PUMP_MODE_CTRL_MANUAL	0x14
+#define AQUASTREAMXT_FAN_MODE_CTRL_OFFSET	0x1a
+#define AQUASTREAMXT_FAN_MODE_CTRL_MANUAL	0x1
 static u16 aquastreamxt_ctrl_fan_offsets[] = { 0x8, 0x1b };
 
 /* Labels for D5 Next */
@@ -1321,8 +1321,8 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 					ctrl_values_types[0] = AQC_LE16;
 
 					/* Enable manual speed control */
-					ctrl_values_offsets[1] = AQUASTREAMXT_CTRL_PUMP_MODE_OFFSET;
-					ctrl_values[1] = AQUASTREAMXT_CTRL_PUMP_MODE_MANUAL;
+					ctrl_values_offsets[1] = AQUASTREAMXT_PUMP_MODE_CTRL_OFFSET;
+					ctrl_values[1] = AQUASTREAMXT_PUMP_MODE_CTRL_MANUAL;
 					ctrl_values_types[1] = AQC_8;
 				} else {
 					ctrl_values_offsets[0] = priv->fan_ctrl_offsets[channel];
@@ -1330,8 +1330,8 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 					ctrl_values_types[0] = AQC_8;
 
 					/* Enable manual speed control */
-					ctrl_values_offsets[1] = AQUASTREAMXT_CTRL_FAN_MODE_OFFSET;
-					ctrl_values[1] = AQUASTREAMXT_CTRL_FAN_MODE_MANUAL;
+					ctrl_values_offsets[1] = AQUASTREAMXT_FAN_MODE_CTRL_OFFSET;
+					ctrl_values[1] = AQUASTREAMXT_FAN_MODE_CTRL_MANUAL;
 					ctrl_values_types[1] = AQC_8;
 				}
 				ret = aqc_set_ctrl_vals(priv, ctrl_values_offsets, ctrl_values,
