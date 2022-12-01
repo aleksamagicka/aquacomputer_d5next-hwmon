@@ -92,113 +92,125 @@ static u8 aquastreamxt_secondary_ctrl_report[] = {
 #define AQC_LEGACY_STATUS_REPORT_ID	0x04
 #define AQC_LEGACY_CTRL_REPORT_ID	0x06
 
-/* Register offsets for all Aquacomputer devices */
-#define AQC_TEMP_SENSOR_SIZE		0x02
-#define AQC_SENSOR_NA			0x7FFF
-#define AQC_POWER_CYCLES		0x18
-
-/* Register offsets for most Aquacomputer devices */
+/* Info, sensor sizes and offsets for all Aquacomputer devices */
 #define AQC_SERIAL_START		0x03
 #define AQC_FIRMWARE_VERSION		0x0D
+#define AQC_POWER_CYCLES		0x18
+
+#define AQC_TEMP_SENSOR_SIZE		0x02
+#define AQC_SENSOR_NA			0x7FFF
 #define AQC_FAN_PERCENT_OFFSET		0x00
 #define AQC_FAN_VOLTAGE_OFFSET		0x02
 #define AQC_FAN_CURRENT_OFFSET		0x04
 #define AQC_FAN_POWER_OFFSET		0x06
 #define AQC_FAN_SPEED_OFFSET		0x08
 
-/* Register offsets for fan control*/
+/* Report offsets for fan control */
 #define AQC_FAN_CTRL_PWM_OFFSET		0x01
 #define AQC_FAN_CTRL_TEMP_SELECT_OFFSET	0x03
 
-/* Register offsets for Aquaero fan controllers */
+/* Specs of the Aquaero fan controllers */
 #define AQUAERO_SERIAL_START		0x07
 #define AQUAERO_FIRMWARE_VERSION	0x0B
 #define AQUAERO_NUM_FANS		4
 #define AQUAERO_NUM_SENSORS		8
-#define AQUAERO_SENSOR_START		0x65
 #define AQUAERO_NUM_VIRTUAL_SENSORS	8
+#define AQUAERO_CTRL_REPORT_SIZE	0xa93
+#define AQUAERO_CTRL_PRESET_ID		0x5c
+#define AQUAERO_CTRL_PRESET_SIZE	0x02
+#define AQUAERO_CTRL_PRESET_START	0x55c
+
+/* Sensor report offsets for Aquaero fan controllers */
+#define AQUAERO_SENSOR_START		0x65
 #define AQUAERO_VIRTUAL_SENSOR_START	0x85
 #define AQUAERO_FIRST_FLOW_SENSOR	0xF9
-#define AQUAERO_CTRL_REPORT_SIZE	0xa93
-#define AQUAERO_TEMP_CTRL_OFFSET	0xdb
-static u16 aquaero_sensor_fan_offsets[] = { 0x167, 0x173, 0x17f, 0x18B };
-
-static u16 aquaero_ctrl_fan_offsets[] = { 0x20c, 0x220, 0x234, 0x248 };
-
 #define AQUAERO_FAN_VOLTAGE_OFFSET	0x04
 #define AQUAERO_FAN_CURRENT_OFFSET	0x06
 #define AQUAERO_FAN_POWER_OFFSET	0x08
 #define AQUAERO_FAN_SPEED_OFFSET	0x00
+static u16 aquaero_sensor_fan_offsets[] = { 0x167, 0x173, 0x17f, 0x18B };
 
+/* Control report offsets for the Aquaero fan controllers */
+#define AQUAERO_TEMP_CTRL_OFFSET	0xdb
 #define AQUAERO_FAN_CTRL_MIN_RPM_OFFSET	0x00
 #define AQUAERO_FAN_CTRL_MAX_RPM_OFFSET	0x02
 #define AQUAERO_FAN_CTRL_MIN_PWR_OFFSET	0x04
 #define AQUAERO_FAN_CTRL_MODE_OFFSET	0x0f
 #define AQUAERO_FAN_CTRL_SRC_OFFSET	0x10
+static u16 aquaero_ctrl_fan_offsets[] = { 0x20c, 0x220, 0x234, 0x248 };
 
-#define AQUAERO_CTRL_PRESET_ID		0x5c
-#define AQUAERO_CTRL_PRESET_SIZE	0x02
-#define AQUAERO_CTRL_PRESET_START	0x55c
-
-/* Register offsets for the D5 Next pump */
-#define D5NEXT_COOLANT_TEMP		0x57
+/* Specs of the D5 Next pump */
 #define D5NEXT_NUM_FANS			2
 #define D5NEXT_NUM_SENSORS		1
 #define D5NEXT_NUM_VIRTUAL_SENSORS	8
-#define D5NEXT_VIRTUAL_SENSOR_START	0x3f
+#define D5NEXT_CTRL_REPORT_SIZE		0x329
+
+/* Sensor report offsets for the D5 Next pump */
+#define D5NEXT_COOLANT_TEMP		0x57
 #define D5NEXT_PUMP_OFFSET		0x6c
 #define D5NEXT_FAN_OFFSET		0x5f
 #define D5NEXT_5V_VOLTAGE		0x39
 #define D5NEXT_12V_VOLTAGE		0x37
-#define D5NEXT_CTRL_REPORT_SIZE		0x329
-#define D5NEXT_TEMP_CTRL_OFFSET		0x2D
+#define D5NEXT_VIRTUAL_SENSORS_START	0x3f
 static u16 d5next_sensor_fan_offsets[] = { D5NEXT_PUMP_OFFSET, D5NEXT_FAN_OFFSET };
 
-/* Pump and fan speed registers in D5 Next control report (from 0-100%) */
-static u16 d5next_ctrl_fan_offsets[] = { 0x96, 0x41 };
+/* Control report offsets for the D5 Next pump */
+#define D5NEXT_TEMP_CTRL_OFFSET		0x2D	/* Temperature sensor offsets location */
+static u16 d5next_ctrl_fan_offsets[] = { 0x96, 0x41 };	/* Pump and fan speed (from 0-100%) */
 
-/* Register offsets for the Farbwerk RGB controller */
+/* Spec and sensor report offset for the Farbwerk RGB controller */
 #define FARBWERK_NUM_SENSORS		4
 #define FARBWERK_SENSOR_START		0x2f
 
-/* Register offsets for the Farbwerk 360 RGB controller */
+/* Specs of the Farbwerk 360 RGB controller */
 #define FARBWERK360_NUM_SENSORS			4
-#define FARBWERK360_SENSOR_START		0x32
 #define FARBWERK360_NUM_VIRTUAL_SENSORS		16
-#define FARBWERK360_VIRTUAL_SENSORS_START	0x3a
 #define FARBWERK360_CTRL_REPORT_SIZE		0x682
+
+/* Sensor report offsets for the Farbwerk 360 */
+#define FARBWERK360_SENSOR_START		0x32
+#define FARBWERK360_VIRTUAL_SENSORS_START	0x3a
+
+/* Control report offsets for the Farbwerk 360 */
 #define FARBWERK360_TEMP_CTRL_OFFSET		0x8
 
-/* Register offsets for the Octo fan controller */
+/* Specs of the Octo fan controller */
 #define OCTO_NUM_FANS			8
 #define OCTO_NUM_SENSORS		4
-#define OCTO_SENSOR_START		0x3D
 #define OCTO_NUM_VIRTUAL_SENSORS	16
-#define OCTO_VIRTUAL_SENSOR_START	0x45
 #define OCTO_CTRL_REPORT_SIZE		0x65F
-#define OCTO_TEMP_CTRL_OFFSET		0xa
+
+/* Sensor report offsets for the Octo */
+#define OCTO_SENSOR_START		0x3D
+#define OCTO_VIRTUAL_SENSORS_START	0x45
 static u16 octo_sensor_fan_offsets[] = { 0x7D, 0x8A, 0x97, 0xA4, 0xB1, 0xBE, 0xCB, 0xD8 };
 
-/* Fan speed registers in Octo control report (from 0-100%) */
+/* Control report offsets for the Octo */
+#define OCTO_TEMP_CTRL_OFFSET		0xA
+/* Fan speed offsets (0-100%) */
 static u16 octo_ctrl_fan_offsets[] = { 0x5A, 0xAF, 0x104, 0x159, 0x1AE, 0x203, 0x258, 0x2AD };
 
-/* Register offsets for the Quadro fan controller */
+/* Specs of Quadro fan controller */
 #define QUADRO_NUM_FANS			4
 #define QUADRO_NUM_SENSORS		4
-#define QUADRO_SENSOR_START		0x34
 #define QUADRO_NUM_VIRTUAL_SENSORS	16
-#define QUADRO_VIRTUAL_SENSORS_START	0x3c
 #define QUADRO_CTRL_REPORT_SIZE		0x3c1
+
+/* Sensor report offsets for the Quadro */
+#define QUADRO_SENSOR_START		0x34
+#define QUADRO_VIRTUAL_SENSORS_START	0x3c
 #define QUADRO_FLOW_SENSOR_OFFSET	0x6e
-#define QUADRO_TEMP_CTRL_OFFSET		0xa
-#define QUADRO_CTRL_FLOW_PULSES_OFFSET	0x6
 static u16 quadro_sensor_fan_offsets[] = { 0x70, 0x7D, 0x8A, 0x97 };
 
-/* Fan speed registers in Quadro control report (from 0-100%) */
-static u16 quadro_ctrl_fan_offsets[] = { 0x36, 0x8b, 0xe0, 0x135 };
+/* Control report offsets for the Quadro */
+#define QUADRO_TEMP_CTRL_OFFSET		0xA
+#define QUADRO_FLOW_PULSES_CTRL_OFFSET	0x6
+static u16 quadro_ctrl_fan_offsets[] = { 0x36, 0x8b, 0xe0, 0x135 }; /* Fan speed offsets (0-100%) */
 
-/* Register offsets for the High Flow Next */
+/* Specs of High Flow Next flow sensor */
 #define HIGHFLOWNEXT_NUM_SENSORS	2
+
+/* Sensor report offsets for the High Flow Next */
 #define HIGHFLOWNEXT_SENSOR_START	85
 #define HIGHFLOWNEXT_FLOW		81
 #define HIGHFLOWNEXT_WATER_QUALITY	89
@@ -207,7 +219,25 @@ static u16 quadro_ctrl_fan_offsets[] = { 0x36, 0x8b, 0xe0, 0x135 };
 #define HIGHFLOWNEXT_5V_VOLTAGE		97
 #define HIGHFLOWNEXT_5V_VOLTAGE_USB	99
 
-/* Register offsets for Leakshield */
+/* Specs of the Leakshield */
+#define LEAKSHIELD_USB_REPORT_LENGTH			49
+#define LEAKSHIELD_USB_REPORT_ENDPOINT			2
+#define LEAKSHIELD_USB_REPORT_PUMP_RPM_OFFSET		1
+#define LEAKSHIELD_USB_REPORT_FLOW_RPM_UNIT_OFFSET	33
+#define LEAKSHIELD_USB_REPORT_FLOW_OFFSET		3
+#define LEAKSHIELD_USB_REPORT_FLOW_UNIT_OFFSET		34
+#define LEAKSHIELD_USB_REPORT_UNIT_RPM			0x03
+#define LEAKSHIELD_USB_REPORT_UNIT_DL_PER_H		0x0C
+
+/* USB bulk message to report pump RPM and flow rate for pressure calculations */
+static u8 leakshield_usb_report_template[] = {
+	0x4, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff,
+	0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff,
+	0x7f, 0xff, 0x7f, 0xff, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
+	0x0, 0x0, 0x0, 0x0
+};
+
+/* Sensor report offsets for Leakshield */
 #define LEAKSHIELD_PRESSURE_ADJUSTED	285
 #define LEAKSHIELD_TEMPERATURE_1	265
 #define LEAKSHIELD_TEMPERATURE_2	287
@@ -218,46 +248,33 @@ static u16 quadro_ctrl_fan_offsets[] = { 0x36, 0x8b, 0xe0, 0x135 };
 #define LEAKSHIELD_FLOW_IN		111
 #define LEAKSHIELD_RESERVOIR_VOLUME	313
 #define LEAKSHIELD_RESERVOIR_FILLED	311
-/* USB bulk message to report pump RPM and flow rate for pressure calculations */
-static u8 leakshield_usb_report_template[] = {
-	0x4, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff,
-	0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff, 0x7f, 0xff,
-	0x7f, 0xff, 0x7f, 0xff, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
-	0x0, 0x0, 0x0, 0x0
-};
 
-#define LEAKSHIELD_USB_REPORT_LENGTH			49
-#define LEAKSHIELD_USB_REPORT_ENDPOINT			2
-#define LEAKSHIELD_USB_REPORT_PUMP_RPM_OFFSET		1
-#define LEAKSHIELD_USB_REPORT_FLOW_RPM_UNIT_OFFSET	33
-#define LEAKSHIELD_USB_REPORT_FLOW_OFFSET		3
-#define LEAKSHIELD_USB_REPORT_FLOW_UNIT_OFFSET		34
-#define LEAKSHIELD_USB_REPORT_UNIT_RPM			0x03
-#define LEAKSHIELD_USB_REPORT_UNIT_DL_PER_H		0x0C
-
-/* Register offsets for Aquastream XT */
+/* Specs of the Aquastream XT pump */
 #define AQUASTREAMXT_SERIAL_START		0x3a
 #define AQUASTREAMXT_FIRMWARE_VERSION		0x32
 #define AQUASTREAMXT_NUM_FANS			2
 #define AQUASTREAMXT_NUM_SENSORS		3
-#define AQUASTREAMXT_SENSOR_START		0xd
-#define AQUASTREAMXT_SENSOR_REPORT_SIZE		0x42
-#define AQUASTREAMXT_CTRL_REPORT_SIZE		0x34
-#define AQUASTREAMXT_FAN_VOLTAGE_OFFSET		0x7
-#define AQUASTREAMXT_FAN_STATUS_OFFSET		0x1d
 #define AQUASTREAMXT_FAN_STOPPED		0x4
-#define AQUASTREAMXT_PUMP_VOLTAGE_OFFSET	0x9
-#define AQUASTREAMXT_PUMP_CURR_OFFSET		0xb
-#define AQUASTREAMXT_CTRL_PUMP_MODE_OFFSET	0x3
-#define AQUASTREAMXT_CTRL_PUMP_MODE_MANUAL	0x14
-#define AQUASTREAMXT_CTRL_FAN_MODE_OFFSET	0x1a
-#define AQUASTREAMXT_CTRL_FAN_MODE_MANUAL	0x1
 #define AQUASTREAMXT_PUMP_CONVERSION_CONST	45000000
 #define AQUASTREAMXT_FAN_CONVERSION_CONST	5646000
 #define AQUASTREAMXT_PUMP_MIN_RPM		3000
 #define AQUASTREAMXT_PUMP_MAX_RPM		6000
+#define AQUASTREAMXT_SENSOR_REPORT_SIZE		0x42
+#define AQUASTREAMXT_CTRL_REPORT_SIZE		0x34
+
+/* Sensor report offsets and info for Aquastream XT */
+#define AQUASTREAMXT_SENSOR_START		0xd
+#define AQUASTREAMXT_FAN_VOLTAGE_OFFSET		0x7
+#define AQUASTREAMXT_FAN_STATUS_OFFSET		0x1d
+#define AQUASTREAMXT_PUMP_VOLTAGE_OFFSET	0x9
+#define AQUASTREAMXT_PUMP_CURR_OFFSET		0xb
 static u16 aquastreamxt_sensor_fan_offsets[] = { 0x13, 0x1b };
 
+/* Control report offsets for Aquastream XT */
+#define AQUASTREAMXT_CTRL_PUMP_MODE_OFFSET	0x3
+#define AQUASTREAMXT_CTRL_PUMP_MODE_MANUAL	0x14
+#define AQUASTREAMXT_CTRL_FAN_MODE_OFFSET	0x1a
+#define AQUASTREAMXT_CTRL_FAN_MODE_MANUAL	0x1
 static u16 aquastreamxt_ctrl_fan_offsets[] = { 0x8, 0x1b };
 
 /* Labels for D5 Next */
@@ -1723,7 +1740,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->num_temp_sensors = D5NEXT_NUM_SENSORS;
 		priv->temp_sensor_start_offset = D5NEXT_COOLANT_TEMP;
 		priv->num_virtual_temp_sensors = D5NEXT_NUM_VIRTUAL_SENSORS;
-		priv->virtual_temp_sensor_start_offset = D5NEXT_VIRTUAL_SENSOR_START;
+		priv->virtual_temp_sensor_start_offset = D5NEXT_VIRTUAL_SENSORS_START;
 
 		priv->power_cycle_count_offset = AQC_POWER_CYCLES;
 		priv->buffer_size = D5NEXT_CTRL_REPORT_SIZE;
@@ -1774,7 +1791,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->num_temp_sensors = OCTO_NUM_SENSORS;
 		priv->temp_sensor_start_offset = OCTO_SENSOR_START;
 		priv->num_virtual_temp_sensors = OCTO_NUM_VIRTUAL_SENSORS;
-		priv->virtual_temp_sensor_start_offset = OCTO_VIRTUAL_SENSOR_START;
+		priv->virtual_temp_sensor_start_offset = OCTO_VIRTUAL_SENSORS_START;
 
 		priv->power_cycle_count_offset = AQC_POWER_CYCLES;
 		priv->buffer_size = OCTO_CTRL_REPORT_SIZE;
@@ -1803,7 +1820,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->buffer_size = QUADRO_CTRL_REPORT_SIZE;
 		priv->flow_sensor_offset = QUADRO_FLOW_SENSOR_OFFSET;
 		priv->temp_ctrl_offset = QUADRO_TEMP_CTRL_OFFSET;
-		priv->flow_pulses_ctrl_offset = QUADRO_CTRL_FLOW_PULSES_OFFSET;
+		priv->flow_pulses_ctrl_offset = QUADRO_FLOW_PULSES_CTRL_OFFSET;
 
 		priv->temp_label = label_temp_sensors;
 		priv->virtual_temp_label = label_virtual_temp_sensors;
