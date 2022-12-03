@@ -97,7 +97,7 @@ static u8 aquastreamxt_secondary_ctrl_report[] = {
 #define AQC_FIRMWARE_VERSION		0x0D
 #define AQC_POWER_CYCLES		0x18
 
-#define AQC_TEMP_SENSOR_SIZE		0x02
+#define AQC_SENSOR_SIZE		0x02
 #define AQC_SENSOR_NA			0x7FFF
 #define AQC_FAN_PERCENT_OFFSET		0x00
 #define AQC_FAN_VOLTAGE_OFFSET		0x02
@@ -879,7 +879,7 @@ static int aqc_legacy_read(struct aqc_data *priv)
 	/* Temperature sensor readings */
 	for (i = 0; i < priv->num_temp_sensors; i++) {
 		sensor_value = get_unaligned_le16(priv->buffer + priv->temp_sensor_start_offset +
-						  i * AQC_TEMP_SENSOR_SIZE);
+						  i * AQC_SENSOR_SIZE);
 		priv->temp_input[i] = sensor_value * 10;
 	}
 
@@ -937,7 +937,7 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			ret =
 			    aqc_get_ctrl_val(priv,
 					     priv->temp_ctrl_offset +
-					     channel * AQC_TEMP_SENSOR_SIZE, val, AQC_BE16);
+					     channel * AQC_SENSOR_SIZE, val, AQC_BE16);
 			if (ret < 0)
 				return ret;
 			*val *= 10;
@@ -1205,7 +1205,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			ret =
 			    aqc_set_ctrl_val(priv,
 					     priv->temp_ctrl_offset +
-					     channel * AQC_TEMP_SENSOR_SIZE, val, AQC_BE16);
+					     channel * AQC_SENSOR_SIZE, val, AQC_BE16);
 			if (ret < 0)
 				return ret;
 			break;
@@ -1518,7 +1518,7 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 	for (i = 0; i < priv->num_temp_sensors; i++) {
 		sensor_value = get_unaligned_be16(data +
 						  priv->temp_sensor_start_offset +
-						  i * AQC_TEMP_SENSOR_SIZE);
+						  i * AQC_SENSOR_SIZE);
 		if (sensor_value == AQC_SENSOR_NA)
 			priv->temp_input[i] = -ENODATA;
 		else
@@ -1529,7 +1529,7 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 	for (j = 0; j < priv->num_virtual_temp_sensors; j++) {
 		sensor_value = get_unaligned_be16(data +
 						  priv->virtual_temp_sensor_start_offset +
-						  j * AQC_TEMP_SENSOR_SIZE);
+						  j * AQC_SENSOR_SIZE);
 		if (sensor_value == AQC_SENSOR_NA)
 			priv->temp_input[i] = -ENODATA;
 		else
@@ -1556,7 +1556,7 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 	/* Flow sensor readings */
 	for (j = 0; j < priv->num_flow_sensors; j++) {
 		priv->speed_input[i] = get_unaligned_be16(data + priv->flow_sensors_start_offset +
-							  j * AQC_TEMP_SENSOR_SIZE);
+							  j * AQC_SENSOR_SIZE);
 		i++;
 	}
 
