@@ -97,7 +97,7 @@ static u8 aquastreamxt_secondary_ctrl_report[] = {
 #define AQC_FIRMWARE_VERSION		0x0D
 #define AQC_POWER_CYCLES		0x18
 
-#define AQC_SENSOR_SIZE		0x02
+#define AQC_SENSOR_SIZE			0x02
 #define AQC_SENSOR_NA			0x7FFF
 #define AQC_FAN_PERCENT_OFFSET		0x00
 #define AQC_FAN_VOLTAGE_OFFSET		0x02
