@@ -778,8 +778,8 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 				break;
 			case aquaero:
 			case quadro:
-				/* Special case to support flow sensor */
-				if (channel < priv->num_fans + 1)
+				/* Special case to support flow sensors */
+				if (channel < priv->num_fans + priv->num_flow_sensors)
 					return 0444;
 				break;
 			default:
