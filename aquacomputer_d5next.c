@@ -97,7 +97,7 @@ static u8 aquastreamxt_secondary_ctrl_report[] = {
 #define AQC_FIRMWARE_VERSION		0x0D
 #define AQC_POWER_CYCLES		0x18
 
-#define AQC_TEMP_SENSOR_SIZE		0x02
+#define AQC_SENSOR_SIZE			0x02
 #define AQC_SENSOR_NA			0x7FFF
 #define AQC_FAN_PERCENT_OFFSET		0x00
 #define AQC_FAN_VOLTAGE_OFFSET		0x02
@@ -115,6 +115,7 @@ static u8 aquastreamxt_secondary_ctrl_report[] = {
 #define AQUAERO_NUM_FANS		4
 #define AQUAERO_NUM_SENSORS		8
 #define AQUAERO_NUM_VIRTUAL_SENSORS	8
+#define AQUAERO_NUM_FLOW_SENSORS	2
 #define AQUAERO_CTRL_REPORT_SIZE	0xa93
 #define AQUAERO_CTRL_PRESET_ID		0x5c
 #define AQUAERO_CTRL_PRESET_SIZE	0x02
@@ -123,7 +124,7 @@ static u8 aquastreamxt_secondary_ctrl_report[] = {
 /* Sensor report offsets for Aquaero fan controllers */
 #define AQUAERO_SENSOR_START		0x65
 #define AQUAERO_VIRTUAL_SENSOR_START	0x85
-#define AQUAERO_FIRST_FLOW_SENSOR	0xF9
+#define AQUAERO_FLOW_SENSORS_START	0xF9
 #define AQUAERO_FAN_VOLTAGE_OFFSET	0x04
 #define AQUAERO_FAN_CURRENT_OFFSET	0x06
 #define AQUAERO_FAN_POWER_OFFSET	0x08
@@ -194,6 +195,7 @@ static u16 octo_ctrl_fan_offsets[] = { 0x5A, 0xAF, 0x104, 0x159, 0x1AE, 0x203, 0
 #define QUADRO_NUM_FANS			4
 #define QUADRO_NUM_SENSORS		4
 #define QUADRO_NUM_VIRTUAL_SENSORS	16
+#define QUADRO_NUM_FLOW_SENSORS		1
 #define QUADRO_CTRL_REPORT_SIZE		0x3c1
 
 /* Sensor report offsets for the Quadro */
@@ -395,7 +397,8 @@ static const char *const label_aquaero_speeds[] = {
 	"Fan 2 speed",
 	"Fan 3 speed",
 	"Fan 4 speed",
-	"Flow sensor 1 [dl/h]"
+	"Flow sensor 1 [dL/h]",
+	"Flow sensor 2 [dL/h]"
 };
 
 /* Labels for High Flow Next */
@@ -491,7 +494,8 @@ struct aqc_data {
 	int virtual_temp_sensor_start_offset;
 	u16 temp_ctrl_offset;
 	u16 power_cycle_count_offset;
-	u8 flow_sensor_offset;
+	int num_flow_sensors;
+	u8 flow_sensors_start_offset;
 	u8 flow_pulses_ctrl_offset;
 	struct aqc_fan_structure_offsets *fan_structure;
 
@@ -774,8 +778,8 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 				break;
 			case aquaero:
 			case quadro:
-				/* Special case to support flow sensor */
-				if (channel < priv->num_fans + 1)
+				/* Special case to support flow sensors */
+				if (channel < priv->num_fans + priv->num_flow_sensors)
 					return 0444;
 				break;
 			default:
@@ -875,7 +879,7 @@ static int aqc_legacy_read(struct aqc_data *priv)
 	/* Temperature sensor readings */
 	for (i = 0; i < priv->num_temp_sensors; i++) {
 		sensor_value = get_unaligned_le16(priv->buffer + priv->temp_sensor_start_offset +
-						  i * AQC_TEMP_SENSOR_SIZE);
+						  i * AQC_SENSOR_SIZE);
 		priv->temp_input[i] = sensor_value * 10;
 	}
 
@@ -933,7 +937,7 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			ret =
 			    aqc_get_ctrl_val(priv,
 					     priv->temp_ctrl_offset +
-					     channel * AQC_TEMP_SENSOR_SIZE, val, AQC_BE16);
+					     channel * AQC_SENSOR_SIZE, val, AQC_BE16);
 			if (ret < 0)
 				return ret;
 			*val *= 10;
@@ -1201,7 +1205,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			ret =
 			    aqc_set_ctrl_val(priv,
 					     priv->temp_ctrl_offset +
-					     channel * AQC_TEMP_SENSOR_SIZE, val, AQC_BE16);
+					     channel * AQC_SENSOR_SIZE, val, AQC_BE16);
 			if (ret < 0)
 				return ret;
 			break;
@@ -1514,7 +1518,7 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 	for (i = 0; i < priv->num_temp_sensors; i++) {
 		sensor_value = get_unaligned_be16(data +
 						  priv->temp_sensor_start_offset +
-						  i * AQC_TEMP_SENSOR_SIZE);
+						  i * AQC_SENSOR_SIZE);
 		if (sensor_value == AQC_SENSOR_NA)
 			priv->temp_input[i] = -ENODATA;
 		else
@@ -1525,7 +1529,7 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 	for (j = 0; j < priv->num_virtual_temp_sensors; j++) {
 		sensor_value = get_unaligned_be16(data +
 						  priv->virtual_temp_sensor_start_offset +
-						  j * AQC_TEMP_SENSOR_SIZE);
+						  j * AQC_SENSOR_SIZE);
 		if (sensor_value == AQC_SENSOR_NA)
 			priv->temp_input[i] = -ENODATA;
 		else
@@ -1549,6 +1553,13 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 				       priv->fan_structure->curr);
 	}
 
+	/* Flow sensor readings */
+	for (j = 0; j < priv->num_flow_sensors; j++) {
+		priv->speed_input[i] = get_unaligned_be16(data + priv->flow_sensors_start_offset +
+							  j * AQC_SENSOR_SIZE);
+		i++;
+	}
+
 	if (priv->power_cycle_count_offset != 0)
 		priv->power_cycles = get_unaligned_be32(data + priv->power_cycle_count_offset);
 
@@ -1557,10 +1568,6 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 	case d5next:
 		priv->voltage_input[2] = get_unaligned_be16(data + D5NEXT_5V_VOLTAGE) * 10;
 		priv->voltage_input[3] = get_unaligned_be16(data + D5NEXT_12V_VOLTAGE) * 10;
-		break;
-	case aquaero:
-	case quadro:
-		priv->speed_input[4] = get_unaligned_be16(data + priv->flow_sensor_offset);
 		break;
 	case highflownext:
 		/* If external temp sensor is not connected, its power reading is also N/A */
@@ -1721,7 +1728,8 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 		priv->buffer_size = AQUAERO_CTRL_REPORT_SIZE;
 		priv->temp_ctrl_offset = AQUAERO_TEMP_CTRL_OFFSET;
-		priv->flow_sensor_offset = AQUAERO_FIRST_FLOW_SENSOR;
+		priv->num_flow_sensors = AQUAERO_NUM_FLOW_SENSORS;
+		priv->flow_sensors_start_offset = AQUAERO_FLOW_SENSORS_START;
 
 		priv->temp_label = label_temp_sensors;
 		priv->virtual_temp_label = label_virtual_temp_sensors;
@@ -1818,7 +1826,8 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 		priv->power_cycle_count_offset = AQC_POWER_CYCLES;
 		priv->buffer_size = QUADRO_CTRL_REPORT_SIZE;
-		priv->flow_sensor_offset = QUADRO_FLOW_SENSOR_OFFSET;
+		priv->num_flow_sensors = QUADRO_NUM_FLOW_SENSORS;
+		priv->flow_sensors_start_offset = QUADRO_FLOW_SENSOR_OFFSET;
 		priv->temp_ctrl_offset = QUADRO_TEMP_CTRL_OFFSET;
 		priv->flow_pulses_ctrl_offset = QUADRO_FLOW_PULSES_CTRL_OFFSET;
 
