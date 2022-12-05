@@ -1590,6 +1590,20 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 
 	/* Special-case sensor readings */
 	switch (priv->kind) {
+	case aquaero:
+		/* Read calculated virtual temp sensors */
+		i = priv->num_temp_sensors + priv->num_virtual_temp_sensors;
+		for (j = 0; j < priv->num_calc_virtual_temp_sensors; j++) {
+			sensor_value = get_unaligned_be16(data +
+					priv->calc_virtual_temp_sensor_start_offset +
+					j * AQC_SENSOR_SIZE);
+			if (sensor_value == AQC_SENSOR_NA)
+				priv->temp_input[i] = -ENODATA;
+			else
+				priv->temp_input[i] = sensor_value * 10;
+			i++;
+		}
+		break;
 	case d5next:
 		priv->voltage_input[2] = get_unaligned_be16(data + D5NEXT_5V_VOLTAGE) * 10;
 		priv->voltage_input[3] = get_unaligned_be16(data + D5NEXT_12V_VOLTAGE) * 10;
