@@ -32,8 +32,9 @@
 #define USB_PRODUCT_ID_LEAKSHIELD	0xf014
 #define USB_PRODUCT_ID_AQUASTREAMXT	0xf0b6
 
-enum kinds { aquaero, d5next, farbwerk, farbwerk360, octo, quadro, highflownext, leakshield,
-	aquastreamxt
+enum kinds {
+	aquaero, d5next, farbwerk, farbwerk360, octo,
+	quadro, highflownext, leakshield, aquastreamxt
 };
 
 static const char *const aqc_device_names[] = {
