@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0+
 /*
  * hwmon driver for Aquacomputer devices (D5 Next, Farbwerk, Farbwerk 360, Octo,
- * Quadro, High Flow Next, Aquaero, Leakshield, Aquastream XT)
+ * Quadro, High Flow Next, Aquaero, Leakshield, Aquastream XT, Aquastream Ultimate)
  *
  * Aquacomputer devices send HID reports (with ID 0x01) every second to report
  * sensor values, with the exception of Aquastream XT.
