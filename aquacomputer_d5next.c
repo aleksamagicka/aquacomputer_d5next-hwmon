@@ -227,9 +227,9 @@ static u16 quadro_ctrl_fan_offsets[] = { 0x36, 0x8b, 0xe0, 0x135 };
 #define HIGHFLOWNEXT_5V_VOLTAGE_USB	99
 
 /* Specs of the Leakshield */
-#define LEAKSHIELD_NUM_SENSORS				2
-#define LEAKSHIELD_USB_REPORT_LENGTH			49
-#define LEAKSHIELD_USB_REPORT_ENDPOINT			2
+#define LEAKSHIELD_NUM_SENSORS		2
+#define LEAKSHIELD_USB_REPORT_LENGTH	49
+#define LEAKSHIELD_USB_REPORT_ENDPOINT	2
 
 /* Sensor report offsets for Leakshield */
 #define LEAKSHIELD_PRESSURE_ADJUSTED	285
