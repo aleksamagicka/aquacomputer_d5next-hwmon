@@ -227,8 +227,23 @@ static u16 quadro_ctrl_fan_offsets[] = { 0x36, 0x8b, 0xe0, 0x135 };
 #define HIGHFLOWNEXT_5V_VOLTAGE_USB	99
 
 /* Specs of the Leakshield */
+#define LEAKSHIELD_NUM_SENSORS				2
 #define LEAKSHIELD_USB_REPORT_LENGTH			49
 #define LEAKSHIELD_USB_REPORT_ENDPOINT			2
+
+/* Sensor report offsets for Leakshield */
+#define LEAKSHIELD_PRESSURE_ADJUSTED	285
+#define LEAKSHIELD_TEMPERATURE_1	265
+#define LEAKSHIELD_TEMPERATURE_2	287
+#define LEAKSHIELD_PRESSURE_MIN		291
+#define LEAKSHIELD_PRESSURE_TARGET	293
+#define LEAKSHIELD_PRESSURE_MAX		295
+#define LEAKSHIELD_PUMP_RPM_IN		101
+#define LEAKSHIELD_FLOW_IN		111
+#define LEAKSHIELD_RESERVOIR_VOLUME	313
+#define LEAKSHIELD_RESERVOIR_FILLED	311
+
+/* USB control report offsets and info for Leakshield */
 #define LEAKSHIELD_USB_REPORT_PUMP_RPM_OFFSET		1
 #define LEAKSHIELD_USB_REPORT_FLOW_RPM_UNIT_OFFSET	33
 #define LEAKSHIELD_USB_REPORT_FLOW_OFFSET		3
@@ -243,18 +258,6 @@ static u8 leakshield_usb_report_template[] = {
 	0x7f, 0xff, 0x7f, 0xff, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
 	0x0, 0x0, 0x0, 0x0
 };
-
-/* Sensor report offsets for Leakshield */
-#define LEAKSHIELD_PRESSURE_ADJUSTED	285
-#define LEAKSHIELD_TEMPERATURE_1	265
-#define LEAKSHIELD_TEMPERATURE_2	287
-#define LEAKSHIELD_PRESSURE_MIN		291
-#define LEAKSHIELD_PRESSURE_TARGET	293
-#define LEAKSHIELD_PRESSURE_MAX		295
-#define LEAKSHIELD_PUMP_RPM_IN		101
-#define LEAKSHIELD_FLOW_IN		111
-#define LEAKSHIELD_RESERVOIR_VOLUME	313
-#define LEAKSHIELD_RESERVOIR_FILLED	311
 
 /* Specs of the Aquastream XT pump */
 #define AQUASTREAMXT_SERIAL_START		0x3a
@@ -1906,15 +1909,14 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->kind = leakshield;
 
 		priv->num_fans = 0;
-		priv->num_temp_sensors = 2;
+		priv->num_temp_sensors = LEAKSHIELD_NUM_SENSORS;
 		priv->temp_sensor_start_offset = LEAKSHIELD_TEMPERATURE_1;
-		priv->temp_ctrl_offset = 0;
-		priv->temp_label = label_leakshield_temp_sensors;
-
-		priv->speed_label = label_leakshield_fan_speed;
 
 		/* Plus two bytes for checksum */
 		priv->buffer_size = LEAKSHIELD_USB_REPORT_LENGTH + 2;
+
+		priv->temp_label = label_leakshield_temp_sensors;
+		priv->speed_label = label_leakshield_fan_speed;
 		break;
 	case USB_PRODUCT_ID_AQUASTREAMXT:
 		priv->kind = aquastreamxt;
