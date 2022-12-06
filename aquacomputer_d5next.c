@@ -452,7 +452,7 @@ static const char *const label_leakshield_fan_speed[] = {
 };
 
 /* Labels for AquastreamXT */
-static const char *const label_temp_sensors_aquastreamxt[] = {
+static const char *const label_aquastreamxt_temp_sensors[] = {
 	"Fan IC temp",
 	"External sensor",
 	"Coolant temp"
@@ -878,7 +878,8 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 	return 0;
 }
 
-static int aqc_legacy_read(struct aqc_data *priv)
+/* Reads Aquastream XT sensors the legacy way */
+static int aqc_aquastreamxt_read(struct aqc_data *priv)
 {
 	int ret, i, sensor_value;
 
@@ -902,9 +903,11 @@ static int aqc_legacy_read(struct aqc_data *priv)
 		priv->temp_input[i] = sensor_value * 10;
 	}
 
+	/* Read pump speed in RPM */
 	sensor_value = get_unaligned_le16(priv->buffer + priv->fan_sensor_offsets[0]);
 	priv->speed_input[0] = aquastream_convert_pump_rpm(sensor_value);
 
+	/* Read fan speed in RPM, if available */
 	sensor_value = get_unaligned_le16(priv->buffer + AQUASTREAMXT_FAN_STATUS_OFFSET);
 	if (sensor_value == AQUASTREAMXT_FAN_STOPPED) {
 		priv->speed_input[1] = 0;
@@ -936,7 +939,7 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 
 	if (time_after(jiffies, priv->updated + STATUS_UPDATE_INTERVAL)) {
 		if (priv->kind == aquastreamxt) {
-			aqc_legacy_read(priv);
+			aqc_aquastreamxt_read(priv);
 			priv->updated = jiffies;
 		} else {
 			return -ENODATA;
@@ -1929,7 +1932,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->temp_sensor_start_offset = AQUASTREAMXT_SENSOR_START;
 		priv->buffer_size = AQUASTREAMXT_SENSOR_REPORT_SIZE;
 
-		priv->temp_label = label_temp_sensors_aquastreamxt;
+		priv->temp_label = label_aquastreamxt_temp_sensors;
 		priv->speed_label = label_d5next_speeds;
 		priv->power_label = label_d5next_power;
 		priv->voltage_label = label_d5next_voltages;
