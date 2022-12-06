@@ -94,7 +94,7 @@ static u8 aquastreamxt_secondary_ctrl_report[] = {
 #define AQC_LEGACY_STATUS_REPORT_ID	0x04
 #define AQC_LEGACY_CTRL_REPORT_ID	0x06
 
-/* Info, sensor sizes and offsets for all Aquacomputer devices */
+/* Info, sensor sizes and offsets for most Aquacomputer devices */
 #define AQC_SERIAL_START		0x03
 #define AQC_FIRMWARE_VERSION		0x0D
 #define AQC_POWER_CYCLES		0x18
