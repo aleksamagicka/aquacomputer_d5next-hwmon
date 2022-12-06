@@ -90,7 +90,7 @@ static u8 aquastreamxt_secondary_ctrl_report[] = {
 #define AQC_BE16	1
 #define AQC_LE16	2
 
-/* Sensor report ID for legacy devices */
+/* Report IDs for legacy devices */
 #define AQC_LEGACY_STATUS_REPORT_ID	0x04
 #define AQC_LEGACY_CTRL_REPORT_ID	0x06
 
