@@ -516,11 +516,10 @@ struct aqc_data {
 	u8 flow_pulses_ctrl_offset;
 	struct aqc_fan_structure_offsets *fan_structure;
 
-	u8 serial_number_start_offset;
-	u8 firmware_version_offset;
-
 	/* General info, available across all devices */
+	u8 serial_number_start_offset;
 	u32 serial_number[2];
+	u8 firmware_version_offset;
 	u16 firmware_version;
 
 	/* How many times the device was powered on */
