@@ -48,8 +48,8 @@ The High Flow Next exposes +5V voltages, water quality, conductivity and flow re
 A temperature sensor can be connected to it, in which case it provides its reading
 and an estimation of the dissipated/absorbed power in the liquid cooling loop.
 
-The Aquastream XT pump exposes sensors readings three temperature sensors, voltages for
-pump and fan and current for the pump. The pump and fan speed can be controlled.
+The Aquastream XT pump exposes three temperature sensors, voltages for
+pump and fan and current for the pump.
 
 The possible values for pwm_enable are:
 for D5 Next, Quadro and Octo
