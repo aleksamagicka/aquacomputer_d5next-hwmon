@@ -1933,7 +1933,6 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 		priv->temp_label = label_aquastreamxt_temp_sensors;
 		priv->speed_label = label_d5next_speeds;
-		priv->power_label = label_d5next_power;
 		priv->voltage_label = label_d5next_voltages;
 		priv->current_label = label_d5next_current;
 		break;
