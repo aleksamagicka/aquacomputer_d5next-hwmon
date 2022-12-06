@@ -559,29 +559,29 @@ static int aqc_pwm_to_percent(long val)
 	return DIV_ROUND_CLOSEST(val * 100 * 100, 255);
 }
 
-/* Converts rpm to pwm */
-static int aquastream_rpm_to_pwm(long val)
+/* Converts RPM to PWM */
+static int aqc_aquastream_rpm_to_pwm(long val)
 {
 	return DIV_ROUND_CLOSEST((val - AQUASTREAMXT_PUMP_MIN_RPM) * 255,
 				 AQUASTREAMXT_PUMP_MAX_RPM - AQUASTREAMXT_PUMP_MIN_RPM);
 }
 
-/* Converts to rpm between 3000 and 6000, where the output is a multiple of 60 */
-static int aquastream_pwm_to_rpm(long val)
+/* Converts to RPM between 3000 and 6000, where the output is a multiple of 60 */
+static int aqc_aquastream_pwm_to_rpm(long val)
 {
 	return DIV_ROUND_CLOSEST(val * 50, 255) * 60 + AQUASTREAMXT_PUMP_MIN_RPM;
 }
 
-/* Converts raw value for Aquastream XT pump speed to rpm */
-static int aquastream_convert_pump_rpm(u16 val)
+/* Converts raw value for Aquastream XT pump speed to RPM */
+static int aqc_aquastream_convert_pump_rpm(u16 val)
 {
 	if (val > 0)
 		return DIV_ROUND_CLOSEST(AQUASTREAMXT_PUMP_CONVERSION_CONST, val);
 	return 0;
 }
 
-/* Converts raw value for Aquastream XT fan speed to rpm */
-static int aquastream_convert_fan_rpm(u16 val)
+/* Converts raw value for Aquastream XT fan speed to RPM */
+static int aqc_aquastream_convert_fan_rpm(u16 val)
 {
 	if (val > 0)
 		return DIV_ROUND_CLOSEST(AQUASTREAMXT_FAN_CONVERSION_CONST, val);
@@ -904,7 +904,7 @@ static int aqc_aquastreamxt_read(struct aqc_data *priv)
 
 	/* Read pump speed in RPM */
 	sensor_value = get_unaligned_le16(priv->buffer + priv->fan_sensor_offsets[0]);
-	priv->speed_input[0] = aquastream_convert_pump_rpm(sensor_value);
+	priv->speed_input[0] = aqc_aquastream_convert_pump_rpm(sensor_value);
 
 	/* Read fan speed in RPM, if available */
 	sensor_value = get_unaligned_le16(priv->buffer + AQUASTREAMXT_FAN_STATUS_OFFSET);
@@ -912,7 +912,7 @@ static int aqc_aquastreamxt_read(struct aqc_data *priv)
 		priv->speed_input[1] = 0;
 	} else {
 		sensor_value = get_unaligned_le16(priv->buffer + priv->fan_sensor_offsets[1]);
-		priv->speed_input[1] = aquastream_convert_fan_rpm(sensor_value);
+		priv->speed_input[1] = aqc_aquastream_convert_fan_rpm(sensor_value);
 	}
 
 	/* Calculation derived from linear regression */
@@ -1046,8 +1046,8 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 							     val, AQC_LE16);
 					if (ret < 0)
 						return ret;
-					*val = aquastream_convert_pump_rpm(*val);
-					*val = aquastream_rpm_to_pwm(*val);
+					*val = aqc_aquastream_convert_pump_rpm(*val);
+					*val = aqc_aquastream_rpm_to_pwm(*val);
 				} else {
 					ret =
 					    aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel],
@@ -1348,8 +1348,8 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				break;
 			case aquastreamxt:
 				if (channel == 0) {
-					pwm_value = aquastream_pwm_to_rpm(val);
-					pwm_value = aquastream_convert_pump_rpm(pwm_value);
+					pwm_value = aqc_aquastream_pwm_to_rpm(val);
+					pwm_value = aqc_aquastream_convert_pump_rpm(pwm_value);
 					ctrl_values_offsets[0] = priv->fan_ctrl_offsets[channel];
 					ctrl_values[0] = pwm_value;
 					ctrl_values_types[0] = AQC_LE16;
