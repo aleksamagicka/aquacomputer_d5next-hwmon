@@ -1690,7 +1690,7 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 		priv->speed_input[5] = get_unaligned_be16(data + AQUASTREAMULT_FLOW_3);
 
 		priv->power_input[0] = get_unaligned_be16(data + AQUASTREAMULT_PUMP_POWER) * 10000;
-		priv->power_input[0] = get_unaligned_be16(data + AQUASTREAMULT_FAN_POWER) * 10000;
+		priv->power_input[1] = get_unaligned_be16(data + AQUASTREAMULT_FAN_POWER) * 10000;
 
 		priv->voltage_input[0] = get_unaligned_be16(data + AQUASTREAMULT_PUMP_VOLTAGE) * 10;
 		priv->voltage_input[1] = get_unaligned_be16(data + AQUASTREAMULT_FAN_VOLTAGE) * 10;
