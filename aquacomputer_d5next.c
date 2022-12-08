@@ -178,6 +178,9 @@ static u16 d5next_ctrl_fan_offsets[] = { 0x96, 0x41 };	/* Pump and fan speed (fr
 #define AQUASTREAMULT_PUMP_POWER	0x55
 #define AQUASTREAMULT_FAN_VOLTAGE	0x43
 #define AQUASTREAMULT_PRESSURE_OFFSET	0x57
+#define AQUASTREAMULT_FLOW_1		0x37
+#define AQUASTREAMULT_FLOW_2		0x39
+#define AQUASTREAMULT_FLOW_3		0x3B
 
 /* Spec and sensor report offset for the Farbwerk RGB controller */
 #define FARBWERK_NUM_SENSORS		4
@@ -482,7 +485,10 @@ static const char *const label_aquastreamult_temp[] = {
 
 static const char *const label_aquastreamult_speeds[] = {
 	"Pump speed",
-	"Pressure [mbar]"
+	"Pressure [mbar]",
+	"Flow speed 1",
+	"Flow speed 2",
+	"Flow speed 3"
 };
 
 static const char *const label_aquastreamult_power[] = {
@@ -820,8 +826,8 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 		case hwmon_fan_label:
 			switch (priv->kind) {
 			case aquastreamult:
-				/* Special case to support pump RPM and pressure */
-				if (channel < 2)
+				/* Special case to support pump RPM, pressure and three flow sensors */
+				if (channel < 5)
 					return 0444;
 				break;
 			case highflownext:
@@ -1663,6 +1669,9 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 
 		priv->speed_input[0] = get_unaligned_be16(data + AQUASTREAMULT_PUMP_OFFSET);
 		priv->speed_input[1] = get_unaligned_be16(data + AQUASTREAMULT_PRESSURE_OFFSET);
+		priv->speed_input[2] = get_unaligned_be16(data + AQUASTREAMULT_FLOW_1);
+		priv->speed_input[3] = get_unaligned_be16(data + AQUASTREAMULT_FLOW_2);
+		priv->speed_input[4] = get_unaligned_be16(data + AQUASTREAMULT_FLOW_3);
 
 		priv->power_input[0] = get_unaligned_be16(data + AQUASTREAMULT_PUMP_POWER) * 10000;
 
