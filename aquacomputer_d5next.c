@@ -167,24 +167,27 @@ static u16 d5next_sensor_fan_offsets[] = { D5NEXT_PUMP_OFFSET, D5NEXT_FAN_OFFSET
 static u16 d5next_ctrl_fan_offsets[] = { 0x96, 0x41 };	/* Pump and fan speed (from 0-100%) */
 
 /* Specs of the Aquastream Ultimate pump */
+/* Pump does not follow the standard structure, so only consider the fan */
+#define AQUASTREAMULT_NUM_FANS		1
 #define AQUASTREAMULT_NUM_SENSORS	2
 
 /* Sensor report offsets for the Aquastream Ultimate pump */
-#define AQUASTREAMULT_COOLANT_TEMP	0x2D
-#define AQUASTREAMULT_EXTERNAL_TEMP	0x2F
-#define AQUASTREAMULT_PUMP_OFFSET	0x51
-#define AQUASTREAMULT_PUMP_VOLTAGE	0x3D
-#define AQUASTREAMULT_PUMP_CURRENT	0x53
-#define AQUASTREAMULT_PUMP_POWER	0x55
-#define AQUASTREAMULT_FAN_OFFSET	0x47
-#define AQUASTREAMULT_FAN_VOLTAGE	0x43
-#define AQUASTREAMULT_FAN_CURRENT	0x41
-#define AQUASTREAMULT_FAN_POWER		0x45
-#define AQUASTREAMULT_FAN_VOLTAGE	0x43
-#define AQUASTREAMULT_PRESSURE_OFFSET	0x57
-#define AQUASTREAMULT_FLOW_1		0x37
-#define AQUASTREAMULT_FLOW_2		0x39
-#define AQUASTREAMULT_FLOW_3		0x3B
+#define AQUASTREAMULT_COOLANT_TEMP		0x2D
+#define AQUASTREAMULT_EXTERNAL_TEMP		0x2F
+#define AQUASTREAMULT_PUMP_OFFSET		0x51
+#define AQUASTREAMULT_PUMP_VOLTAGE		0x3D
+#define AQUASTREAMULT_PUMP_CURRENT		0x53
+#define AQUASTREAMULT_PUMP_POWER		0x55
+#define AQUASTREAMULT_FAN_OFFSET		0x41
+#define AQUASTREAMULT_PUMP_FREQUENCY		0x15
+#define AQUASTREAMULT_PRESSURE_OFFSET		0x57
+#define AQUASTREAMULT_FLOW_1			0x37
+#define AQUASTREAMULT_FLOW_2			0x39
+#define AQUASTREAMULT_FLOW_3			0x3B
+#define AQUASTREAMULT_FAN_VOLTAGE_OFFSET	0x02
+#define AQUASTREAMULT_FAN_CURRENT_OFFSET	0x00
+#define AQUASTREAMULT_FAN_POWER_OFFSET		0x04
+#define AQUASTREAMULT_FAN_SPEED_OFFSET		0x06
 
 /* Spec and sensor report offset for the Farbwerk RGB controller */
 #define FARBWERK_NUM_SENSORS		4
@@ -488,8 +491,9 @@ static const char *const label_aquastreamult_temp[] = {
 };
 
 static const char *const label_aquastreamult_speeds[] = {
-	"Pump speed",
 	"Fan speed",
+	"Pump speed",
+	"Pump frequency",
 	"Pressure [mbar]",
 	"Flow speed 1",
 	"Flow speed 2",
@@ -497,18 +501,18 @@ static const char *const label_aquastreamult_speeds[] = {
 };
 
 static const char *const label_aquastreamult_power[] = {
-	"Pump power",
-	"Fan power"
+	"Fan power",
+	"Pump power"
 };
 
 static const char *const label_aquastreamult_voltages[] = {
-	"Pump +12V",
-	"Fan +12V"
+	"Fan +12V",
+	"Pump +12V"
 };
 
 static const char *const label_aquastreamult_current[] = {
-	"Pump current",
-	"Fan current"
+	"Fan current",
+	"Pump current"
 };
 
 struct aqc_fan_structure_offsets {
@@ -524,6 +528,14 @@ static struct aqc_fan_structure_offsets aqc_aquaero_fan_structure = {
 	.curr = AQUAERO_FAN_CURRENT_OFFSET,
 	.power = AQUAERO_FAN_POWER_OFFSET,
 	.speed = AQUAERO_FAN_SPEED_OFFSET
+};
+
+/* Fan structure offsets for Aquastream Ultimate */
+static struct aqc_fan_structure_offsets aqc_aquastreamult_fan_structure = {
+	.voltage = AQUASTREAMULT_FAN_VOLTAGE_OFFSET,
+	.curr = AQUASTREAMULT_FAN_CURRENT_OFFSET,
+	.power = AQUASTREAMULT_FAN_POWER_OFFSET,
+	.speed = AQUASTREAMULT_FAN_SPEED_OFFSET
 };
 
 /* Fan structure offsets for all devices except Aquaero */
@@ -835,9 +847,9 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 			case aquastreamult:
 				/*
 				 * Special case to support pump RPM, fan RPM,
-				 * pressure and three flow sensors
+				 * pressure, pump frequency and three flow sensors
 				 */
-				if (channel < 6)
+				if (channel < 7)
 					return 0444;
 				break;
 			case highflownext:
@@ -1682,24 +1694,21 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 		}
 		break;
 	case aquastreamult:
-		priv->temp_input[0] = get_unaligned_be16(data + AQUASTREAMULT_COOLANT_TEMP) * 10;
+		/* Second temp sensor is not positioned after the first one, read it here */
 		priv->temp_input[1] = get_unaligned_be16(data + AQUASTREAMULT_EXTERNAL_TEMP) * 10;
 
-		priv->speed_input[0] = get_unaligned_be16(data + AQUASTREAMULT_PUMP_OFFSET);
-		priv->speed_input[1] = get_unaligned_be16(data + AQUASTREAMULT_FAN_OFFSET);
-		priv->speed_input[2] = get_unaligned_be16(data + AQUASTREAMULT_PRESSURE_OFFSET);
-		priv->speed_input[3] = get_unaligned_be16(data + AQUASTREAMULT_FLOW_1);
-		priv->speed_input[4] = get_unaligned_be16(data + AQUASTREAMULT_FLOW_2);
-		priv->speed_input[5] = get_unaligned_be16(data + AQUASTREAMULT_FLOW_3);
+		priv->speed_input[1] = get_unaligned_be16(data + AQUASTREAMULT_PUMP_OFFSET);
+		priv->speed_input[2] = get_unaligned_be16(data + AQUASTREAMULT_PUMP_FREQUENCY);
+		priv->speed_input[3] = get_unaligned_be16(data + AQUASTREAMULT_PRESSURE_OFFSET);
+		priv->speed_input[4] = get_unaligned_be16(data + AQUASTREAMULT_FLOW_1);
+		priv->speed_input[5] = get_unaligned_be16(data + AQUASTREAMULT_FLOW_2);
+		priv->speed_input[6] = get_unaligned_be16(data + AQUASTREAMULT_FLOW_3);
 
-		priv->power_input[0] = get_unaligned_be16(data + AQUASTREAMULT_PUMP_POWER) * 10000;
-		priv->power_input[1] = get_unaligned_be16(data + AQUASTREAMULT_FAN_POWER) * 10000;
+		priv->power_input[1] = get_unaligned_be16(data + AQUASTREAMULT_PUMP_POWER) * 10000;
 
-		priv->voltage_input[0] = get_unaligned_be16(data + AQUASTREAMULT_PUMP_VOLTAGE) * 10;
-		priv->voltage_input[1] = get_unaligned_be16(data + AQUASTREAMULT_FAN_VOLTAGE) * 10;
+		priv->voltage_input[1] = get_unaligned_be16(data + AQUASTREAMULT_PUMP_VOLTAGE) * 10;
 
-		priv->current_input[0] = get_unaligned_be16(data + AQUASTREAMULT_PUMP_CURRENT);
-		priv->current_input[1] = get_unaligned_be16(data + AQUASTREAMULT_FAN_CURRENT);
+		priv->current_input[1] = get_unaligned_be16(data + AQUASTREAMULT_PUMP_CURRENT);
 		break;
 	case d5next:
 		priv->voltage_input[2] = get_unaligned_be16(data + D5NEXT_5V_VOLTAGE) * 10;
@@ -2033,6 +2042,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 		priv->num_fans = 0;
 		priv->num_temp_sensors = AQUASTREAMULT_NUM_SENSORS;
+		priv->temp_sensor_start_offset = AQUASTREAMULT_COOLANT_TEMP;
 
 		priv->temp_label = label_aquastreamult_temp;
 		priv->speed_label = label_aquastreamult_speeds;
@@ -2062,6 +2072,8 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->secondary_ctrl_report_id = AQUASTREAMXT_SECONDARY_CTRL_REPORT_ID;
 		priv->secondary_ctrl_report_size = AQUASTREAMXT_SECONDARY_CTRL_REPORT_SIZE;
 		priv->secondary_ctrl_report = aquastreamxt_secondary_ctrl_report;
+	} else if (priv->kind == aquastreamult) {
+		priv->fan_structure = &aqc_aquastreamult_fan_structure;
 	} else {
 		priv->serial_number_start_offset = AQC_SERIAL_START;
 		priv->firmware_version_offset = AQC_FIRMWARE_VERSION;
