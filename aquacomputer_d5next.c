@@ -833,7 +833,10 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 		case hwmon_fan_label:
 			switch (priv->kind) {
 			case aquastreamult:
-				/* Special case to support pump RPM, fan RPM, pressure and three flow sensors */
+				/*
+				 * Special case to support pump RPM, fan RPM,
+				 * pressure and three flow sensors
+				 */
 				if (channel < 6)
 					return 0444;
 				break;
