@@ -167,10 +167,11 @@ static u16 d5next_sensor_fan_offsets[] = { D5NEXT_PUMP_OFFSET, D5NEXT_FAN_OFFSET
 static u16 d5next_ctrl_fan_offsets[] = { 0x96, 0x41 };	/* Pump and fan speed (from 0-100%) */
 
 /* Specs of the Aquastream Ultimate pump */
-#define AQUASTREAMULT_NUM_SENSORS	1
+#define AQUASTREAMULT_NUM_SENSORS	2
 
 /* Sensor report offsets for the Aquastream Ultimate pump */
 #define AQUASTREAMULT_COOLANT_TEMP	0x2D
+#define AQUASTREAMULT_EXTERNAL_TEMP	0x2F
 #define AQUASTREAMULT_PUMP_OFFSET	0x51
 #define AQUASTREAMULT_PUMP_VOLTAGE	0x3D
 #define AQUASTREAMULT_PUMP_CURRENT	0x53
@@ -474,6 +475,11 @@ static const char *const label_aquastreamxt_temp_sensors[] = {
 };
 
 /* Labels for Aquastream Ultimate */
+static const char *const label_aquastreamult_temp[] = {
+	"Coolant temp",
+	"External temp"
+};
+
 static const char *const label_aquastreamult_speeds[] = {
 	"Pump speed",
 	"Pressure [mbar]"
@@ -1653,6 +1659,7 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 		break;
 	case aquastreamult:
 		priv->temp_input[0] = get_unaligned_be16(data + AQUASTREAMULT_COOLANT_TEMP) * 10;
+		priv->temp_input[1] = get_unaligned_be16(data + AQUASTREAMULT_EXTERNAL_TEMP) * 10;
 
 		priv->speed_input[0] = get_unaligned_be16(data + AQUASTREAMULT_PUMP_OFFSET);
 		priv->speed_input[1] = get_unaligned_be16(data + AQUASTREAMULT_PRESSURE_OFFSET);
@@ -1997,7 +2004,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->num_fans = 0;
 		priv->num_temp_sensors = AQUASTREAMULT_NUM_SENSORS;
 
-		priv->temp_label = label_d5next_temp;
+		priv->temp_label = label_aquastreamult_temp;
 		priv->speed_label = label_aquastreamult_speeds;
 		priv->power_label = label_aquastreamult_power;
 		priv->voltage_label = label_aquastreamult_voltages;
