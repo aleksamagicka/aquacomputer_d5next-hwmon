@@ -182,8 +182,6 @@ static u16 d5next_ctrl_fan_offsets[] = { 0x96, 0x41 };	/* Pump and fan speed (fr
 #define AQUASTREAMULT_PUMP_FREQUENCY		0x15
 #define AQUASTREAMULT_PRESSURE_OFFSET		0x57
 #define AQUASTREAMULT_FLOW_1			0x37
-#define AQUASTREAMULT_FLOW_2			0x39
-#define AQUASTREAMULT_FLOW_3			0x3B
 #define AQUASTREAMULT_FAN_VOLTAGE_OFFSET	0x02
 #define AQUASTREAMULT_FAN_CURRENT_OFFSET	0x00
 #define AQUASTREAMULT_FAN_POWER_OFFSET		0x04
@@ -847,9 +845,9 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 			case aquastreamult:
 				/*
 				 * Special case to support pump RPM, fan RPM,
-				 * pressure, pump frequency and three flow sensors
+				 * pressure, pump frequency and flow sensor
 				 */
-				if (channel < 7)
+				if (channel < 5)
 					return 0444;
 				break;
 			case highflownext:
@@ -1701,8 +1699,6 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 		priv->speed_input[2] = get_unaligned_be16(data + AQUASTREAMULT_PUMP_FREQUENCY);
 		priv->speed_input[3] = get_unaligned_be16(data + AQUASTREAMULT_PRESSURE_OFFSET);
 		priv->speed_input[4] = get_unaligned_be16(data + AQUASTREAMULT_FLOW_1);
-		priv->speed_input[5] = get_unaligned_be16(data + AQUASTREAMULT_FLOW_2);
-		priv->speed_input[6] = get_unaligned_be16(data + AQUASTREAMULT_FLOW_3);
 
 		priv->power_input[1] = get_unaligned_be16(data + AQUASTREAMULT_PUMP_POWER) * 10000;
 
@@ -2040,7 +2036,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	case USB_PRODUCT_ID_AQUASTREAMULT:
 		priv->kind = aquastreamult;
 
-		priv->num_fans = 0;
+		priv->num_fans = AQUASTREAMULT_NUM_FANS;
 		priv->num_temp_sensors = AQUASTREAMULT_NUM_SENSORS;
 		priv->temp_sensor_start_offset = AQUASTREAMULT_COOLANT_TEMP;
 
