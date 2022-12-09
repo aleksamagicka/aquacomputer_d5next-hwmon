@@ -493,9 +493,7 @@ static const char *const label_aquastreamult_speeds[] = {
 	"Pump speed",
 	"Pump frequency",
 	"Pressure [mbar]",
-	"Flow speed 1",
-	"Flow speed 2",
-	"Flow speed 3"
+	"Flow speed 1"
 };
 
 static const char *const label_aquastreamult_power[] = {
