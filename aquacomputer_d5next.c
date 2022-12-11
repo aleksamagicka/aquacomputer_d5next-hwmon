@@ -172,8 +172,7 @@ static u16 d5next_ctrl_fan_offsets[] = { 0x96, 0x41 };	/* Pump and fan speed (fr
 #define AQUASTREAMULT_NUM_SENSORS	2
 
 /* Sensor report offsets for the Aquastream Ultimate pump */
-#define AQUASTREAMULT_COOLANT_TEMP		0x2D
-#define AQUASTREAMULT_EXTERNAL_TEMP		0x2F
+#define AQUASTREAMULT_SENSOR_START		0x2D
 #define AQUASTREAMULT_PUMP_OFFSET		0x51
 #define AQUASTREAMULT_PUMP_VOLTAGE		0x3D
 #define AQUASTREAMULT_PUMP_CURRENT		0x53
@@ -2033,7 +2032,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 		priv->num_fans = AQUASTREAMULT_NUM_FANS;
 		priv->num_temp_sensors = AQUASTREAMULT_NUM_SENSORS;
-		priv->temp_sensor_start_offset = AQUASTREAMULT_COOLANT_TEMP;
+		priv->temp_sensor_start_offset = AQUASTREAMULT_SENSOR_START;
 
 		priv->temp_label = label_aquastreamult_temp;
 		priv->speed_label = label_aquastreamult_speeds;
