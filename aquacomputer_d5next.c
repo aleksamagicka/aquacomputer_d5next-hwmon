@@ -32,11 +32,12 @@
 #define USB_PRODUCT_ID_LEAKSHIELD	0xf014
 #define USB_PRODUCT_ID_AQUASTREAMXT	0xf0b6
 #define USB_PRODUCT_ID_AQUASTREAMULT	0xf00b
+#define USB_PRODUCT_ID_POWERADJUST3	0xf0bd
 
 enum kinds {
 	aquaero, d5next, farbwerk, farbwerk360, octo,
 	quadro, highflownext, leakshield, aquastreamxt,
-	aquastreamult
+	aquastreamult, poweradjust3
 };
 
 static const char *const aqc_device_names[] = {
@@ -49,7 +50,8 @@ static const char *const aqc_device_names[] = {
 	[highflownext] = "highflownext",
 	[leakshield] = "leakshield",
 	[aquastreamxt] = "aquastreamxt",
-	[aquastreamult] = "aquastreamultimate"
+	[aquastreamult] = "aquastreamultimate",
+	[poweradjust3] = "poweradjust3"
 };
 
 #define DRIVER_NAME			"aquacomputer_d5next"
@@ -311,6 +313,14 @@ static u16 aquastreamxt_sensor_fan_offsets[] = { 0x13, 0x1b };
 #define AQUASTREAMXT_FAN_MODE_CTRL_MANUAL	0x1
 static u16 aquastreamxt_ctrl_fan_offsets[] = { 0x8, 0x1b };
 
+/* Specs of the Poweradjust 3 */
+#define POWERADJUST3_STATUS_REPORT_ID	0x03
+#define POWERADJUST3_NUM_SENSORS	1
+#define POWERADJUST3_SENSOR_REPORT_SIZE	50
+
+/* Sensor report offsets for the Poweradjust 3 */
+#define POWERADJUST3_SENSOR_START	0x03
+
 /* Labels for D5 Next */
 static const char *const label_d5next_temp[] = {
 	"Coolant temp"
@@ -508,6 +518,11 @@ static const char *const label_aquastreamult_voltages[] = {
 static const char *const label_aquastreamult_current[] = {
 	"Fan current",
 	"Pump current"
+};
+
+/* Labels for Poweradjust 3 */
+static const char *const label_poweradjust3_temp_sensors[] = {
+	"External sensor"
 };
 
 struct aqc_fan_structure_offsets {
@@ -1009,6 +1024,31 @@ unlock_and_return:
 	return ret;
 }
 
+/* Reads Poweradjust3 sensors the legacy way */
+static int aqc_poweradjust3_read(struct aqc_data *priv)
+{
+	int ret, i, sensor_value;
+
+	mutex_lock(&priv->mutex);
+
+	memset(priv->buffer, 0x00, priv->buffer_size);
+	ret = hid_hw_raw_request(priv->hdev, POWERADJUST3_STATUS_REPORT_ID, priv->buffer,
+				 priv->buffer_size, HID_FEATURE_REPORT, HID_REQ_GET_REPORT);
+	if (ret < 0)
+		goto unlock_and_return;
+
+	/* Temperature sensor readings */
+	for (i = 0; i < priv->num_temp_sensors; i++) {
+		sensor_value = get_unaligned_le16(priv->buffer + priv->temp_sensor_start_offset +
+						  i * AQC_SENSOR_SIZE);
+		priv->temp_input[i] = sensor_value * 10;
+	}
+
+unlock_and_return:
+	mutex_unlock(&priv->mutex);
+	return ret;
+}
+
 static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		    int channel, long *val)
 {
@@ -1016,10 +1056,16 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 	struct aqc_data *priv = dev_get_drvdata(dev);
 
 	if (time_after(jiffies, priv->updated + STATUS_UPDATE_INTERVAL)) {
-		if (priv->kind == aquastreamxt) {
+		switch (priv->kind) {
+		case poweradjust3:
+			aqc_poweradjust3_read(priv);
+			priv->updated = jiffies;
+			break;
+		case aquastreamxt:
 			aqc_aquastreamxt_read(priv);
 			priv->updated = jiffies;
-		} else {
+			break;
+		default:
 			return -ENODATA;
 		}
 	}
@@ -2043,6 +2089,17 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->voltage_label = label_aquastreamult_voltages;
 		priv->current_label = label_aquastreamult_current;
 		break;
+	case USB_PRODUCT_ID_POWERADJUST3:
+		priv->kind = poweradjust3;
+
+		priv->num_fans = 0;
+
+		priv->num_temp_sensors = POWERADJUST3_NUM_SENSORS;
+		priv->temp_sensor_start_offset = POWERADJUST3_SENSOR_START;
+		priv->buffer_size = POWERADJUST3_SENSOR_REPORT_SIZE;
+
+		priv->temp_label = label_poweradjust3_temp_sensors;
+		break;
 	default:
 		break;
 	}
@@ -2141,6 +2198,7 @@ static const struct hid_device_id aqc_table[] = {
 	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_LEAKSHIELD) },
 	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_AQUASTREAMXT) },
 	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_AQUASTREAMULT) },
+	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_POWERADJUST3) },
 	{ }
 };
 
