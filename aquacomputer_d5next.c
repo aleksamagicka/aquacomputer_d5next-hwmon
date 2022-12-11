@@ -915,12 +915,12 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 		break;
 	case hwmon_curr:
 		switch (priv->kind) {
-		case aquastreamxt:
+		case aquastreamult:
 			/* Special case to support pump and fan current */
 			if (channel < 2)
 				return 0444;
 			break;
-		case aquastreamult:
+		case aquastreamxt:
 			/* Current only reported for pump */
 			if (channel == 0)
 				return 0444;
@@ -2066,18 +2066,20 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->secondary_ctrl_report_id = AQUASTREAMXT_SECONDARY_CTRL_REPORT_ID;
 		priv->secondary_ctrl_report_size = AQUASTREAMXT_SECONDARY_CTRL_REPORT_SIZE;
 		priv->secondary_ctrl_report = aquastreamxt_secondary_ctrl_report;
-	} else if (priv->kind == aquastreamult) {
-		priv->fan_structure = &aqc_aquastreamult_fan_structure;
 	} else {
 		priv->serial_number_start_offset = AQC_SERIAL_START;
 		priv->firmware_version_offset = AQC_FIRMWARE_VERSION;
 
-		priv->fan_structure = &aqc_general_fan_structure;
+		if (priv->kind == aquastreamult) {
+			priv->fan_structure = &aqc_aquastreamult_fan_structure;
+		} else {
+			priv->fan_structure = &aqc_general_fan_structure;
 
-		priv->ctrl_report_id = CTRL_REPORT_ID;
-		priv->secondary_ctrl_report_id = SECONDARY_CTRL_REPORT_ID;
-		priv->secondary_ctrl_report_size = SECONDARY_CTRL_REPORT_SIZE;
-		priv->secondary_ctrl_report = secondary_ctrl_report;
+			priv->ctrl_report_id = CTRL_REPORT_ID;
+			priv->secondary_ctrl_report_id = SECONDARY_CTRL_REPORT_ID;
+			priv->secondary_ctrl_report_size = SECONDARY_CTRL_REPORT_SIZE;
+			priv->secondary_ctrl_report = secondary_ctrl_report;
+		}
 	}
 
 	if (priv->buffer_size != 0) {
