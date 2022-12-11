@@ -181,7 +181,7 @@ static u16 d5next_ctrl_fan_offsets[] = { 0x96, 0x41 };	/* Pump and fan speed (fr
 #define AQUASTREAMULT_FAN_OFFSET		0x41
 #define AQUASTREAMULT_PUMP_FREQUENCY		0x15
 #define AQUASTREAMULT_PRESSURE_OFFSET		0x57
-#define AQUASTREAMULT_FLOW_1			0x37
+#define AQUASTREAMULT_FLOW_SENSOR_OFFSET	0x37
 #define AQUASTREAMULT_FAN_VOLTAGE_OFFSET	0x02
 #define AQUASTREAMULT_FAN_CURRENT_OFFSET	0x00
 #define AQUASTREAMULT_FAN_POWER_OFFSET		0x04
@@ -493,7 +493,7 @@ static const char *const label_aquastreamult_speeds[] = {
 	"Pump speed",
 	"Pump frequency",
 	"Pressure [mbar]",
-	"Flow speed 1"
+	"Flow speed [dL/h]"
 };
 
 static const char *const label_aquastreamult_power[] = {
@@ -502,7 +502,7 @@ static const char *const label_aquastreamult_power[] = {
 };
 
 static const char *const label_aquastreamult_voltages[] = {
-	"Fan +12V",
+	"Fan voltage",
 	"Pump +12V"
 };
 
@@ -1690,13 +1690,10 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 		}
 		break;
 	case aquastreamult:
-		/* Second temp sensor is not positioned after the first one, read it here */
-		priv->temp_input[1] = get_unaligned_be16(data + AQUASTREAMULT_EXTERNAL_TEMP) * 10;
-
 		priv->speed_input[1] = get_unaligned_be16(data + AQUASTREAMULT_PUMP_OFFSET);
 		priv->speed_input[2] = get_unaligned_be16(data + AQUASTREAMULT_PUMP_FREQUENCY);
 		priv->speed_input[3] = get_unaligned_be16(data + AQUASTREAMULT_PRESSURE_OFFSET);
-		priv->speed_input[4] = get_unaligned_be16(data + AQUASTREAMULT_FLOW_1);
+		priv->speed_input[4] = get_unaligned_be16(data + AQUASTREAMULT_FLOW_SENSOR_OFFSET);
 
 		priv->power_input[1] = get_unaligned_be16(data + AQUASTREAMULT_PUMP_POWER) * 10000;
 
