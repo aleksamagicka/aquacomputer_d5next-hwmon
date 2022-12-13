@@ -1771,11 +1771,11 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->virtual_temp_sensor_start_offset = AQUAERO_VIRTUAL_SENSOR_START;
 		priv->num_calc_virtual_temp_sensors = AQUAERO_NUM_CALC_VIRTUAL_SENSORS;
 		priv->calc_virtual_temp_sensor_start_offset = AQUAERO_CALC_VIRTUAL_SENSOR_START;
+		priv->num_flow_sensors = AQUAERO_NUM_FLOW_SENSORS;
+		priv->flow_sensors_start_offset = AQUAERO_FLOW_SENSORS_START;
 
 		priv->buffer_size = AQUAERO_CTRL_REPORT_SIZE;
 		priv->temp_ctrl_offset = AQUAERO_TEMP_CTRL_OFFSET;
-		priv->num_flow_sensors = AQUAERO_NUM_FLOW_SENSORS;
-		priv->flow_sensors_start_offset = AQUAERO_FLOW_SENSORS_START;
 
 		priv->temp_label = label_temp_sensors;
 		priv->virtual_temp_label = label_virtual_temp_sensors;
@@ -1870,11 +1870,11 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->temp_sensor_start_offset = QUADRO_SENSOR_START;
 		priv->num_virtual_temp_sensors = QUADRO_NUM_VIRTUAL_SENSORS;
 		priv->virtual_temp_sensor_start_offset = QUADRO_VIRTUAL_SENSORS_START;
+		priv->num_flow_sensors = QUADRO_NUM_FLOW_SENSORS;
+		priv->flow_sensors_start_offset = QUADRO_FLOW_SENSOR_OFFSET;
 
 		priv->power_cycle_count_offset = AQC_POWER_CYCLES;
 		priv->buffer_size = QUADRO_CTRL_REPORT_SIZE;
-		priv->num_flow_sensors = QUADRO_NUM_FLOW_SENSORS;
-		priv->flow_sensors_start_offset = QUADRO_FLOW_SENSOR_OFFSET;
 		priv->temp_ctrl_offset = QUADRO_TEMP_CTRL_OFFSET;
 		priv->flow_pulses_ctrl_offset = QUADRO_FLOW_PULSES_CTRL_OFFSET;
 
@@ -1893,6 +1893,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->temp_sensor_start_offset = HIGHFLOWNEXT_SENSOR_START;
 		priv->num_flow_sensors = HIGHFLOWNEXT_NUM_FLOW_SENSORS;
 		priv->flow_sensors_start_offset = HIGHFLOWNEXT_FLOW;
+
 		priv->power_cycle_count_offset = AQC_POWER_CYCLES;
 
 		priv->temp_label = label_highflownext_temp_sensors;
