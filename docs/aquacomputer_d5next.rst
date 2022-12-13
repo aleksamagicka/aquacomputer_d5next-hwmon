@@ -13,6 +13,7 @@ Supported devices:
 * Aquacomputer Quadro fan controller
 * Aquacomputer High Flow Next sensor
 * Aquacomputer Aquastream XT watercooling pump
+* Aquacomputer Aquastream Ultimate watercooling pump
 
 Author: Aleksa Savic
 
@@ -50,6 +51,10 @@ and an estimation of the dissipated/absorbed power in the liquid cooling loop.
 
 The Aquastream XT pump exposes three temperature sensors, voltages for
 pump and fan and current for the pump.
+
+The Aquastream Ultimate pump exposes coolant temp and an external temp sensor, along
+with speed, power, voltage and current of both the pump and optionally connected fan.
+It also exposes pressure and flow speed readings.
 
 The possible values for pwm_enable are:
 for D5 Next, Quadro and Octo
