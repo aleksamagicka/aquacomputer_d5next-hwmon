@@ -216,6 +216,7 @@ static u16 quadro_ctrl_fan_offsets[] = { 0x36, 0x8b, 0xe0, 0x135 };
 
 /* Specs of High Flow Next flow sensor */
 #define HIGHFLOWNEXT_NUM_SENSORS	2
+#define HIGHFLOWNEXT_NUM_FLOW_SENSORS	1
 
 /* Sensor report offsets for the High Flow Next */
 #define HIGHFLOWNEXT_SENSOR_START	85
@@ -1625,7 +1626,6 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 		priv->voltage_input[1] =
 		    get_unaligned_be16(data + HIGHFLOWNEXT_5V_VOLTAGE_USB) * 10;
 
-		priv->speed_input[0] = get_unaligned_be16(data + HIGHFLOWNEXT_FLOW);
 		priv->speed_input[1] = get_unaligned_be16(data + HIGHFLOWNEXT_WATER_QUALITY);
 		priv->speed_input[2] = get_unaligned_be16(data + HIGHFLOWNEXT_CONDUCTIVITY);
 		break;
@@ -1891,6 +1891,8 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->num_fans = 0;
 		priv->num_temp_sensors = HIGHFLOWNEXT_NUM_SENSORS;
 		priv->temp_sensor_start_offset = HIGHFLOWNEXT_SENSOR_START;
+		priv->num_flow_sensors = HIGHFLOWNEXT_NUM_FLOW_SENSORS;
+		priv->flow_sensors_start_offset = HIGHFLOWNEXT_FLOW;
 		priv->power_cycle_count_offset = AQC_POWER_CYCLES;
 
 		priv->temp_label = label_highflownext_temp_sensors;
