@@ -501,7 +501,7 @@ static const char *const label_aquastreamult_power[] = {
 
 static const char *const label_aquastreamult_voltages[] = {
 	"Fan voltage",
-	"Pump +12V"
+	"Pump voltage"
 };
 
 static const char *const label_aquastreamult_current[] = {
