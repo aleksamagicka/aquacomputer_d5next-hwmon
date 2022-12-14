@@ -184,6 +184,7 @@ static u16 d5next_ctrl_fan_offsets[] = { 0x96, 0x41 };	/* Pump and fan speed (fr
 #define AQUASTREAMULT_FAN_CURRENT_OFFSET	0x00
 #define AQUASTREAMULT_FAN_POWER_OFFSET		0x04
 #define AQUASTREAMULT_FAN_SPEED_OFFSET		0x06
+static u16 aquastreamult_sensor_fan_offsets[] = { AQUASTREAMULT_FAN_OFFSET };
 
 /* Spec and sensor report offset for the Farbwerk RGB controller */
 #define FARBWERK_NUM_SENSORS		4
@@ -2028,6 +2029,8 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->kind = aquastreamult;
 
 		priv->num_fans = AQUASTREAMULT_NUM_FANS;
+		priv->fan_sensor_offsets = aquastreamult_sensor_fan_offsets;
+
 		priv->num_temp_sensors = AQUASTREAMULT_NUM_SENSORS;
 		priv->temp_sensor_start_offset = AQUASTREAMULT_SENSOR_START;
 
