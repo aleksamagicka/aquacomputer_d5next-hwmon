@@ -16,6 +16,7 @@
 #include <linux/debugfs.h>
 #include <linux/hid.h>
 #include <linux/hwmon.h>
+#include <linux/hwmon-sysfs.h>
 #include <linux/jiffies.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
@@ -574,6 +575,7 @@ struct aqc_data {
 	struct mutex mutex;	/* Used for locking access when reading and writing PWM values */
 	enum kinds kind;
 	const char *name;
+	const struct attribute_group *groups[8];	/* For max 8 fans */
 
 	int status_report_id;	/* Used for legacy devices, report is stored in buffer */
 	int ctrl_report_id;
@@ -1590,6 +1592,327 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 	return 0;
 }
 
+/* Curve templates and atribute generation function, remixed from nct6683.c */
+struct sensor_device_template {
+	struct device_attribute dev_attr;
+	union {
+		struct {
+			u8 nr;
+			u8 index;
+		} s;
+		int index;
+	} u;
+	bool s2;	/* true if both index and nr are used */
+};
+
+struct sensor_device_attr_u {
+	union {
+		struct sensor_device_attribute a1;
+		struct sensor_device_attribute_2 a2;
+	} u;
+	char name[32];
+};
+
+#define __TEMPLATE_ATTR(_template, _mode, _show, _store) {	\
+	.attr = {.name = _template, .mode = _mode },		\
+	.show	= _show,					\
+	.store	= _store,					\
+}
+
+#define SENSOR_DEVICE_TEMPLATE(_template, _mode, _show, _store, _index)	\
+	{ .dev_attr = __TEMPLATE_ATTR(_template, _mode, _show, _store),	\
+	  .u.index = _index,						\
+	  .s2 = false }
+
+#define SENSOR_DEVICE_TEMPLATE_2(_template, _mode, _show, _store,	\
+				 _nr, _index)				\
+	{ .dev_attr = __TEMPLATE_ATTR(_template, _mode, _show, _store),	\
+	  .u.s.index = _index,						\
+	  .u.s.nr = _nr,						\
+	  .s2 = true }
+
+#define SENSOR_TEMPLATE(_name, _template, _mode, _show, _store, _index)	\
+static struct sensor_device_template sensor_dev_template_##_name =	\
+	SENSOR_DEVICE_TEMPLATE(_template, _mode, _show, _store,		\
+				 _index)
+
+#define SENSOR_TEMPLATE_2(_name, _template, _mode, _show, _store,	\
+			  _nr, _index)					\
+static struct sensor_device_template sensor_dev_template_##_name =	\
+	SENSOR_DEVICE_TEMPLATE_2(_template, _mode, _show, _store,	\
+				 _nr, _index)
+
+struct sensor_template_group {
+	struct sensor_device_template **templates;
+	umode_t (*is_visible)(struct kobject *kobj, struct attribute *attr, int index);
+	int base;
+};
+
+static struct attribute_group *aqc_create_attr_group(struct device *dev,
+						     const struct sensor_template_group *tg,
+						     int repeat)
+{
+	struct sensor_device_attribute_2 *a2;
+	struct sensor_device_attribute *a;
+	struct sensor_device_template **t;
+	struct sensor_device_attr_u *su;
+	struct attribute_group *group;
+	struct attribute **attrs;
+	int i, count;
+
+	if (repeat <= 0)
+		return ERR_PTR(-EINVAL);
+
+	t = tg->templates;
+	for (count = 0; *t; t++, count++)
+		;
+
+	if (count == 0)
+		return ERR_PTR(-EINVAL);
+
+	group = devm_kzalloc(dev, sizeof(*group), GFP_KERNEL);
+	if (!group)
+		return ERR_PTR(-ENOMEM);
+
+	attrs = devm_kcalloc(dev, repeat * count + 1, sizeof(*attrs), GFP_KERNEL);
+	if (!attrs)
+		return ERR_PTR(-ENOMEM);
+
+	su = devm_kzalloc(dev, array3_size(repeat, count, sizeof(*su)), GFP_KERNEL);
+	if (!su)
+		return ERR_PTR(-ENOMEM);
+
+	group->attrs = attrs;
+	group->is_visible = tg->is_visible;
+
+	for (i = 0; i < repeat; i++) {
+		t = tg->templates;
+		while (*t) {
+			snprintf(su->name, sizeof(su->name),
+				 (*t)->dev_attr.attr.name, tg->base + i);
+			if ((*t)->s2) {
+				a2 = &su->u.a2;
+				sysfs_attr_init(&a2->dev_attr.attr);
+				a2->dev_attr.attr.name = su->name;
+				a2->nr = (*t)->u.s.nr + i;
+				a2->index = (*t)->u.s.index;
+				a2->dev_attr.attr.mode = (*t)->dev_attr.attr.mode;
+				a2->dev_attr.show = (*t)->dev_attr.show;
+				a2->dev_attr.store = (*t)->dev_attr.store;
+				*attrs = &a2->dev_attr.attr;
+			} else {
+				a = &su->u.a1;
+				sysfs_attr_init(&a->dev_attr.attr);
+				a->dev_attr.attr.name = su->name;
+				a->index = (*t)->u.index + i;
+				a->dev_attr.attr.mode = (*t)->dev_attr.attr.mode;
+				a->dev_attr.show = (*t)->dev_attr.show;
+				a->dev_attr.store = (*t)->dev_attr.store;
+				*attrs = &a->dev_attr.attr;
+			}
+			attrs++;
+			su++;
+			t++;
+		}
+	}
+
+	return group;
+}
+
+/* Temp-PWM curve show and store functions */
+static ssize_t show_auto_temp(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct aqc_data *priv = dev_get_drvdata(dev);
+	struct sensor_device_attribute_2 *sattr = to_sensor_dev_attr_2(attr);
+	int nr = sattr->nr;
+	int point = sattr->index;
+
+	/* TODO */
+	return sprintf(buf, "%d\n", 50);
+}
+
+static ssize_t
+store_auto_temp(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct aqc_data *priv = dev_get_drvdata(dev);
+	struct sensor_device_attribute_2 *sattr = to_sensor_dev_attr_2(attr);
+	int nr = sattr->nr;
+	int point = sattr->index;
+	unsigned long val;
+	int err;
+
+	err = kstrtoul(buf, 10, &val);
+	if (err)
+		return err;
+	if (val > 255000)	/* TODO */
+		return -EINVAL;
+
+	return count;
+}
+
+static ssize_t show_auto_pwm(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct aqc_data *priv = dev_get_drvdata(dev);
+	struct sensor_device_attribute_2 *sattr = to_sensor_dev_attr_2(attr);
+
+	/* TODO */
+	return sprintf(buf, "test\n");
+}
+
+static ssize_t
+store_auto_pwm(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct aqc_data *priv = dev_get_drvdata(dev);
+	struct sensor_device_attribute_2 *sattr = to_sensor_dev_attr_2(attr);
+	int nr = sattr->nr;
+	int point = sattr->index;
+	unsigned long val;
+	int err;
+
+	err = kstrtoul(buf, 10, &val);
+	if (err < 0)
+		return err;
+	if (val > 255)
+		return -EINVAL;
+
+	/* TODO */
+
+	return count;
+}
+
+SENSOR_TEMPLATE_2(temp_auto_point1_pwm, "temp%d_auto_point1_pwm",
+		  0644, show_auto_pwm, store_auto_pwm, 0, 0);
+SENSOR_TEMPLATE_2(temp_auto_point1_temp, "temp%d_auto_point1_temp",
+		  0644, show_auto_temp, store_auto_temp, 0, 0);
+
+SENSOR_TEMPLATE_2(temp_auto_point2_pwm, "temp%d_auto_point2_pwm",
+		  0644, show_auto_pwm, store_auto_pwm, 0, 1);
+SENSOR_TEMPLATE_2(temp_auto_point2_temp, "temp%d_auto_point2_temp",
+		  0644, show_auto_temp, store_auto_temp, 0, 1);
+
+SENSOR_TEMPLATE_2(temp_auto_point3_pwm, "temp%d_auto_point3_pwm",
+		  0644, show_auto_pwm, store_auto_pwm, 0, 2);
+SENSOR_TEMPLATE_2(temp_auto_point3_temp, "temp%d_auto_point3_temp",
+		  0644, show_auto_temp, store_auto_temp, 0, 2);
+
+SENSOR_TEMPLATE_2(temp_auto_point4_pwm, "temp%d_auto_point4_pwm",
+		  0644, show_auto_pwm, store_auto_pwm, 0, 3);
+SENSOR_TEMPLATE_2(temp_auto_point4_temp, "temp%d_auto_point4_temp",
+		  0644, show_auto_temp, store_auto_temp, 0, 3);
+
+SENSOR_TEMPLATE_2(temp_auto_point5_pwm, "temp%d_auto_point5_pwm",
+		  0644, show_auto_pwm, store_auto_pwm, 0, 4);
+SENSOR_TEMPLATE_2(temp_auto_point5_temp, "temp%d_auto_point5_temp",
+		  0644, show_auto_temp, store_auto_temp, 0, 4);
+
+SENSOR_TEMPLATE_2(temp_auto_point6_pwm, "temp%d_auto_point6_pwm",
+		  0644, show_auto_pwm, store_auto_pwm, 0, 5);
+SENSOR_TEMPLATE_2(temp_auto_point6_temp, "temp%d_auto_point6_temp",
+		  0644, show_auto_temp, store_auto_temp, 0, 5);
+
+SENSOR_TEMPLATE_2(temp_auto_point7_pwm, "temp%d_auto_point7_pwm",
+		  0644, show_auto_pwm, store_auto_pwm, 0, 6);
+SENSOR_TEMPLATE_2(temp_auto_point7_temp, "temp%d_auto_point7_temp",
+		  0644, show_auto_temp, store_auto_temp, 0, 6);
+
+SENSOR_TEMPLATE_2(temp_auto_point8_pwm, "temp%d_auto_point8_pwm",
+		  0644, show_auto_pwm, store_auto_pwm, 0, 7);
+SENSOR_TEMPLATE_2(temp_auto_point8_temp, "temp%d_auto_point8_temp",
+		  0644, show_auto_temp, store_auto_temp, 0, 7);
+
+SENSOR_TEMPLATE_2(temp_auto_point9_pwm, "temp%d_auto_point9_pwm",
+		  0644, show_auto_pwm, store_auto_pwm, 0, 8);
+SENSOR_TEMPLATE_2(temp_auto_point9_temp, "temp%d_auto_point9_temp",
+		  0644, show_auto_temp, store_auto_temp, 0, 8);
+
+SENSOR_TEMPLATE_2(temp_auto_point10_pwm, "temp%d_auto_point10_pwm",
+		  0644, show_auto_pwm, store_auto_pwm, 0, 9);
+SENSOR_TEMPLATE_2(temp_auto_point10_temp, "temp%d_auto_point10_temp",
+		  0644, show_auto_temp, store_auto_temp, 0, 9);
+
+SENSOR_TEMPLATE_2(temp_auto_point11_pwm, "temp%d_auto_point11_pwm",
+		  0644, show_auto_pwm, store_auto_pwm, 0, 10);
+SENSOR_TEMPLATE_2(temp_auto_point11_temp, "temp%d_auto_point11_temp",
+		  0644, show_auto_temp, store_auto_temp, 0, 10);
+
+SENSOR_TEMPLATE_2(temp_auto_point12_pwm, "temp%d_auto_point12_pwm",
+		  0644, show_auto_pwm, store_auto_pwm, 0, 11);
+SENSOR_TEMPLATE_2(temp_auto_point12_temp, "temp%d_auto_point12_temp",
+		  0644, show_auto_temp, store_auto_temp, 0, 11);
+
+SENSOR_TEMPLATE_2(temp_auto_point13_pwm, "temp%d_auto_point13_pwm",
+		  0644, show_auto_pwm, store_auto_pwm, 0, 12);
+SENSOR_TEMPLATE_2(temp_auto_point13_temp, "temp%d_auto_point13_temp",
+		  0644, show_auto_temp, store_auto_temp, 0, 12);
+
+SENSOR_TEMPLATE_2(temp_auto_point14_pwm, "temp%d_auto_point14_pwm",
+		  0644, show_auto_pwm, store_auto_pwm, 0, 13);
+SENSOR_TEMPLATE_2(temp_auto_point14_temp, "temp%d_auto_point14_temp",
+		  0644, show_auto_temp, store_auto_temp, 0, 13);
+
+SENSOR_TEMPLATE_2(temp_auto_point15_pwm, "temp%d_auto_point15_pwm",
+		  0644, show_auto_pwm, store_auto_pwm, 0, 14);
+SENSOR_TEMPLATE_2(temp_auto_point15_temp, "temp%d_auto_point15_temp",
+		  0644, show_auto_temp, store_auto_temp, 0, 14);
+
+SENSOR_TEMPLATE_2(temp_auto_point16_pwm, "temp%d_auto_point16_pwm",
+		  0644, show_auto_pwm, store_auto_pwm, 0, 15);
+SENSOR_TEMPLATE_2(temp_auto_point16_temp, "temp%d_auto_point16_temp",
+		  0644, show_auto_temp, store_auto_temp, 0, 15);
+
+static umode_t aqc_curve_is_visible(struct kobject *kobj, struct attribute *attr, int index)
+{
+	struct device *dev = kobj_to_dev(kobj);
+	struct aqc_data *data = dev_get_drvdata(dev);
+	int pwm = index;	/* pwm index */
+
+	/* TODO */
+
+	return attr->mode;
+}
+
+static struct sensor_device_template *aqc_attributes_curve_template[] = {
+	&sensor_dev_template_temp_auto_point1_pwm,
+	&sensor_dev_template_temp_auto_point1_temp,
+	&sensor_dev_template_temp_auto_point2_pwm,
+	&sensor_dev_template_temp_auto_point2_temp,
+	&sensor_dev_template_temp_auto_point3_pwm,
+	&sensor_dev_template_temp_auto_point3_temp,
+	&sensor_dev_template_temp_auto_point4_pwm,
+	&sensor_dev_template_temp_auto_point4_temp,
+	&sensor_dev_template_temp_auto_point5_pwm,
+	&sensor_dev_template_temp_auto_point5_temp,
+	&sensor_dev_template_temp_auto_point6_pwm,
+	&sensor_dev_template_temp_auto_point6_temp,
+	&sensor_dev_template_temp_auto_point7_pwm,
+	&sensor_dev_template_temp_auto_point7_temp,
+	&sensor_dev_template_temp_auto_point8_pwm,
+	&sensor_dev_template_temp_auto_point8_temp,
+	&sensor_dev_template_temp_auto_point9_pwm,
+	&sensor_dev_template_temp_auto_point9_temp,
+	&sensor_dev_template_temp_auto_point10_pwm,
+	&sensor_dev_template_temp_auto_point10_temp,
+	&sensor_dev_template_temp_auto_point11_pwm,
+	&sensor_dev_template_temp_auto_point11_temp,
+	&sensor_dev_template_temp_auto_point12_pwm,
+	&sensor_dev_template_temp_auto_point12_temp,
+	&sensor_dev_template_temp_auto_point13_pwm,
+	&sensor_dev_template_temp_auto_point13_temp,
+	&sensor_dev_template_temp_auto_point14_pwm,
+	&sensor_dev_template_temp_auto_point14_temp,
+	&sensor_dev_template_temp_auto_point15_pwm,
+	&sensor_dev_template_temp_auto_point15_temp,
+	&sensor_dev_template_temp_auto_point16_pwm,
+	&sensor_dev_template_temp_auto_point16_temp,
+	NULL
+};
+
+static const struct sensor_template_group aqc_curve_template_group = {
+	.templates = aqc_attributes_curve_template,
+	.is_visible = aqc_curve_is_visible,
+	.base = 1,
+};
+
 static const struct hwmon_ops aqc_hwmon_ops = {
 	.is_visible = aqc_is_visible,
 	.read = aqc_read,
@@ -1912,7 +2235,8 @@ static void aqc_debugfs_init(struct aqc_data *priv)
 static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 {
 	struct aqc_data *priv;
-	int ret;
+	struct attribute_group *group;
+	int ret, groups;
 
 	priv = devm_kzalloc(&hdev->dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
@@ -2211,6 +2535,16 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		break;
 	}
 
+	/* Set up curves */
+	/* TODO: Check if required offsets are defined */
+	if (priv->num_fans > 0) {
+		group =
+		    aqc_create_attr_group(&hdev->dev, &aqc_curve_template_group, priv->num_fans);
+		if (IS_ERR(group))
+			return PTR_ERR(group);
+		priv->groups[groups++] = group;
+	}
+
 	if (priv->buffer_size != 0) {
 		priv->checksum_start = 0x01;
 		priv->checksum_length = priv->buffer_size - 3;
@@ -2232,8 +2566,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 	hid_device_io_start(hdev);
 	priv->hwmon_dev = hwmon_device_register_with_info(&hdev->dev, priv->name, priv,
-							  &aqc_chip_info, NULL);
-	hid_device_io_stop(hdev);
+							  &aqc_chip_info, priv->groups);
 
 	if (IS_ERR(priv->hwmon_dev)) {
 		ret = (int)PTR_ERR(priv->hwmon_dev);
