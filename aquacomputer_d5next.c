@@ -2051,7 +2051,13 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 		priv->num_temp_sensors = AQUASTREAMXT_NUM_SENSORS;
 		priv->temp_sensor_start_offset = AQUASTREAMXT_SENSOR_START;
-		priv->buffer_size = AQUASTREAMXT_SENSOR_REPORT_SIZE;
+
+		/*
+		 * Since we use the same buffer for both sensor and control
+		 * report storage on legacy devices, reserve enough space
+		 */
+		priv->buffer_size = max(AQUASTREAMXT_SENSOR_REPORT_SIZE,
+					AQUASTREAMXT_CTRL_REPORT_SIZE);
 
 		priv->temp_label = label_aquastreamxt_temp_sensors;
 		priv->speed_label = label_d5next_speeds;
