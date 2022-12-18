@@ -584,8 +584,8 @@ struct aqc_data {
 	int temp_sensor_start_offset;
 	int num_virtual_temp_sensors;
 	int virtual_temp_sensor_start_offset;
-	int num_calc_virtual_temp_sensors;
-	int calc_virtual_temp_sensor_start_offset;
+	int num_calc_virt_temp_sensors;
+	int calc_virt_temp_sensor_start_offset;
 	u16 temp_ctrl_offset;
 	u16 power_cycle_count_offset;
 	int num_flow_sensors;
@@ -809,7 +809,7 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 
 		if (channel <
 		    priv->num_temp_sensors + priv->num_virtual_temp_sensors +
-		    priv->num_calc_virtual_temp_sensors)
+		    priv->num_calc_virt_temp_sensors)
 			switch (attr) {
 			case hwmon_temp_label:
 			case hwmon_temp_input:
@@ -1706,11 +1706,10 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 	case aquaero:
 		/* Read calculated virtual temp sensors */
 		i = priv->num_temp_sensors + priv->num_virtual_temp_sensors;
-		for (j = 0; j < priv->num_calc_virtual_temp_sensors; j++) {
+		for (j = 0; j < priv->num_calc_virt_temp_sensors; j++) {
 			sensor_value = get_unaligned_be16(data +
-							  priv->
-							  calc_virtual_temp_sensor_start_offset +
-							  j * AQC_SENSOR_SIZE);
+							  priv->calc_virt_temp_sensor_start_offset
+							  + j * AQC_SENSOR_SIZE);
 			if (sensor_value == AQC_SENSOR_NA)
 				priv->temp_input[i] = -ENODATA;
 			else
@@ -1888,8 +1887,8 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->temp_sensor_start_offset = AQUAERO_SENSOR_START;
 		priv->num_virtual_temp_sensors = AQUAERO_NUM_VIRTUAL_SENSORS;
 		priv->virtual_temp_sensor_start_offset = AQUAERO_VIRTUAL_SENSOR_START;
-		priv->num_calc_virtual_temp_sensors = AQUAERO_NUM_CALC_VIRTUAL_SENSORS;
-		priv->calc_virtual_temp_sensor_start_offset = AQUAERO_CALC_VIRTUAL_SENSOR_START;
+		priv->num_calc_virt_temp_sensors = AQUAERO_NUM_CALC_VIRTUAL_SENSORS;
+		priv->calc_virt_temp_sensor_start_offset = AQUAERO_CALC_VIRTUAL_SENSOR_START;
 		priv->num_flow_sensors = AQUAERO_NUM_FLOW_SENSORS;
 		priv->flow_sensors_start_offset = AQUAERO_FLOW_SENSORS_START;
 
