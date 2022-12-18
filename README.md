@@ -102,6 +102,7 @@ The following devices are supported by this driver, and from which kernel versio
 |   Leakshield   |     Available here     |  Various sensors and setting parameters for higher accuracy  |        ?        |
 | Aquastream XT  |     Available here     | Temperature sensors, voltage sensors, pump and fan speed control | ATMEGA8-16MU |
 | Aquastream Ultimate  |     Available here     | Temperature sensors, pump and fan sensors, pressure and flow | ? |
+| Poweradjust 3  |     Available here     | External temperature sensor | ? |
 
 Microcontrollers are noted for general reference, as this driver only communicates through HID reports and does not interact with the device CPU & electronics directly.
 
