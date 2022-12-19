@@ -5,7 +5,8 @@
  * Poweradjust 3)
  *
  * Aquacomputer devices send HID reports (with ID 0x01) every second to report
- * sensor values, with the exception of Aquastream XT.
+ * sensor values, with the exception of devices that communicate through the
+ * legacy way (currently, Aquastream XT and Poweradjust 3).
  *
  * Copyright 2021 Aleksa Savic <savicaleksa83@gmail.com>
  * Copyright 2022 Jack Doan <me@jackdoan.com>
