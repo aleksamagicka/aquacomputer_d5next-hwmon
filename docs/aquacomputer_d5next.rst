@@ -14,6 +14,7 @@ Supported devices:
 * Aquacomputer High Flow Next sensor
 * Aquacomputer Aquastream XT watercooling pump
 * Aquacomputer Aquastream Ultimate watercooling pump
+* Aquacomputer Poweradjust 3 fan controller
 
 Author: Aleksa Savic
 
@@ -55,6 +56,8 @@ pump and fan and current for the pump.
 The Aquastream Ultimate pump exposes coolant temp and an external temp sensor, along
 with speed, power, voltage and current of both the pump and optionally connected fan.
 It also exposes pressure and flow speed readings.
+
+The Poweradjust 3 controller exposes a single external temperature sensor.
 
 The possible values for pwm_enable are:
 for D5 Next, Quadro and Octo
