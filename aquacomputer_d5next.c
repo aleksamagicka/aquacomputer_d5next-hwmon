@@ -567,7 +567,7 @@ struct aqc_data {
 	enum kinds kind;
 	const char *name;
 
-	int status_report_id;	/* Used for legacy devices, report is stored in buffer */
+	int status_report_id;	/* Used for legacy devices, report is stored in sensor_buffer */
 	int sensor_buffer_size;
 	u8 *sensor_buffer;
 
@@ -627,6 +627,7 @@ struct aqc_data {
 	const char *const *current_label;
 
 	unsigned long updated;
+	unsigned long control_updated;
 };
 
 /* Converts from centi-percent */
@@ -715,10 +716,30 @@ static int aqc_send_ctrl_data(struct aqc_data *priv)
 	return ret;
 }
 
-/* Refreshes the control buffer and stores value at offset in val */
-static int aqc_get_ctrl_val(struct aqc_data *priv, int offset, long *val, int type)
+static int aqc_get_buffer_val(u8 *buffer, int offset, long *val, int type)
+{
+	switch (type) {
+	case AQC_LE16:
+		*val = (s16)get_unaligned_le16(buffer + offset);
+		return 0;
+	case AQC_BE16:
+		*val = (s16)get_unaligned_be16(buffer + offset);
+		return 0;
+	case AQC_8:
+		*val = buffer[offset];
+		return 0;
+	default:
+		return -EINVAL;
+	}
+}
+
+/* Refreshes the control buffer if requested and stores value at offset in val */
+static int aqc_get_ctrl_val(struct aqc_data *priv, int offset, long *val, int type, bool refresh)
 {
 	int ret;
+
+	if (!refresh && !time_after(jiffies, priv->control_updated + STATUS_UPDATE_INTERVAL))
+		return aqc_get_buffer_val(priv->ctrl_buffer, offset, val, type);
 
 	mutex_lock(&priv->mutex);
 
@@ -726,20 +747,9 @@ static int aqc_get_ctrl_val(struct aqc_data *priv, int offset, long *val, int ty
 	if (ret < 0)
 		goto unlock_and_return;
 
-	switch (type) {
-	case AQC_LE16:
-		*val = (s16)get_unaligned_le16(priv->ctrl_buffer + offset);
-		break;
-	case AQC_BE16:
-		*val = (s16)get_unaligned_be16(priv->ctrl_buffer + offset);
-		break;
-	case AQC_8:
-		*val = priv->ctrl_buffer[offset];
-		break;
-	default:
-		ret = -EINVAL;
-		break;
-	}
+	priv->control_updated = jiffies;
+
+	ret = aqc_get_buffer_val(priv->ctrl_buffer, offset, val, type);
 
 unlock_and_return:
 	mutex_unlock(&priv->mutex);
@@ -1078,7 +1088,7 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			ret =
 			    aqc_get_ctrl_val(priv,
 					     priv->temp_ctrl_offset +
-					     channel * AQC_SENSOR_SIZE, val, AQC_BE16);
+					     channel * AQC_SENSOR_SIZE, val, AQC_BE16, false);
 			if (ret < 0)
 				return ret;
 			*val *= 10;
@@ -1100,7 +1110,7 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				    aqc_get_ctrl_val(priv,
 						     priv->fan_ctrl_offsets[channel] +
 						     AQUAERO_FAN_CTRL_MIN_RPM_OFFSET,
-						     val, AQC_BE16);
+						     val, AQC_BE16, false);
 				if (ret < 0)
 					return ret;
 				break;
@@ -1114,7 +1124,7 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				    aqc_get_ctrl_val(priv,
 						     priv->fan_ctrl_offsets[channel] +
 						     AQUAERO_FAN_CTRL_MAX_RPM_OFFSET,
-						     val, AQC_BE16);
+						     val, AQC_BE16, false);
 				if (ret < 0)
 					return ret;
 				break;
@@ -1126,7 +1136,8 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			*val = priv->speed_input_target[channel];
 			break;
 		case hwmon_fan_pulses:
-			ret = aqc_get_ctrl_val(priv, priv->flow_pulses_ctrl_offset, val, AQC_BE16);
+			ret = aqc_get_ctrl_val(priv, priv->flow_pulses_ctrl_offset,
+					       val, AQC_BE16, false);
 			if (ret < 0)
 				return ret;
 			break;
@@ -1140,7 +1151,8 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 	case hwmon_pwm:
 		switch (attr) {
 		case hwmon_pwm_enable:
-			ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel], val, AQC_8);
+			ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel],
+					       val, AQC_8, false);
 			if (ret < 0)
 				return ret;
 
@@ -1154,7 +1166,7 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				    aqc_get_ctrl_val(priv,
 						     AQUAERO_CTRL_PRESET_START +
 						     channel * AQUAERO_CTRL_PRESET_SIZE,
-						     val, AQC_BE16);
+						     val, AQC_BE16, false);
 				if (ret < 0)
 					return ret;
 				*val = aqc_percent_to_pwm(*val);
@@ -1163,7 +1175,7 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				if (channel == 0) {
 					ret =
 					    aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel],
-							     val, AQC_LE16);
+							     val, AQC_LE16, false);
 					if (ret < 0)
 						return ret;
 					*val = aqc_aquastreamxt_convert_pump_rpm(*val);
@@ -1171,7 +1183,7 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				} else {
 					ret =
 					    aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel],
-							     val, AQC_8);
+							     val, AQC_8, false);
 					if (ret < 0)
 						return ret;
 				}
@@ -1180,7 +1192,8 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				ret =
 				    aqc_get_ctrl_val(priv,
 						     priv->fan_ctrl_offsets[channel] +
-						     AQC_FAN_CTRL_PWM_OFFSET, val, AQC_BE16);
+						     AQC_FAN_CTRL_PWM_OFFSET, val,
+						     AQC_BE16, false);
 				if (ret < 0)
 					return ret;
 				*val = aqc_percent_to_pwm(*val);
@@ -1191,7 +1204,7 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			ret =
 			    aqc_get_ctrl_val(priv,
 					     priv->fan_ctrl_offsets[channel] +
-					     AQC_FAN_CTRL_TEMP_SELECT_OFFSET, val, AQC_BE16);
+					     AQC_FAN_CTRL_TEMP_SELECT_OFFSET, val, AQC_BE16, false);
 			if (ret < 0)
 				return ret;
 
@@ -1200,7 +1213,7 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		case hwmon_pwm_mode:
 			ret = aqc_get_ctrl_val(priv,
 					       priv->fan_ctrl_offsets[channel] +
-					       AQUAERO_FAN_CTRL_MODE_OFFSET, val, AQC_8);
+					       AQUAERO_FAN_CTRL_MODE_OFFSET, val, AQC_8, false);
 			if (ret < 0)
 				return ret;
 
@@ -1418,7 +1431,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				if (val > 3) {
 					ret =
 					    aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[val - 4],
-							     &ctrl_mode, AQC_8);
+							     &ctrl_mode, AQC_8, true);
 					if (ret < 0)
 						return ret;
 
@@ -1859,6 +1872,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	hid_set_drvdata(hdev, priv);
 
 	priv->updated = jiffies - STATUS_UPDATE_INTERVAL;
+	priv->control_updated = jiffies - STATUS_UPDATE_INTERVAL;
 
 	ret = hid_parse(hdev);
 	if (ret)
