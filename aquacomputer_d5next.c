@@ -568,13 +568,16 @@ struct aqc_data {
 	const char *name;
 
 	int status_report_id;	/* Used for legacy devices, report is stored in buffer */
+	int sensor_buffer_size;
+	u8 *sensor_buffer;
+
 	int ctrl_report_id;
 	int secondary_ctrl_report_id;
 	int secondary_ctrl_report_size;
 	u8 *secondary_ctrl_report;
 
-	int buffer_size;
-	u8 *buffer;
+	int ctrl_buffer_size;
+	u8 *ctrl_buffer;
 	int checksum_start;
 	int checksum_length;
 	int checksum_offset;
@@ -672,9 +675,9 @@ static int aqc_get_ctrl_data(struct aqc_data *priv)
 {
 	int ret;
 
-	memset(priv->buffer, 0x00, priv->buffer_size);
-	ret = hid_hw_raw_request(priv->hdev, priv->ctrl_report_id, priv->buffer, priv->buffer_size,
-				 HID_FEATURE_REPORT, HID_REQ_GET_REPORT);
+	memset(priv->ctrl_buffer, 0x00, priv->ctrl_buffer_size);
+	ret = hid_hw_raw_request(priv->hdev, priv->ctrl_report_id, priv->ctrl_buffer,
+				 priv->ctrl_buffer_size, HID_FEATURE_REPORT, HID_REQ_GET_REPORT);
 	if (ret < 0)
 		ret = -ENODATA;
 
@@ -691,16 +694,16 @@ static int aqc_send_ctrl_data(struct aqc_data *priv)
 	if (priv->kind != aquaero && priv->kind != aquastreamxt) {
 		/* Init and xorout value for CRC-16/USB is 0xffff */
 		checksum =
-		    crc16(0xffff, priv->buffer + priv->checksum_start, priv->checksum_length);
+		    crc16(0xffff, priv->ctrl_buffer + priv->checksum_start, priv->checksum_length);
 		checksum ^= 0xffff;
 
 		/* Place the new checksum at the end of the report */
-		put_unaligned_be16(checksum, priv->buffer + priv->checksum_offset);
+		put_unaligned_be16(checksum, priv->ctrl_buffer + priv->checksum_offset);
 	}
 
 	/* Send the patched up report back to the device */
-	ret = hid_hw_raw_request(priv->hdev, priv->ctrl_report_id, priv->buffer, priv->buffer_size,
-				 HID_FEATURE_REPORT, HID_REQ_SET_REPORT);
+	ret = hid_hw_raw_request(priv->hdev, priv->ctrl_report_id, priv->ctrl_buffer,
+				 priv->ctrl_buffer_size, HID_FEATURE_REPORT, HID_REQ_SET_REPORT);
 	if (ret < 0)
 		return ret;
 
@@ -725,13 +728,13 @@ static int aqc_get_ctrl_val(struct aqc_data *priv, int offset, long *val, int ty
 
 	switch (type) {
 	case AQC_LE16:
-		*val = (s16)get_unaligned_le16(priv->buffer + offset);
+		*val = (s16)get_unaligned_le16(priv->ctrl_buffer + offset);
 		break;
 	case AQC_BE16:
-		*val = (s16)get_unaligned_be16(priv->buffer + offset);
+		*val = (s16)get_unaligned_be16(priv->ctrl_buffer + offset);
 		break;
 	case AQC_8:
-		*val = priv->buffer[offset];
+		*val = priv->ctrl_buffer[offset];
 		break;
 	default:
 		ret = -EINVAL;
@@ -772,7 +775,7 @@ static int aqc_set_ctrl_vals(struct aqc_data *priv, int *offsets, long *values, 
 		goto unlock_and_return;
 
 	for (i = 0; i < len; i++) {
-		ret = aqc_set_buffer_val(priv->buffer, offsets[i], values[i], types[i]);
+		ret = aqc_set_buffer_val(priv->ctrl_buffer, offsets[i], values[i], types[i]);
 		if (ret < 0)
 			goto unlock_and_return;
 	}
@@ -982,15 +985,16 @@ static int aqc_legacy_read(struct aqc_data *priv)
 
 	mutex_lock(&priv->mutex);
 
-	memset(priv->buffer, 0x00, priv->buffer_size);
-	ret = hid_hw_raw_request(priv->hdev, priv->status_report_id, priv->buffer,
-				 priv->buffer_size, HID_FEATURE_REPORT, HID_REQ_GET_REPORT);
+	memset(priv->sensor_buffer, 0x00, priv->sensor_buffer_size);
+	ret = hid_hw_raw_request(priv->hdev, priv->status_report_id, priv->sensor_buffer,
+				 priv->sensor_buffer_size, HID_FEATURE_REPORT, HID_REQ_GET_REPORT);
 	if (ret < 0)
 		goto unlock_and_return;
 
 	/* Temperature sensor readings */
 	for (i = 0; i < priv->num_temp_sensors; i++) {
-		sensor_value = get_unaligned_le16(priv->buffer + priv->temp_sensor_start_offset +
+		sensor_value = get_unaligned_le16(priv->sensor_buffer +
+						  priv->temp_sensor_start_offset +
 						  i * AQC_SENSOR_SIZE);
 		priv->temp_input[i] = sensor_value * 10;
 	}
@@ -999,33 +1003,38 @@ static int aqc_legacy_read(struct aqc_data *priv)
 	switch (priv->kind) {
 	case aquastreamxt:
 		/* Info provided with every report */
-		priv->serial_number[0] = get_unaligned_le16(priv->buffer +
+		priv->serial_number[0] = get_unaligned_le16(priv->sensor_buffer +
 							    priv->serial_number_start_offset);
 		priv->firmware_version =
-		    get_unaligned_le16(priv->buffer + priv->firmware_version_offset);
+		    get_unaligned_le16(priv->sensor_buffer + priv->firmware_version_offset);
 
 		/* Read pump speed in RPM */
-		sensor_value = get_unaligned_le16(priv->buffer + priv->fan_sensor_offsets[0]);
+		sensor_value = get_unaligned_le16(priv->sensor_buffer +
+						  priv->fan_sensor_offsets[0]);
 		priv->speed_input[0] = aqc_aquastreamxt_convert_pump_rpm(sensor_value);
 
 		/* Read fan speed in RPM, if available */
-		sensor_value = get_unaligned_le16(priv->buffer + AQUASTREAMXT_FAN_STATUS_OFFSET);
+		sensor_value = get_unaligned_le16(priv->sensor_buffer +
+						  AQUASTREAMXT_FAN_STATUS_OFFSET);
 		if (sensor_value == AQUASTREAMXT_FAN_STOPPED) {
 			priv->speed_input[1] = 0;
 		} else {
 			sensor_value =
-			    get_unaligned_le16(priv->buffer + priv->fan_sensor_offsets[1]);
+			    get_unaligned_le16(priv->sensor_buffer + priv->fan_sensor_offsets[1]);
 			priv->speed_input[1] = aqc_aquastreamxt_convert_fan_rpm(sensor_value);
 		}
 
 		/* Calculation derived from linear regression */
-		sensor_value = get_unaligned_le16(priv->buffer + AQUASTREAMXT_PUMP_CURR_OFFSET);
+		sensor_value = get_unaligned_le16(priv->sensor_buffer +
+						  AQUASTREAMXT_PUMP_CURR_OFFSET);
 		priv->current_input[0] = DIV_ROUND_CLOSEST(sensor_value * 176, 100) - 52;
 
-		sensor_value = get_unaligned_le16(priv->buffer + AQUASTREAMXT_PUMP_VOLTAGE_OFFSET);
+		sensor_value = get_unaligned_le16(priv->sensor_buffer +
+						  AQUASTREAMXT_PUMP_VOLTAGE_OFFSET);
 		priv->voltage_input[0] = DIV_ROUND_CLOSEST(sensor_value * 1000, 61);
 
-		sensor_value = get_unaligned_le16(priv->buffer + AQUASTREAMXT_FAN_VOLTAGE_OFFSET);
+		sensor_value = get_unaligned_le16(priv->sensor_buffer +
+						  AQUASTREAMXT_FAN_VOLTAGE_OFFSET);
 		priv->voltage_input[1] = DIV_ROUND_CLOSEST(sensor_value * 1000, 63);
 		break;
 	default:
@@ -1289,37 +1298,39 @@ static int aqc_leakshield_send_report(struct aqc_data *priv, int channel, long v
 		val16 = (u16)val;
 
 	/*
-	 * leakshield_usb_report_template is loaded into priv->buffer during initialization.
+	 * leakshield_usb_report_template is loaded into priv->ctrl_buffer during initialization.
 	 * Modify only the requested value (pump RPM or flow) without resetting the other one
 	 */
 	switch (channel) {
 	case 1:
-		priv->buffer[LEAKSHIELD_USB_REPORT_FLOW_RPM_UNIT_OFFSET] =
+		priv->ctrl_buffer[LEAKSHIELD_USB_REPORT_FLOW_RPM_UNIT_OFFSET] =
 		    (val16 == AQC_SENSOR_NA) ? 0 : LEAKSHIELD_USB_REPORT_UNIT_RPM;
-		put_unaligned_be16(val16, priv->buffer + LEAKSHIELD_USB_REPORT_PUMP_RPM_OFFSET);
+		put_unaligned_be16(val16,
+				   priv->ctrl_buffer + LEAKSHIELD_USB_REPORT_PUMP_RPM_OFFSET);
 		break;
 	case 2:
-		priv->buffer[LEAKSHIELD_USB_REPORT_FLOW_UNIT_OFFSET] =
+		priv->ctrl_buffer[LEAKSHIELD_USB_REPORT_FLOW_UNIT_OFFSET] =
 		    (val16 == AQC_SENSOR_NA) ? 0 : LEAKSHIELD_USB_REPORT_UNIT_DL_PER_H;
-		put_unaligned_be16(val16, priv->buffer + LEAKSHIELD_USB_REPORT_FLOW_OFFSET);
+		put_unaligned_be16(val16, priv->ctrl_buffer + LEAKSHIELD_USB_REPORT_FLOW_OFFSET);
 		break;
 	default:
 		return -EINVAL;
 	}
 
 	/* Init and xorout value for CRC-16/USB is 0xffff */
-	checksum = crc16(0xffff, priv->buffer, LEAKSHIELD_USB_REPORT_LENGTH);
+	checksum = crc16(0xffff, priv->ctrl_buffer, LEAKSHIELD_USB_REPORT_LENGTH);
 	checksum ^= 0xffff;
 
 	/* Place the new checksum at the end of the report */
-	put_unaligned_be16(checksum, priv->buffer + LEAKSHIELD_USB_REPORT_LENGTH);
+	put_unaligned_be16(checksum, priv->ctrl_buffer + LEAKSHIELD_USB_REPORT_LENGTH);
 
 	intf = to_usb_interface(priv->hdev->dev.parent);
 	usb_dev = interface_to_usbdev(intf);
 	pipe = usb_sndbulkpipe(usb_dev, LEAKSHIELD_USB_REPORT_ENDPOINT);
-	ret = usb_bulk_msg(usb_dev, pipe, priv->buffer, priv->buffer_size, &actual_length, 1000);
+	ret = usb_bulk_msg(usb_dev, pipe, priv->ctrl_buffer, priv->ctrl_buffer_size,
+			   &actual_length, 1000);
 
-	if (actual_length != priv->buffer_size)
+	if (actual_length != priv->ctrl_buffer_size)
 		return -EIO;
 
 	return ret;
@@ -1894,7 +1905,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->num_flow_sensors = AQUAERO_NUM_FLOW_SENSORS;
 		priv->flow_sensors_start_offset = AQUAERO_FLOW_SENSORS_START;
 
-		priv->buffer_size = AQUAERO_CTRL_REPORT_SIZE;
+		priv->ctrl_buffer_size = AQUAERO_CTRL_REPORT_SIZE;
 		priv->temp_ctrl_offset = AQUAERO_TEMP_CTRL_OFFSET;
 
 		priv->temp_label = label_temp_sensors;
@@ -1918,7 +1929,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->virtual_temp_sensor_start_offset = D5NEXT_VIRTUAL_SENSORS_START;
 
 		priv->power_cycle_count_offset = AQC_POWER_CYCLES;
-		priv->buffer_size = D5NEXT_CTRL_REPORT_SIZE;
+		priv->ctrl_buffer_size = D5NEXT_CTRL_REPORT_SIZE;
 		priv->temp_ctrl_offset = D5NEXT_TEMP_CTRL_OFFSET;
 
 		priv->temp_label = label_d5next_temp;
@@ -1950,7 +1961,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->num_virtual_temp_sensors = FARBWERK360_NUM_VIRTUAL_SENSORS;
 		priv->virtual_temp_sensor_start_offset = FARBWERK360_VIRTUAL_SENSORS_START;
 
-		priv->buffer_size = FARBWERK360_CTRL_REPORT_SIZE;
+		priv->ctrl_buffer_size = FARBWERK360_CTRL_REPORT_SIZE;
 		priv->temp_ctrl_offset = FARBWERK360_TEMP_CTRL_OFFSET;
 
 		priv->temp_label = label_temp_sensors;
@@ -1969,7 +1980,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->virtual_temp_sensor_start_offset = OCTO_VIRTUAL_SENSORS_START;
 
 		priv->power_cycle_count_offset = AQC_POWER_CYCLES;
-		priv->buffer_size = OCTO_CTRL_REPORT_SIZE;
+		priv->ctrl_buffer_size = OCTO_CTRL_REPORT_SIZE;
 		priv->temp_ctrl_offset = OCTO_TEMP_CTRL_OFFSET;
 
 		priv->temp_label = label_temp_sensors;
@@ -1994,7 +2005,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->flow_sensors_start_offset = QUADRO_FLOW_SENSOR_OFFSET;
 
 		priv->power_cycle_count_offset = AQC_POWER_CYCLES;
-		priv->buffer_size = QUADRO_CTRL_REPORT_SIZE;
+		priv->ctrl_buffer_size = QUADRO_CTRL_REPORT_SIZE;
 		priv->temp_ctrl_offset = QUADRO_TEMP_CTRL_OFFSET;
 		priv->flow_pulses_ctrl_offset = QUADRO_FLOW_PULSES_CTRL_OFFSET;
 
@@ -2038,7 +2049,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->temp_sensor_start_offset = LEAKSHIELD_TEMPERATURE_1;
 
 		/* Plus two bytes for checksum */
-		priv->buffer_size = LEAKSHIELD_USB_REPORT_LENGTH + 2;
+		priv->ctrl_buffer_size = LEAKSHIELD_USB_REPORT_LENGTH + 2;
 
 		priv->temp_label = label_leakshield_temp_sensors;
 		priv->speed_label = label_leakshield_fan_speed;
@@ -2053,12 +2064,8 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->num_temp_sensors = AQUASTREAMXT_NUM_SENSORS;
 		priv->temp_sensor_start_offset = AQUASTREAMXT_SENSOR_START;
 
-		/*
-		 * Since we use the same buffer for both sensor and control
-		 * report storage on legacy devices, reserve enough space
-		 */
-		priv->buffer_size = max(AQUASTREAMXT_SENSOR_REPORT_SIZE,
-					AQUASTREAMXT_CTRL_REPORT_SIZE);
+		priv->sensor_buffer_size = AQUASTREAMXT_SENSOR_REPORT_SIZE;
+		priv->ctrl_buffer_size = AQUASTREAMXT_CTRL_REPORT_SIZE;
 
 		priv->temp_label = label_aquastreamxt_temp_sensors;
 		priv->speed_label = label_d5next_speeds;
@@ -2087,7 +2094,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 		priv->num_temp_sensors = POWERADJUST3_NUM_SENSORS;
 		priv->temp_sensor_start_offset = POWERADJUST3_SENSOR_START;
-		priv->buffer_size = POWERADJUST3_SENSOR_REPORT_SIZE;
+		priv->sensor_buffer_size = POWERADJUST3_SENSOR_REPORT_SIZE;
 
 		priv->temp_label = label_poweradjust3_temp_sensors;
 		break;
@@ -2132,22 +2139,29 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		}
 	}
 
-	if (priv->buffer_size != 0) {
+	if (priv->ctrl_buffer_size != 0) {
 		priv->checksum_start = 0x01;
-		priv->checksum_length = priv->buffer_size - 3;
-		priv->checksum_offset = priv->buffer_size - 2;
+		priv->checksum_length = priv->ctrl_buffer_size - 3;
+		priv->checksum_offset = priv->ctrl_buffer_size - 2;
 	}
 
 	priv->name = aqc_device_names[priv->kind];
 
-	priv->buffer = devm_kzalloc(&hdev->dev, priv->buffer_size, GFP_KERNEL);
-	if (!priv->buffer) {
+	priv->sensor_buffer = devm_kzalloc(&hdev->dev, priv->sensor_buffer_size, GFP_KERNEL);
+	if (!priv->sensor_buffer) {
+		ret = -ENOMEM;
+		goto fail_and_close;
+	}
+
+	priv->ctrl_buffer = devm_kzalloc(&hdev->dev, priv->ctrl_buffer_size, GFP_KERNEL);
+	if (!priv->ctrl_buffer) {
 		ret = -ENOMEM;
 		goto fail_and_close;
 	}
 
 	if (priv->kind == leakshield)
-		memcpy(priv->buffer, leakshield_usb_report_template, LEAKSHIELD_USB_REPORT_LENGTH);
+		memcpy(priv->ctrl_buffer,
+		       leakshield_usb_report_template, LEAKSHIELD_USB_REPORT_LENGTH);
 
 	mutex_init(&priv->mutex);
 
