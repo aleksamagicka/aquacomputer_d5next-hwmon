@@ -1169,9 +1169,8 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			default:
 				ret =
 				    aqc_get_ctrl_val(priv,
-						     AQUAERO_CTRL_PRESET_START +
-						     channel * AQUAERO_CTRL_PRESET_SIZE,
-						     val, AQC_BE16);
+						     priv->fan_ctrl_offsets[channel] +
+						     AQC_FAN_CTRL_PWM_OFFSET, val, AQC_BE16);
 				if (ret < 0)
 					return ret;
 				*val = aqc_percent_to_pwm(*val);
