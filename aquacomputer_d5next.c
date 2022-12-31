@@ -1764,9 +1764,18 @@ static ssize_t show_auto_pwm(struct device *dev, struct device_attribute *attr, 
 {
 	struct aqc_data *priv = dev_get_drvdata(dev);
 	struct sensor_device_attribute_2 *sattr = to_sensor_dev_attr_2(attr);
+	int nr = sattr->nr;
+	int point = sattr->index;
 
-	/* TODO */
-	return sprintf(buf, "test\n");
+	unsigned long val;
+	int ret =
+	    aqc_get_ctrl_val(priv,
+			     priv->fan_ctrl_offsets[nr] + AQC_FAN_CTRL_PWM_CURVE_START +
+			     point * AQC_SENSOR_SIZE, &val, AQC_BE16);
+	if (ret < 0)
+		return -ENODATA;
+
+	return sprintf(buf, "%d\n", aqc_percent_to_pwm(val));
 }
 
 static ssize_t
