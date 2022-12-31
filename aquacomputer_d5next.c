@@ -1730,8 +1730,15 @@ static ssize_t show_auto_temp(struct device *dev, struct device_attribute *attr,
 	int nr = sattr->nr;
 	int point = sattr->index;
 
-	/* TODO */
-	return sprintf(buf, "%d\n", 50);
+	unsigned long val;
+	int ret =
+	    aqc_get_ctrl_val(priv,
+			     priv->fan_ctrl_offsets[nr] + AQC_FAN_CTRL_TEMP_CURVE_START +
+			     point * AQC_SENSOR_SIZE, &val, AQC_BE16);
+	if (ret < 0)
+		return -ENODATA;
+
+	return sprintf(buf, "%d\n", (s16)val);
 }
 
 static ssize_t
@@ -2534,8 +2541,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	}
 
 	/* Set up curves */
-	/* TODO: Check if required offsets are defined */
-	if (priv->num_fans > 0) {
+	if (priv->fan_ctrl_offsets) {
 		group =
 		    aqc_create_attr_group(&hdev->dev, &aqc_curve_template_group, priv->num_fans);
 		if (IS_ERR(group))
