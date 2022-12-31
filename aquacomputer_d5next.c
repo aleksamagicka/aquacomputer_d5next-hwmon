@@ -1749,13 +1749,16 @@ store_auto_temp(struct device *dev, struct device_attribute *attr, const char *b
 	int nr = sattr->nr;
 	int point = sattr->index;
 	unsigned long val;
-	int err;
+	int ret = kstrtoul(buf, 10, &val);
 
-	err = kstrtoul(buf, 10, &val);
-	if (err)
-		return err;
-	if (val > 255000)	/* TODO */
-		return -EINVAL;
+	if (ret < 0)
+		return ret;
+
+	ret = aqc_set_ctrl_val(priv,
+			       priv->fan_ctrl_offsets[nr] + AQC_FAN_CTRL_TEMP_CURVE_START +
+			       point * AQC_SENSOR_SIZE, val, AQC_BE16);
+	if (ret < 0)
+		return ret;
 
 	return count;
 }
@@ -1789,6 +1792,7 @@ store_auto_pwm(struct device *dev, struct device_attribute *attr, const char *bu
 	int pwm_value;
 
 	int ret = kstrtoul(buf, 10, &val);
+
 	if (ret < 0)
 		return ret;
 	if (val > 255)
