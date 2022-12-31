@@ -120,10 +120,13 @@ static u8 aquastreamxt_secondary_ctrl_report[] = {
 #define AQC_FAN_CURRENT_OFFSET		0x04
 #define AQC_FAN_POWER_OFFSET		0x06
 #define AQC_FAN_SPEED_OFFSET		0x08
+#define AQC_FAN_CTRL_CURVE_NUM_POINTS	16
 
 /* Report offsets for fan control */
 #define AQC_FAN_CTRL_PWM_OFFSET		0x01
 #define AQC_FAN_CTRL_TEMP_SELECT_OFFSET	0x03
+#define AQC_FAN_CTRL_TEMP_CURVE_START	0x15
+#define AQC_FAN_CTRL_PWM_CURVE_START	0x35
 
 /* Specs of the Aquaero fan controllers */
 #define AQUAERO_SERIAL_START			0x07
@@ -1862,12 +1865,7 @@ SENSOR_TEMPLATE_2(temp_auto_point16_temp, "temp%d_auto_point16_temp",
 
 static umode_t aqc_curve_is_visible(struct kobject *kobj, struct attribute *attr, int index)
 {
-	struct device *dev = kobj_to_dev(kobj);
-	struct aqc_data *data = dev_get_drvdata(dev);
-	int pwm = index;	/* pwm index */
-
-	/* TODO */
-
+	/* Each fan always has 16 points available */
 	return attr->mode;
 }
 
