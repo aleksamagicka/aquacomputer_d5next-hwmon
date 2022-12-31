@@ -1786,15 +1786,20 @@ store_auto_pwm(struct device *dev, struct device_attribute *attr, const char *bu
 	int nr = sattr->nr;
 	int point = sattr->index;
 	unsigned long val;
-	int err;
+	int pwm_value;
 
-	err = kstrtoul(buf, 10, &val);
-	if (err < 0)
-		return err;
+	int ret = kstrtoul(buf, 10, &val);
+	if (ret < 0)
+		return ret;
 	if (val > 255)
 		return -EINVAL;
 
-	/* TODO */
+	pwm_value = aqc_pwm_to_percent(val);
+	ret = aqc_set_ctrl_val(priv,
+			       priv->fan_ctrl_offsets[nr] + AQC_FAN_CTRL_PWM_CURVE_START +
+			       point * AQC_SENSOR_SIZE, pwm_value, AQC_BE16);
+	if (ret < 0)
+		return ret;
 
 	return count;
 }
