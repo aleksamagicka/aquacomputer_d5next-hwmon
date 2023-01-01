@@ -1032,6 +1032,8 @@ static int aqc_legacy_read(struct aqc_data *priv)
 		break;
 	}
 
+	priv->updated = jiffies;
+
 unlock_and_return:
 	mutex_unlock(&priv->mutex);
 	return ret;
@@ -1049,7 +1051,6 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			ret = aqc_legacy_read(priv);
 			if (ret < 0)
 				return -ENODATA;
-			priv->updated = jiffies;
 		} else {
 			return -ENODATA;
 		}
