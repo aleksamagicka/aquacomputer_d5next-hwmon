@@ -2558,13 +2558,21 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		break;
 	}
 
-	/* Set up curves */
+	/* Set up temp-PWM curves for devices that support them */
 	if (priv->fan_ctrl_offsets) {
-		group =
-		    aqc_create_attr_group(&hdev->dev, &aqc_curve_template_group, priv->num_fans);
-		if (IS_ERR(group))
-			return PTR_ERR(group);
-		priv->groups[groups++] = group;
+		switch (priv->kind) {
+		case octo:
+		case quadro:
+			group =
+			    aqc_create_attr_group(&hdev->dev, &aqc_curve_template_group,
+						  priv->num_fans);
+			if (IS_ERR(group))
+				return PTR_ERR(group);
+			priv->groups[groups++] = group;
+			break;
+		default:
+			break;
+		}
 	}
 
 	if (priv->buffer_size != 0) {
