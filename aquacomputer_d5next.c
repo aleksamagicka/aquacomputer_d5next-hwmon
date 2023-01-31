@@ -2099,7 +2099,8 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		break;
 	}
 
-	if (priv->kind == aquaero) {
+	switch (priv->kind) {
+	case aquaero:
 		priv->serial_number_start_offset = AQUAERO_SERIAL_START;
 		priv->firmware_version_offset = AQUAERO_FIRMWARE_VERSION;
 
@@ -2109,7 +2110,8 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->secondary_ctrl_report_id = AQUAERO_SECONDARY_CTRL_REPORT_ID;
 		priv->secondary_ctrl_report_size = AQUAERO_SECONDARY_CTRL_REPORT_SIZE;
 		priv->secondary_ctrl_report = aquaero_secondary_ctrl_report;
-	} else if (priv->kind == aquastreamxt) {
+		break;
+	case aquastreamxt:
 		priv->serial_number_start_offset = AQUASTREAMXT_SERIAL_START;
 		priv->firmware_version_offset = AQUASTREAMXT_FIRMWARE_VERSION;
 
@@ -2118,9 +2120,11 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->secondary_ctrl_report_id = AQUASTREAMXT_SECONDARY_CTRL_REPORT_ID;
 		priv->secondary_ctrl_report_size = AQUASTREAMXT_SECONDARY_CTRL_REPORT_SIZE;
 		priv->secondary_ctrl_report = aquastreamxt_secondary_ctrl_report;
-	} else if (priv->kind == poweradjust3) {
+		break;
+	case poweradjust3:
 		priv->status_report_id = POWERADJUST3_STATUS_REPORT_ID;
-	} else {
+		break;
+	default:
 		priv->serial_number_start_offset = AQC_SERIAL_START;
 		priv->firmware_version_offset = AQC_FIRMWARE_VERSION;
 
@@ -2134,6 +2138,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 			priv->secondary_ctrl_report_size = SECONDARY_CTRL_REPORT_SIZE;
 			priv->secondary_ctrl_report = secondary_ctrl_report;
 		}
+		break;
 	}
 
 	if (priv->buffer_size != 0) {
