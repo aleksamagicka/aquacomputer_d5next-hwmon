@@ -1820,9 +1820,13 @@ static void aqc_debugfs_init(struct aqc_data *priv)
 		  dev_name(&priv->hdev->dev));
 
 	priv->debugfs = debugfs_create_dir(name, NULL);
-	debugfs_create_file("serial_number", 0444, priv->debugfs, priv, &serial_number_fops);
-	debugfs_create_file("firmware_version", 0444, priv->debugfs, priv, &firmware_version_fops);
 
+	if (priv->serial_number_start_offset != 0)
+		debugfs_create_file("serial_number", 0444, priv->debugfs, priv,
+				    &serial_number_fops);
+	if (priv->firmware_version_offset != 0)
+		debugfs_create_file("firmware_version", 0444, priv->debugfs, priv,
+				    &firmware_version_fops);
 	if (priv->power_cycle_count_offset != 0)
 		debugfs_create_file("power_cycles", 0444, priv->debugfs, priv, &power_cycles_fops);
 }
