@@ -551,7 +551,7 @@ static struct aqc_fan_structure_offsets aqc_aquastreamult_fan_structure = {
 	.speed = AQUASTREAMULT_FAN_SPEED_OFFSET
 };
 
-/* Fan structure offsets for all devices except Aquaero */
+/* Fan structure offsets for all devices except those above */
 static struct aqc_fan_structure_offsets aqc_general_fan_structure = {
 	.voltage = AQC_FAN_VOLTAGE_OFFSET,
 	.curr = AQC_FAN_CURRENT_OFFSET,
