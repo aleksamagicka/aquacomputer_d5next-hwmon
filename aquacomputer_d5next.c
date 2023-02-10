@@ -574,10 +574,10 @@ struct aqc_data {
 	u8 *secondary_ctrl_report;
 
 	int buffer_size;
-    	/*
-    	 * Used for writing reports (where supported) and reading
-    	 * sensor reports on legacy devices
-    	 */
+	/*
+	 * Used for writing reports (where supported) and reading
+	 * sensor reports on legacy devices
+	 */
 	u8 *buffer;
 	int checksum_start;
 	int checksum_length;
