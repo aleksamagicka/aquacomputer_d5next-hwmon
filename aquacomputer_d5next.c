@@ -488,7 +488,7 @@ static const char *const label_leakshield_fan_speed[] = {
 	"Reservoir Filled [ml]",
 };
 
-/* Labels for AquastreamXT */
+/* Labels for Aquastream XT */
 static const char *const label_aquastreamxt_temp_sensors[] = {
 	"Fan IC temp",
 	"External sensor",
@@ -642,7 +642,7 @@ static int aqc_pwm_to_percent(long val)
 	return DIV_ROUND_CLOSEST(val * 100 * 100, 255);
 }
 
-/* Converts RPM to PWM */
+/* Converts RPM to Aquastream XT PWM representation */
 static int aqc_aquastreamxt_rpm_to_pwm(long val)
 {
 	return DIV_ROUND_CLOSEST((val - AQUASTREAMXT_PUMP_MIN_RPM) * 255,
@@ -943,7 +943,7 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 				return 0444;
 			break;
 		case aquastreamxt:
-			/* Current only reported for pump */
+			/* Special case to support pump current */
 			if (channel == 0)
 				return 0444;
 			break;
