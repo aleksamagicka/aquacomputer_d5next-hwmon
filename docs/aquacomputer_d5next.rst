@@ -50,8 +50,8 @@ The High Flow Next exposes +5V voltages, water quality, conductivity and flow re
 A temperature sensor can be connected to it, in which case it provides its reading
 and an estimation of the dissipated/absorbed power in the liquid cooling loop.
 
-The Aquastream XT pump exposes three temperature sensors, voltages for
-pump and fan and current for the pump.
+The Aquastream XT pump exposes temperature readings for the coolant, external sensor
+and fan IC. It also exposes pump and fan voltages, as well as pump current.
 
 The Aquastream Ultimate pump exposes coolant temp and an external temp sensor, along
 with speed, power, voltage and current of both the pump and optionally connected fan.
