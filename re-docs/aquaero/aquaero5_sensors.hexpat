@@ -9,6 +9,8 @@ struct Fan {
 
 be u16 serial[2] @ 0x07;
 be u16 firmware @ 0xb;
+be u16 bootloader_version @ 0xd;
+be u16 hw_version @ 0xf;
 be u16 temp_sensor[8] @ 0x65;
 be u16 soft_sensor[8] @ 0x85;
 be u16 temp_fan_amp[4] @ 0xbd;
