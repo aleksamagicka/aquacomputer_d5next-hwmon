@@ -236,6 +236,26 @@ static u16 octo_sensor_fan_offsets[] = { 0x7D, 0x8A, 0x97, 0xA4, 0xB1, 0xBE, 0xC
 /* Fan speed offsets (0-100%) */
 static u16 octo_ctrl_fan_offsets[] = { 0x5A, 0xAF, 0x104, 0x159, 0x1AE, 0x203, 0x258, 0x2AD };
 
+/* Fan curve "hold min power" and "start boost" offsets */
+static u8 octo_ctrl_fan_curve_hold_start_offsets[] = {
+	0x12, 0x1B, 0x24, 0x2D, 0x36, 0x3F, 0x48, 0x51
+};
+
+/* Fan curve min power */
+static u8 octo_ctrl_fan_curve_min_power_offsets[] = {
+	0x13, 0x1C, 0x25, 0x2E, 0x37, 0x40, 0x49, 0x52
+};
+
+/* Fan curve max power */
+static u8 octo_ctrl_fan_curve_max_power_offsets[] = {
+	0x15, 0x1E, 0x27, 0x30, 0x39, 0x42, 0x4B, 0x54
+};
+
+/* Fan curve fallback power */
+static u8 octo_ctrl_fan_curve_fallback_power_offsets[] = {
+	0x17, 0x20, 0x29, 0x32, 0x3B, 0x44, 0x4D, 0x56
+};
+
 /* Specs of Quadro fan controller */
 #define QUADRO_NUM_FANS			4
 #define QUADRO_NUM_SENSORS		4
@@ -254,6 +274,14 @@ static u16 quadro_sensor_fan_offsets[] = { 0x70, 0x7D, 0x8A, 0x97 };
 #define QUADRO_FLOW_PULSES_CTRL_OFFSET	0x6
 /* Fan speed offsets (0-100%) */
 static u16 quadro_ctrl_fan_offsets[] = { 0x36, 0x8b, 0xe0, 0x135 };
+/* Fan curve "hold min power" and "start boost" offsets */
+static u8 quadro_ctrl_fan_curve_hold_start_offsets[] = { 0x12, 0x1B, 0x24, 0x2D };
+/* Fan curve min power */
+static u8 quadro_ctrl_fan_curve_min_power_offsets[] = { 0x13, 0x1C, 0x25, 0x2E };
+/* Fan curve max power */
+static u8 quadro_ctrl_fan_curve_max_power_offsets[] = { 0x15, 0x1E, 0x27, 0x30 };
+/* Fan curve fallback power */
+static u8 quadro_ctrl_fan_curve_fallback_power_offsets[] = { 0x17, 0x20, 0x29, 0x32 };
 
 /* Specs of High Flow Next flow sensor */
 #define HIGHFLOWNEXT_NUM_SENSORS	2
