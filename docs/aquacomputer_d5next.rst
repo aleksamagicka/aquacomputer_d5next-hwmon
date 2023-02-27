@@ -73,56 +73,41 @@ Thus, some tasks are better suited for userspace tools.
 Depending on the device, not all sysfs and debugfs entries will be available.
 Writing to virtual temperature sensors is not currently supported.
 
-The possible values for pwm_enable are:
-for D5 Next, Quadro and Octo
-
-= =================
-0 no change
-1 manual pwm mode
-2 PID control mode
-3 fan curve mode
-= =================
-
-additionally for Quadro and Octo
-
-= ===============
-4 follow fan1 pwm
-5 follow fan2 pwm
-6 follow fan3 pwm
-7 follow fan4 pwm
-= ===============
-
-additionally for Octo
-
-== ===============
-8  follow fan5 pwm
-9  follow fan6 pwm
-10 follow fan7 pwm
-11 follow fan8 pwm
-== ===============
-
 Usage notes
 -----------
 
 The devices communicate via HID reports. The driver is loaded automatically by
 the kernel and supports hotswapping.
 
+Configuring fan curves is available on the D5 Next, Quadro and Octo. Possible
+pwm_enable values are:
+
+====== ==========================================================
+0      Set fan to 100%
+1      Direct PWM mode (applies value in corresponding PWM entry)
+2      PID control mode
+3      Fan curve mode
+[4-11] Follow fan[1-8], if available and device supports
+====== ==========================================================
+
 Sysfs entries
 -------------
 
-=========================== ==============================================================
-temp[1-20]_input            Physical/virtual temperature sensors (in millidegrees Celsius)
-temp[1-4]_offset            Temperature sensor correction offset (in millidegrees Celsius)
-fan[1-8]_input              Pump/fan speed (in RPM) / Flow speed (in dL/h)
-fan5_pulses                 Quadro flow sensor pulses
-power[1-8]_input            Pump/fan power (in micro Watts)
-in[0-7]_input               Pump/fan voltage (in milli Volts)
-curr[1-8]_input             Pump/fan current (in milli Amperes)
-pwm[1-8]                    Fan PWM (0 - 255)
-pwm[1-8]_enable             Fan control mode
-pwm[1-8]_auto_channels_temp Fan control temperature sensors select
-pwm[1-4]_mode               Fan mode (DC or PWM)
-=========================== ===============================================================
+=============================== ==============================================================
+temp[1-20]_input                Physical/virtual temperature sensors (in millidegrees Celsius)
+temp[1-4]_offset                Temperature sensor correction offset (in millidegrees Celsius)
+fan[1-8]_input                  Pump/fan speed (in RPM) / Flow speed (in dL/h)
+fan5_pulses                     Quadro flow sensor pulses
+power[1-8]_input                Pump/fan power (in micro Watts)
+in[0-7]_input                   Pump/fan voltage (in milli Volts)
+curr[1-8]_input                 Pump/fan current (in milli Amperes)
+pwm[1-8]                        Fan PWM (0 - 255)
+pwm[1-8]_enable                 Fan control mode
+pwm[1-8]_auto_channels_temp     Fan control temperature sensors select
+pwm[1-4]_mode                   Fan mode (DC or PWM)
+temp[1-8]_auto_point[1-16]_temp Temperature value of point on curve for given fan
+temp[1-8]_auto_point[1-16]_pwm  PWM value of point on curve for given fan
+=============================== ==============================================================
 
 Debugfs entries
 ---------------
