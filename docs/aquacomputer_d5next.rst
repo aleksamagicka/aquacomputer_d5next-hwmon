@@ -25,32 +25,33 @@ Description
 This driver exposes hardware sensors of listed Aquacomputer devices, which
 communicate through proprietary USB HID protocols.
 
-The Aquaero devices expose eight temperature sensors and four PWM controllable fans,
-along with their speed (in RPM), power, voltage and current. The PWM fans can be
-controlled directly and can be configured as DC or PWM using pwm[1-4]_mode. Note
-that Aquaero 5 can set PWM mode only for the fourth fan.
+The Aquaero devices expose eight physical, eight virtual and four calculated
+virtual temperature sensors, as well as two flow sensors. The fans expose their
+speed (in RPM), power, voltage and current. The four fans can also be
+controlled directly, as well as configured as DC or PWM using pwm[1-4]_mode.
 
 Additionally, Aquaero devices also expose twenty temperature sensors and twelve flow
 sensors from devices connected via Aquabus. The assigned sensor number is
 predetermined by the Aquabus address of the device.
 
 For the D5 Next pump, available sensors are pump and fan speed, power, voltage
-and current, as well as coolant temperature. Also available through debugfs are
-the serial number, firmware version and power-on count. Attaching a fan to it is
-optional and allows it to be controlled using temperature curves directly from the
-pump. If it's not connected, the fan-related sensors will report zeroes.
+and current, as well as coolant temperature and eight virtual temp sensors. Also
+available through debugfs are the serial number, firmware version and power-on
+count. Attaching a fan to it is optional and allows it to be controlled using
+temperature curves directly from the pump. If it's not connected, the fan-related
+sensors will report zeroes. The pump can be configured either through software or
+via its physical interface.
 
-The pump can be configured either through software or via its physical
-interface. Configuring the pump and the other devices through this driver 
-is not implemented completely, as it seems to require sending it a complete 
-configuration. That includes addressable RGB LEDs, for which there is no standard
-sysfs interface. Thus, that task is better suited for userspace tools.
+The Octo exposes four physical and sixteen virtual temperature sensors, as well as
+eight PWM controllable fans, along with their speed (in RPM), power, voltage and
+current.
 
-The Octo exposes four temperature sensors and eight PWM controllable fans, along
-with their speed (in RPM), power, voltage and current.
+The Quadro exposes four physical and sixteen virtual temperature sensors, a flow
+sensor and four PWM controllable fans, along with their speed (in RPM), power,
+voltage and current. Flow sensor pulses are also available.
 
-The Quadro exposes four temperature sensors, a flow sensor and four PWM controllable fans,
-along with their speed (in RPM), power, voltage and current.
+The Farbwerk and Farbwerk 360 expose four temperature sensors. Additionally,
+sixteen virtual temperature sensors of the Farbwerk 360 are exposed.
 
 The High Flow Next exposes +5V voltages, water quality, conductivity and flow readings.
 A temperature sensor can be connected to it, in which case it provides its reading
@@ -69,6 +70,13 @@ with speed, power, voltage and current of both the pump and optionally connected
 It also exposes pressure and flow speed readings.
 
 The Poweradjust 3 controller exposes a single external temperature sensor.
+
+Configuring listed devices through this driver is not implemented completely, as
+it often includes addressable RGB LEDs, for which there is no standard sysfs interface.
+Thus, some tasks are better suited for userspace tools.
+
+Depending on the device, not all sysfs and debugfs entries will be available.
+Writing to virtual temperature sensors is not currently supported.
 
 The possible values for pwm_enable are:
 for D5 Next, Quadro and Octo
@@ -97,9 +105,6 @@ additionally for Octo
 10 follow fan7 pwm
 11 follow fan8 pwm
 == ===============
-
-The Farbwerk and Farbwerk 360 expose four temperature sensors. Depending on the device,
-not all sysfs and debugfs entries will be available.
 
 Usage notes
 -----------
