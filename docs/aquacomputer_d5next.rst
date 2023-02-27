@@ -122,9 +122,9 @@ pwm[1-4]_mode               Fan mode (DC or PWM)
 Debugfs entries
 ---------------
 
-================ =================================================
+================ ==================================================
 serial_number    Serial number of the device
 firmware_version Version of installed firmware
 power_cycles     Count of how many times the device was powered on
-hw_version       Hardware version/revision of device
-================ =================================================
+hw_version       Hardware version/revision of device (Aquaero only)
+================ ==================================================
