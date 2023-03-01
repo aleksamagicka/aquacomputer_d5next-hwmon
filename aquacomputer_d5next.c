@@ -102,6 +102,9 @@ static u8 aquastreamxt_secondary_ctrl_report[] = {
 #define AQC_BE16	1
 #define AQC_LE16	2
 
+#define FAN_CURVE_HOLD_MIN_POWER_POS	1
+#define FAN_CURVE_START_BOOST_POS	2
+
 /* Report IDs for legacy devices */
 #define AQUASTREAMXT_STATUS_REPORT_ID	0x04
 #define AQUASTREAMXT_CTRL_REPORT_ID	0x06
@@ -639,6 +642,11 @@ struct aqc_data {
 	u8 flow_sensors_start_offset;
 	u8 flow_pulses_ctrl_offset;
 	struct aqc_fan_structure_offsets *fan_structure;
+	u8 *fan_curve_min_power_offsets;
+	u8 *fan_curve_max_power_offsets;
+	/* Used for both "hold min power" and "start boost" parameters */
+	u8 *fan_curve_hold_start_offsets;
+	u8 *fan_curve_fallback_power_offsets;
 
 	/* For differentiating between Aquaero 5 and 6 */
 	enum aquaero_hw_kinds aquaero_hw_kind;
@@ -685,6 +693,18 @@ static int aqc_percent_to_pwm(u16 val)
 static int aqc_pwm_to_percent(long val)
 {
 	return DIV_ROUND_CLOSEST(val * 100 * 100, 255);
+}
+
+/* Gets bit value on given position in an int */
+static int aqc_get_bit_at_pos(int val, int pos)
+{
+	return (val >> pos) & 1;
+}
+
+/* Sets bit value on given position in an int */
+static int aqc_set_bit_at_pos(int val, int pos, int bit_value)
+{
+	return (val & ~(1 << pos)) | (bit_value << pos);
 }
 
 /* Converts RPM to Aquastream XT PWM representation */
@@ -1759,10 +1779,9 @@ static ssize_t show_auto_temp(struct device *dev, struct device_attribute *attr,
 	int point = sattr->index;
 
 	unsigned long val;
-	int ret =
-	    aqc_get_ctrl_val(priv,
-			     priv->fan_ctrl_offsets[nr] + AQC_FAN_CTRL_TEMP_CURVE_START +
-			     point * AQC_SENSOR_SIZE, &val, AQC_BE16);
+	int ret = aqc_get_ctrl_val(priv,
+				   priv->fan_ctrl_offsets[nr] + AQC_FAN_CTRL_TEMP_CURVE_START +
+				   point * AQC_SENSOR_SIZE, &val, AQC_BE16);
 	if (ret < 0)
 		return -ENODATA;
 
@@ -1799,10 +1818,9 @@ static ssize_t show_auto_pwm(struct device *dev, struct device_attribute *attr, 
 	int point = sattr->index;
 
 	unsigned long val;
-	int ret =
-	    aqc_get_ctrl_val(priv,
-			     priv->fan_ctrl_offsets[nr] + AQC_FAN_CTRL_PWM_CURVE_START +
-			     point * AQC_SENSOR_SIZE, &val, AQC_BE16);
+	int ret = aqc_get_ctrl_val(priv,
+				   priv->fan_ctrl_offsets[nr] + AQC_FAN_CTRL_PWM_CURVE_START +
+				   point * AQC_SENSOR_SIZE, &val, AQC_BE16);
 	if (ret < 0)
 		return -ENODATA;
 
@@ -1961,6 +1979,246 @@ static struct sensor_device_template *aqc_attributes_curve_template[] = {
 static const struct sensor_template_group aqc_curve_template_group = {
 	.templates = aqc_attributes_curve_template,
 	.is_visible = aqc_curve_is_visible,
+	.base = 1,
+};
+
+/* Fan curve parameters (for both PID mode and temp-PWM curves) */
+static ssize_t show_curve_power_min(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct aqc_data *priv = dev_get_drvdata(dev);
+	struct sensor_device_attribute *sattr = to_sensor_dev_attr(attr);
+	int index = sattr->index;
+
+	unsigned long val;
+	int ret = aqc_get_ctrl_val(priv,
+				   priv->fan_curve_min_power_offsets[index], &val, AQC_BE16);
+	if (ret < 0)
+		return -ENODATA;
+
+	return sprintf(buf, "%d\n", aqc_percent_to_pwm(val));
+}
+
+static ssize_t
+store_curve_power_min(struct device *dev, struct device_attribute *attr, const char *buf,
+		      size_t count)
+{
+	struct aqc_data *priv = dev_get_drvdata(dev);
+	struct sensor_device_attribute *sattr = to_sensor_dev_attr(attr);
+	int index = sattr->index;
+	unsigned long val;
+	int ret = kstrtoul(buf, 10, &val);
+	int pwm_value;
+
+	if (ret < 0)
+		return ret;
+	if (val > 255)
+		return -EINVAL;
+
+	pwm_value = aqc_pwm_to_percent(val);
+	ret = aqc_set_ctrl_val(priv, priv->fan_curve_min_power_offsets[index], pwm_value, AQC_BE16);
+	if (ret < 0)
+		return ret;
+
+	return count;
+}
+
+/* Fan curve parameters (for both PID and temp-PWM curves) */
+static ssize_t show_curve_power_max(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct aqc_data *priv = dev_get_drvdata(dev);
+	struct sensor_device_attribute *sattr = to_sensor_dev_attr(attr);
+	int index = sattr->index;
+
+	unsigned long val;
+	int ret = aqc_get_ctrl_val(priv,
+				   priv->fan_curve_max_power_offsets[index], &val, AQC_BE16);
+	if (ret < 0)
+		return -ENODATA;
+
+	return sprintf(buf, "%d\n", aqc_percent_to_pwm(val));
+}
+
+static ssize_t
+store_curve_power_max(struct device *dev, struct device_attribute *attr, const char *buf,
+		      size_t count)
+{
+	struct aqc_data *priv = dev_get_drvdata(dev);
+	struct sensor_device_attribute *sattr = to_sensor_dev_attr(attr);
+	int index = sattr->index;
+	unsigned long val;
+	int ret = kstrtoul(buf, 10, &val);
+	int pwm_value;
+
+	if (ret < 0)
+		return ret;
+	if (val > 255)
+		return -EINVAL;
+
+	pwm_value = aqc_pwm_to_percent(val);
+	ret = aqc_set_ctrl_val(priv, priv->fan_curve_max_power_offsets[index], pwm_value, AQC_BE16);
+	if (ret < 0)
+		return ret;
+
+	return count;
+}
+
+static ssize_t show_curve_power_fallback(struct device *dev, struct device_attribute *attr,
+					 char *buf)
+{
+	struct aqc_data *priv = dev_get_drvdata(dev);
+	struct sensor_device_attribute *sattr = to_sensor_dev_attr(attr);
+	int index = sattr->index;
+
+	unsigned long val;
+	int ret = aqc_get_ctrl_val(priv,
+				   priv->fan_curve_fallback_power_offsets[index], &val, AQC_BE16);
+	if (ret < 0)
+		return -ENODATA;
+
+	return sprintf(buf, "%d\n", aqc_percent_to_pwm(val));
+}
+
+static ssize_t
+store_curve_power_fallback(struct device *dev, struct device_attribute *attr, const char *buf,
+			   size_t count)
+{
+	struct aqc_data *priv = dev_get_drvdata(dev);
+	struct sensor_device_attribute *sattr = to_sensor_dev_attr(attr);
+	int index = sattr->index;
+	unsigned long val;
+	int ret = kstrtoul(buf, 10, &val);
+	int pwm_value;
+
+	if (ret < 0)
+		return ret;
+	if (val > 255)
+		return -EINVAL;
+
+	pwm_value = aqc_pwm_to_percent(val);
+	ret = aqc_set_ctrl_val(priv,
+			       priv->fan_curve_fallback_power_offsets[index], pwm_value, AQC_BE16);
+	if (ret < 0)
+		return ret;
+
+	return count;
+}
+
+static ssize_t show_curve_start_boost(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct aqc_data *priv = dev_get_drvdata(dev);
+	struct sensor_device_attribute *sattr = to_sensor_dev_attr(attr);
+	int index = sattr->index, ret;
+
+	unsigned long val;
+	ret = aqc_get_ctrl_val(priv,
+			       priv->fan_curve_hold_start_offsets[index], &val, AQC_8);
+	if (ret < 0)
+		return -ENODATA;
+
+	return sprintf(buf, "%d\n", aqc_get_bit_at_pos(val, FAN_CURVE_START_BOOST_POS));
+}
+
+static ssize_t
+store_curve_start_boost(struct device *dev, struct device_attribute *attr, const char *buf,
+			size_t count)
+{
+	struct aqc_data *priv = dev_get_drvdata(dev);
+	struct sensor_device_attribute *sattr = to_sensor_dev_attr(attr);
+	int index = sattr->index;
+	unsigned long val, new_val;
+	int ret = kstrtoul(buf, 10, &val);
+
+	if (ret < 0)
+		return ret;
+	if (val > 2)
+		return -EINVAL;
+
+	ret = aqc_get_ctrl_val(priv, priv->fan_curve_hold_start_offsets[index], &new_val, AQC_8);
+	if (ret < 0)
+		return ret;
+
+	new_val = aqc_set_bit_at_pos(new_val, FAN_CURVE_START_BOOST_POS, val);
+
+	ret = aqc_set_ctrl_val(priv, priv->fan_curve_hold_start_offsets[index], new_val, AQC_8);
+	if (ret < 0)
+		return ret;
+
+	return count;
+}
+
+static ssize_t show_curve_power_hold_start(struct device *dev, struct device_attribute *attr,
+					   char *buf)
+{
+	struct aqc_data *priv = dev_get_drvdata(dev);
+	struct sensor_device_attribute *sattr = to_sensor_dev_attr(attr);
+	int index = sattr->index, ret;
+
+	unsigned long val;
+	ret = aqc_get_ctrl_val(priv,
+			       priv->fan_curve_hold_start_offsets[index], &val, AQC_8);
+	if (ret < 0)
+		return -ENODATA;
+
+	return sprintf(buf, "%d\n", aqc_get_bit_at_pos(val, FAN_CURVE_HOLD_MIN_POWER_POS));
+}
+
+static ssize_t
+store_curve_power_hold_start(struct device *dev, struct device_attribute *attr, const char *buf,
+			     size_t count)
+{
+	struct aqc_data *priv = dev_get_drvdata(dev);
+	struct sensor_device_attribute *sattr = to_sensor_dev_attr(attr);
+	int index = sattr->index;
+	unsigned long val, new_val;
+	int ret = kstrtoul(buf, 10, &val);
+
+	if (ret < 0)
+		return ret;
+	if (val > 2)
+		return -EINVAL;
+
+	ret = aqc_get_ctrl_val(priv, priv->fan_curve_hold_start_offsets[index], &new_val, AQC_8);
+	if (ret < 0)
+		return ret;
+
+	new_val = aqc_set_bit_at_pos(new_val, FAN_CURVE_HOLD_MIN_POWER_POS, val);
+
+	ret = aqc_set_ctrl_val(priv, priv->fan_curve_hold_start_offsets[index], new_val, AQC_8);
+	if (ret < 0)
+		return ret;
+
+	return count;
+}
+
+SENSOR_TEMPLATE(curve_power_min, "curve%d_power_min",
+		0644, show_curve_power_min, store_curve_power_min, 0);
+SENSOR_TEMPLATE(curve_power_max, "curve%d_power_max",
+		0644, show_curve_power_max, store_curve_power_max, 0);
+SENSOR_TEMPLATE(curve_power_fallback, "curve%d_power_fallback",
+		0644, show_curve_power_fallback, store_curve_power_fallback, 0);
+SENSOR_TEMPLATE(curve_start_boost, "curve%d_start_boost",
+		0644, show_curve_start_boost, store_curve_start_boost, 0);
+SENSOR_TEMPLATE(curve_power_hold_start, "curve%d_power_hold_start",
+		0644, show_curve_power_hold_start, store_curve_power_hold_start, 0);
+
+static umode_t aqc_params_is_visible(struct kobject *kobj, struct attribute *attr, int index)
+{
+	/* Each fan curve always has all parameters available */
+	return attr->mode;
+}
+
+static struct sensor_device_template *aqc_attributes_params_template[] = {
+	&sensor_dev_template_curve_power_min,
+	&sensor_dev_template_curve_power_max,
+	&sensor_dev_template_curve_power_fallback,
+	&sensor_dev_template_curve_start_boost,
+	&sensor_dev_template_curve_power_hold_start,
+	NULL
+};
+
+static const struct sensor_template_group aqc_curve_params_template_group = {
+	.templates = aqc_attributes_params_template,
+	.is_visible = aqc_params_is_visible,
 	.base = 1,
 };
 
@@ -2411,6 +2669,10 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->num_fans = OCTO_NUM_FANS;
 		priv->fan_sensor_offsets = octo_sensor_fan_offsets;
 		priv->fan_ctrl_offsets = octo_ctrl_fan_offsets;
+		priv->fan_curve_min_power_offsets = octo_ctrl_fan_curve_min_power_offsets;
+		priv->fan_curve_max_power_offsets = octo_ctrl_fan_curve_max_power_offsets;
+		priv->fan_curve_hold_start_offsets = octo_ctrl_fan_curve_hold_start_offsets;
+		priv->fan_curve_fallback_power_offsets = octo_ctrl_fan_curve_fallback_power_offsets;
 
 		priv->num_temp_sensors = OCTO_NUM_SENSORS;
 		priv->temp_sensor_start_offset = OCTO_SENSOR_START;
@@ -2434,6 +2696,11 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->num_fans = QUADRO_NUM_FANS;
 		priv->fan_sensor_offsets = quadro_sensor_fan_offsets;
 		priv->fan_ctrl_offsets = quadro_ctrl_fan_offsets;
+		priv->fan_curve_min_power_offsets = quadro_ctrl_fan_curve_min_power_offsets;
+		priv->fan_curve_max_power_offsets = quadro_ctrl_fan_curve_max_power_offsets;
+		priv->fan_curve_hold_start_offsets = quadro_ctrl_fan_curve_hold_start_offsets;
+		priv->fan_curve_fallback_power_offsets =
+		    quadro_ctrl_fan_curve_fallback_power_offsets;
 
 		priv->num_temp_sensors = QUADRO_NUM_SENSORS;
 		priv->temp_sensor_start_offset = QUADRO_SENSOR_START;
@@ -2586,13 +2853,22 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		break;
 	}
 
-	/* Set up temp-PWM curves for devices that support them */
+	/* Set up temp-PWM curves and their parameters for devices that support them */
 	if (priv->fan_ctrl_offsets) {
 		switch (priv->kind) {
 		case octo:
 		case quadro:
+			/* Temp-PWM curve */
 			group =
 			    aqc_create_attr_group(&hdev->dev, &aqc_curve_template_group,
+						  priv->num_fans);
+			if (IS_ERR(group))
+				return PTR_ERR(group);
+			priv->groups[groups++] = group;
+
+			/* General curve parameters */
+			group =
+			    aqc_create_attr_group(&hdev->dev, &aqc_curve_params_template_group,
 						  priv->num_fans);
 			if (IS_ERR(group))
 				return PTR_ERR(group);
