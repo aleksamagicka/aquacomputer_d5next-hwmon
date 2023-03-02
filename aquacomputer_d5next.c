@@ -149,6 +149,7 @@ static u16 aquaero_sensor_fan_offsets[] = { 0x167, 0x173, 0x17f, 0x18B };
 #define AQUAERO_FAN_CTRL_MIN_RPM_OFFSET	0x00
 #define AQUAERO_FAN_CTRL_MAX_RPM_OFFSET	0x02
 #define AQUAERO_FAN_CTRL_MIN_PWR_OFFSET	0x04
+#define AQUAERO_FAN_CTRL_MAX_PWR_OFFSET	0x06
 #define AQUAERO_FAN_CTRL_MODE_OFFSET	0x0f
 #define AQUAERO_FAN_CTRL_SRC_OFFSET	0x10
 static u16 aquaero_ctrl_fan_offsets[] = { 0x20c, 0x220, 0x234, 0x248 };
@@ -1335,9 +1336,9 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 	int ret, pwm_value, temp_sensor;
 	long ctrl_mode;
 	/* Arrays for setting multiple values at once in the control report */
-	int ctrl_values_offsets[3];
-	long ctrl_values[3];
-	int ctrl_values_types[3];
+	int ctrl_values_offsets[4];
+	long ctrl_values[4];
+	int ctrl_values_types[4];
 	struct aqc_data *priv = dev_get_drvdata(dev);
 
 	switch (type) {
@@ -1455,8 +1456,17 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				ctrl_values[2] = 0;
 				ctrl_values_types[2] = AQC_BE16;
 
+				/*
+				 * Set maximum power to 100% to allow the fan to
+				 * reach maximum speed
+				 */
+				ctrl_values_offsets[3] = priv->fan_ctrl_offsets[channel] +
+				    AQUAERO_FAN_CTRL_MAX_PWR_OFFSET;
+				ctrl_values[3] = aqc_pwm_to_percent(255);
+				ctrl_values_types[3] = AQC_BE16;
+
 				ret = aqc_set_ctrl_vals(priv, ctrl_values_offsets, ctrl_values,
-							ctrl_values_types, 3);
+							ctrl_values_types, 4);
 				if (ret < 0)
 					return ret;
 				break;
