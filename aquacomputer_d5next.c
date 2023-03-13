@@ -186,6 +186,14 @@ static u16 d5next_sensor_fan_offsets[] = { D5NEXT_PUMP_OFFSET, D5NEXT_FAN_OFFSET
 /* Control report offsets for the D5 Next pump */
 #define D5NEXT_TEMP_CTRL_OFFSET		0x2D	/* Temperature sensor offsets location */
 static u16 d5next_ctrl_fan_offsets[] = { 0x96, 0x41 };	/* Pump and fan speed (from 0-100%) */
+/* Fan curve "hold min power" and "start boost" offsets, only for the fan, first value is unused */
+static u8 d5next_ctrl_fan_curve_hold_start_offsets[] = { 0x00, 0x2F };
+/* Fan curve min power */
+static u8 d5next_ctrl_fan_curve_min_power_offsets[] = { 0x39, 0x30 };
+/* Fan curve max power */
+static u8 d5next_ctrl_fan_curve_max_power_offsets[] = { 0x3B, 0x32 };
+/* Fan curve fallback power */
+static u8 d5next_ctrl_fan_curve_fallback_power_offsets[] = { 0x3D, 0x34 };
 
 /* Specs of the Aquastream Ultimate pump */
 /* Pump does not follow the standard structure, so only consider the fan */
@@ -2221,7 +2229,7 @@ SENSOR_TEMPLATE(curve_power_hold_start, "curve%d_power_hold_start",
 
 static umode_t aqc_params_is_visible(struct kobject *kobj, struct attribute *attr, int index)
 {
-	/* Each fan curve always has all parameters available */
+	/* Every fan curve always has all parameters available */
 	return attr->mode;
 }
 
@@ -2636,6 +2644,11 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->num_fans = D5NEXT_NUM_FANS;
 		priv->fan_sensor_offsets = d5next_sensor_fan_offsets;
 		priv->fan_ctrl_offsets = d5next_ctrl_fan_offsets;
+		priv->fan_curve_min_power_offsets = d5next_ctrl_fan_curve_min_power_offsets;
+		priv->fan_curve_max_power_offsets = d5next_ctrl_fan_curve_max_power_offsets;
+		priv->fan_curve_hold_start_offsets = d5next_ctrl_fan_curve_hold_start_offsets;
+		priv->fan_curve_fallback_power_offsets =
+		    d5next_ctrl_fan_curve_fallback_power_offsets;
 
 		priv->num_temp_sensors = D5NEXT_NUM_SENSORS;
 		priv->temp_sensor_start_offset = D5NEXT_COOLANT_TEMP;
