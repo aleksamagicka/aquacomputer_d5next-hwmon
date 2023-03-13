@@ -1504,9 +1504,21 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				return -EOPNOTSUPP;
 			}
 
-			/* Decrement to convert from hwmon to aqc */
-			ret = aqc_set_ctrl_val(priv,
-					       priv->fan_ctrl_offsets[channel], val - 1, AQC_8);
+			if (val == 0) {
+				/* Set the fan to 100% as we don't control it anymore */
+				ret =
+				    aqc_set_ctrl_val(priv,
+						     priv->fan_ctrl_offsets[channel] +
+						     AQC_FAN_CTRL_PWM_OFFSET,
+						     aqc_pwm_to_percent(255), AQC_BE16);
+				if (ret < 0)
+					return ret;
+			} else {
+				/* Decrement to convert from hwmon to aqc */
+				val--;
+			}
+
+			ret = aqc_set_ctrl_val(priv, priv->fan_ctrl_offsets[channel], val, AQC_8);
 			if (ret < 0)
 				return ret;
 			break;
