@@ -924,9 +924,15 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 					break;
 				}
 				break;
-			default:
+			case octo:
+			case quadro:
 				switch (attr) {
 				case hwmon_pwm_enable:
+					return 0644;
+				}
+				fallthrough;
+			default:
+				switch (attr) {
 				case hwmon_pwm_input:
 				case hwmon_pwm_auto_channels_temp:
 					return 0644;
