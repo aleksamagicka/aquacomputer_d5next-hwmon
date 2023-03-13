@@ -932,6 +932,7 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 					break;
 				}
 				break;
+			case d5next:
 			case octo:
 			case quadro:
 				switch (attr) {
@@ -2887,6 +2888,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	/* Set up temp-PWM curves and their parameters for devices that support them */
 	if (priv->fan_ctrl_offsets) {
 		switch (priv->kind) {
+		case d5next:
 		case octo:
 		case quadro:
 			/* Temp-PWM curve */
