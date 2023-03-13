@@ -2173,8 +2173,8 @@ store_curve_start_boost(struct device *dev, struct device_attribute *attr, const
 	return count;
 }
 
-static ssize_t show_curve_power_hold_start(struct device *dev, struct device_attribute *attr,
-					   char *buf)
+static ssize_t show_curve_power_hold_min(struct device *dev, struct device_attribute *attr,
+					 char *buf)
 {
 	struct aqc_data *priv = dev_get_drvdata(dev);
 	struct sensor_device_attribute *sattr = to_sensor_dev_attr(attr);
@@ -2190,8 +2190,8 @@ static ssize_t show_curve_power_hold_start(struct device *dev, struct device_att
 }
 
 static ssize_t
-store_curve_power_hold_start(struct device *dev, struct device_attribute *attr, const char *buf,
-			     size_t count)
+store_curve_power_hold_min(struct device *dev, struct device_attribute *attr, const char *buf,
+			   size_t count)
 {
 	struct aqc_data *priv = dev_get_drvdata(dev);
 	struct sensor_device_attribute *sattr = to_sensor_dev_attr(attr);
@@ -2225,8 +2225,8 @@ SENSOR_TEMPLATE(curve_power_fallback, "curve%d_power_fallback",
 		0644, show_curve_power_fallback, store_curve_power_fallback, 0);
 SENSOR_TEMPLATE(curve_start_boost, "curve%d_start_boost",
 		0644, show_curve_start_boost, store_curve_start_boost, 0);
-SENSOR_TEMPLATE(curve_power_hold_start, "curve%d_power_hold_start",
-		0644, show_curve_power_hold_start, store_curve_power_hold_start, 0);
+SENSOR_TEMPLATE(curve_power_hold_min, "curve%d_power_min_hold",
+		0644, show_curve_power_hold_min, store_curve_power_hold_min, 0);
 
 static umode_t aqc_params_is_visible(struct kobject *kobj, struct attribute *attr, int index)
 {
@@ -2239,7 +2239,7 @@ static struct sensor_device_template *aqc_attributes_params_template[] = {
 	&sensor_dev_template_curve_power_max,
 	&sensor_dev_template_curve_power_fallback,
 	&sensor_dev_template_curve_start_boost,
-	&sensor_dev_template_curve_power_hold_start,
+	&sensor_dev_template_curve_power_hold_min,
 	NULL
 };
 
