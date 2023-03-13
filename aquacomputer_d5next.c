@@ -2135,8 +2135,8 @@ static ssize_t show_curve_start_boost(struct device *dev, struct device_attribut
 	struct aqc_data *priv = dev_get_drvdata(dev);
 	struct sensor_device_attribute *sattr = to_sensor_dev_attr(attr);
 	int index = sattr->index, ret;
-
 	unsigned long val;
+
 	ret = aqc_get_ctrl_val(priv,
 			       priv->fan_curve_hold_start_offsets[index], &val, AQC_8);
 	if (ret < 0)
@@ -2179,8 +2179,8 @@ static ssize_t show_curve_power_hold_min(struct device *dev, struct device_attri
 	struct aqc_data *priv = dev_get_drvdata(dev);
 	struct sensor_device_attribute *sattr = to_sensor_dev_attr(attr);
 	int index = sattr->index, ret;
-
 	unsigned long val;
+
 	ret = aqc_get_ctrl_val(priv,
 			       priv->fan_curve_hold_start_offsets[index], &val, AQC_8);
 	if (ret < 0)
@@ -2230,7 +2230,18 @@ SENSOR_TEMPLATE(curve_power_hold_min, "curve%d_power_min_hold",
 
 static umode_t aqc_params_is_visible(struct kobject *kobj, struct attribute *attr, int index)
 {
-	/* Every fan curve always has all parameters available */
+	/*
+	 * Pump channel on the D5 Next does not support the last two features,
+	 * "start boost" and "hold min power". Every other fan curve supports
+	 * all parameters.
+	 */
+	struct device *dev = kobj_to_dev(kobj);
+	struct aqc_data *priv = dev_get_drvdata(dev);
+	int nr = index % 5;
+
+	if (priv->kind == d5next && nr > 2)
+		return 0;
+
 	return attr->mode;
 }
 
