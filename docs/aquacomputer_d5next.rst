@@ -27,7 +27,8 @@ communicate through proprietary USB HID protocols.
 
 The Aquaero devices expose eight temperature sensors and four PWM controllable fans,
 along with their speed (in RPM), power, voltage and current. The PWM fans can be
-controlled directly and can be configured as DC or PWM using pwm[1-4]_mode.
+controlled directly and can be configured as DC or PWM using pwm[1-4]_mode. Note
+that Aquaero 5 can set PWM mode only for the fourth fan.
 
 For the D5 Next pump, available sensors are pump and fan speed, power, voltage
 and current, as well as coolant temperature. Also available through debugfs are
@@ -121,8 +122,9 @@ pwm[1-4]_mode               Fan mode (DC or PWM)
 Debugfs entries
 ---------------
 
-================ =================================================
+================ ==================================================
 serial_number    Serial number of the device
 firmware_version Version of installed firmware
 power_cycles     Count of how many times the device was powered on
-================ =================================================
+hw_version       Hardware version/revision of device (Aquaero only)
+================ ==================================================

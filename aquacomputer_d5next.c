@@ -42,6 +42,10 @@ enum kinds {
 	aquastreamult, poweradjust3
 };
 
+enum aquaero_hw_kinds { unknown, aquaero5, aquaero6 };
+
+DECLARE_COMPLETION(aquaero_sensor_report_received);
+
 static const char *const aqc_device_names[] = {
 	[aquaero] = "aquaero",
 	[d5next] = "d5next",
@@ -123,6 +127,7 @@ static u8 aquastreamxt_secondary_ctrl_report[] = {
 /* Specs of the Aquaero fan controllers */
 #define AQUAERO_SERIAL_START			0x07
 #define AQUAERO_FIRMWARE_VERSION		0x0B
+#define AQUAERO_HARDWARE_VERSION		0x0F
 #define AQUAERO_NUM_FANS			4
 #define AQUAERO_NUM_SENSORS			8
 #define AQUAERO_NUM_VIRTUAL_SENSORS		8
@@ -132,6 +137,8 @@ static u8 aquastreamxt_secondary_ctrl_report[] = {
 #define AQUAERO_CTRL_PRESET_ID			0x5c
 #define AQUAERO_CTRL_PRESET_SIZE		0x02
 #define AQUAERO_CTRL_PRESET_START		0x55c
+#define AQUAERO_5_HW_VERSION			5600
+#define AQUAERO_6_HW_VERSION			6000
 
 /* Sensor report offsets for Aquaero fan controllers */
 #define AQUAERO_SENSOR_START			0x65
@@ -600,6 +607,10 @@ struct aqc_data {
 	u8 flow_pulses_ctrl_offset;
 	struct aqc_fan_structure_offsets *fan_structure;
 
+	/* For differentiating between Aquaero 5 and 6 */
+	enum aquaero_hw_kinds aquaero_hw_kind;
+	int aquaero_hw_version;
+
 	/* General info, available across all devices */
 	u8 serial_number_start_offset;
 	u32 serial_number[2];
@@ -831,8 +842,23 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 			case aquaero:
 				switch (attr) {
 				case hwmon_pwm_input:
-				case hwmon_pwm_mode:
 					return 0644;
+				case hwmon_pwm_mode:
+					/*
+					 * Wait until the first Aquaero sensor report is received,
+					 * to be able to differentiate between Aquaero 5 and 6
+					 * by looking at the hardware version. While the v6 supports
+					 * both DC and PWM mode for all four fans, v5 supports PWM
+					 * mode only for the fourth fan.
+					 */
+					if (!wait_for_completion_timeout
+					    (&aquaero_sensor_report_received,
+					     STATUS_UPDATE_INTERVAL))
+						return 0;
+
+					if ((priv->aquaero_hw_kind == aquaero5 && channel == 3) ||
+					    priv->aquaero_hw_kind == aquaero6)
+						return 0644;
 				default:
 					break;
 				}
@@ -1720,6 +1746,19 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 	/* Special-case sensor readings */
 	switch (priv->kind) {
 	case aquaero:
+		/* Read hardware version (for v5: 5600, for v6: 6000) */
+		switch (priv->aquaero_hw_version) {
+		case AQUAERO_5_HW_VERSION:
+			priv->aquaero_hw_kind = aquaero5;
+			break;
+		case AQUAERO_6_HW_VERSION:
+			priv->aquaero_hw_kind = aquaero6;
+			break;
+		default:
+			priv->aquaero_hw_kind = unknown;
+			break;
+		}
+
 		/* Read calculated virtual temp sensors */
 		i = priv->num_temp_sensors + priv->num_virtual_temp_sensors;
 		for (j = 0; j < priv->num_calc_virt_temp_sensors; j++) {
@@ -1732,6 +1771,9 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 				priv->temp_input[i] = sensor_value * 10;
 			i++;
 		}
+
+		if (!completion_done(&aquaero_sensor_report_received))
+			complete_all(&aquaero_sensor_report_received);
 		break;
 	case aquastreamult:
 		priv->speed_input[1] = get_unaligned_be16(data + AQUASTREAMULT_PUMP_OFFSET);
@@ -1826,6 +1868,18 @@ static int power_cycles_show(struct seq_file *seqf, void *unused)
 }
 DEFINE_SHOW_ATTRIBUTE(power_cycles);
 
+static int hw_version_show(struct seq_file *seqf, void *unused)
+{
+	struct aqc_data *priv = seqf->private;
+
+	wait_for_completion(&aquaero_sensor_report_received);
+
+	seq_printf(seqf, "%u\n", priv->aquaero_hw_version);
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(hw_version);
+
 static void aqc_debugfs_init(struct aqc_data *priv)
 {
 	char name[64];
@@ -1843,6 +1897,8 @@ static void aqc_debugfs_init(struct aqc_data *priv)
 				    &firmware_version_fops);
 	if (priv->power_cycle_count_offset != 0)
 		debugfs_create_file("power_cycles", 0444, priv->debugfs, priv, &power_cycles_fops);
+	if (priv->kind == aquaero)
+		debugfs_create_file("hw_version", 0444, priv->debugfs, priv, &hw_version_fops);
 }
 
 #else
@@ -2174,8 +2230,10 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 	mutex_init(&priv->mutex);
 
+	hid_device_io_start(hdev);
 	priv->hwmon_dev = hwmon_device_register_with_info(&hdev->dev, priv->name, priv,
 							  &aqc_chip_info, NULL);
+	hid_device_io_stop(hdev);
 
 	if (IS_ERR(priv->hwmon_dev)) {
 		ret = (int)PTR_ERR(priv->hwmon_dev);
