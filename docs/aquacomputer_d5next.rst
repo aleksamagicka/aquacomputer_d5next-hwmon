@@ -57,7 +57,8 @@ target readings). It also exposes the estimated reservoir volume and how much of
 filled with coolant. Pump RPM and flow can be set to enhance on-device calculations.
 
 The Aquastream XT pump exposes temperature readings for the coolant, external sensor
-and fan IC. It also exposes pump and fan voltages, as well as pump current.
+and fan IC. It also exposes pump and fan speeds (in RPM), voltages, as well as pump
+current.
 
 The Aquastream Ultimate pump exposes coolant temp and an external temp sensor, along
 with speed, power, voltage and current of both the pump and optionally connected fan.
