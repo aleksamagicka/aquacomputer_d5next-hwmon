@@ -2,9 +2,9 @@
 
    on:
      push:
-       branches: [ main, gh-actions-test ]
+       branches: [ main, hwmon-state, gh-actions-test ]
      pull_request:
-       branches: [ main, gh-actions-test ]
+       branches: [ main, hwmon-state, gh-actions-test ]
 
    jobs:
     build:
