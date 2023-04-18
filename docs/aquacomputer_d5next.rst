@@ -103,6 +103,9 @@ Sysfs entries
 temp[1-40]_input                Physical/virtual temperature sensors (in millidegrees Celsius)
 temp[1-4]_offset                Temperature sensor correction offset (in millidegrees Celsius)
 fan[1-20]_input                 Pump/fan speed (in RPM) / Flow speed (in dL/h)
+fan[1-4]_min                    Minimal fan speed (in RPM)
+fan[1-4]_max                    Maximal fan speed (in RPM)
+fan1_target                     Target fan speed (in RPM)
 fan5_pulses                     Quadro flow sensor pulses
 power[1-8]_input                Pump/fan power (in micro Watts)
 in[0-7]_input                   Pump/fan voltage (in milli Volts)
