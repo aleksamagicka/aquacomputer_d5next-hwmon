@@ -99,7 +99,7 @@ The following devices are supported by this driver, and from which kernel versio
 |     Quadro     |          6.0           | Temperature, flow and fan sensors, direct fan PWM control, flow sensor pulses |  MCF51JU128VHS  |
 | High Flow Next |          6.1           |                       Various sensors                        |        ?        |
 |  Aquaero 5/6   |     6.3 (sensors), 6.4 (fan control), rest here     | Temperature sensors, fan sensors, direct fan PWM control, DC/PWM mode setting, flow sensors | MCF51JM128EVLK  |
-|   Leakshield   |     Available here     |  Various sensors and setting parameters for higher accuracy  |        ?        |
+|   Leakshield   |     6.4 (sensors), rest here     |  Various sensors and setting parameters for higher accuracy  |        ?        |
 | Aquastream XT  |     6.4 (sensors), rest here     | Temperature sensors, voltage sensors, pump and fan speed control | ATMEGA8-16MU |
 | Aquastream Ultimate  |     6.3     | Temperature sensors, pump and fan sensors, pressure and flow | ? |
 | Poweradjust 3  |     6.3    | External temperature sensor | ? |
