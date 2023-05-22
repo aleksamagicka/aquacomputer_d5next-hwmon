@@ -192,6 +192,7 @@ static u16 d5next_sensor_fan_offsets[] = { D5NEXT_PUMP_OFFSET, D5NEXT_FAN_OFFSET
 
 /* Control report offsets for the D5 Next pump */
 #define D5NEXT_TEMP_CTRL_OFFSET		0x2D	/* Temperature sensor offsets location */
+#define D5NEXT_TEMP_CTRL_ALARM_OFFSET	0x324	/* location of overtemp alarm setpoint */
 static u16 d5next_ctrl_fan_offsets[] = { 0x96, 0x41 };	/* Pump and fan speed (from 0-100%) */
 /* Fan curve "hold min power" and "start boost" offsets, only for the fan, first value is unused */
 static u8 d5next_ctrl_fan_curve_hold_start_offsets[] = { 0x00, 0x2F };
@@ -683,6 +684,7 @@ struct aqc_data {
 	int num_aquabus_temp_sensors;
 	int aquabus_temp_sensor_start_offset;
 	u16 temp_ctrl_offset;
+	u16 temp_ctrl_alarm_offset;
 	u16 power_cycle_count_offset;
 	int num_flow_sensors;
 	u8 flow_sensors_start_offset;
@@ -954,6 +956,11 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 			case hwmon_temp_offset:
 				if (priv->temp_ctrl_offset != 0)
 					return 0644;
+				break;
+			case hwmon_temp_max:
+				if (priv->temp_ctrl_alarm_offset != 0)
+					return 0644;
+				break;
 			default:
 				break;
 			}
@@ -1247,6 +1254,16 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			if (ret < 0)
 				return ret;
 			*val *= 10;
+			break;
+		case hwmon_temp_max:
+			ret =
+			    aqc_get_ctrl_val(priv,
+					     priv->temp_ctrl_alarm_offset +
+					     channel * AQC_SENSOR_SIZE, val, AQC_BE16);
+			if (ret < 0)
+				return ret;
+			*val *= 10;
+			break;
 		default:
 			break;
 		}
@@ -1525,6 +1542,15 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			ret =
 			    aqc_set_ctrl_val(priv,
 					     priv->temp_ctrl_offset +
+					     channel * AQC_SENSOR_SIZE, val, AQC_BE16);
+			if (ret < 0)
+				return ret;
+			break;
+		case hwmon_temp_max:
+			val = val / 10;
+			ret =
+			    aqc_set_ctrl_val(priv,
+					     priv->temp_ctrl_alarm_offset +
 					     channel * AQC_SENSOR_SIZE, val, AQC_BE16);
 			if (ret < 0)
 				return ret;
@@ -2352,7 +2378,7 @@ static const struct hwmon_ops aqc_hwmon_ops = {
 
 static const struct hwmon_channel_info *aqc_info[] = {
 	HWMON_CHANNEL_INFO(temp,
-			   HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_OFFSET,
+			   HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_OFFSET | HWMON_T_MAX,
 			   HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_OFFSET,
 			   HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_OFFSET,
 			   HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_OFFSET,
@@ -2849,6 +2875,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->power_cycle_count_offset = AQC_POWER_CYCLES;
 		priv->buffer_size = D5NEXT_CTRL_REPORT_SIZE;
 		priv->temp_ctrl_offset = D5NEXT_TEMP_CTRL_OFFSET;
+		priv->temp_ctrl_alarm_offset = D5NEXT_TEMP_CTRL_ALARM_OFFSET;
 
 		priv->temp_label = label_d5next_temp;
 		priv->virtual_temp_label = label_virtual_temp_sensors;
