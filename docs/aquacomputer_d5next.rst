@@ -30,6 +30,10 @@ along with their speed (in RPM), power, voltage and current. The PWM fans can be
 controlled directly and can be configured as DC or PWM using pwm[1-4]_mode. Note
 that Aquaero 5 can set PWM mode only for the fourth fan.
 
+Additionally, Aquaero devices also expose twenty temperature sensors and twelve flow
+sensors from devices connected via Aquabus. The assigned sensor number is
+predetermined by the Aquabus address of the device.
+
 For the D5 Next pump, available sensors are pump and fan speed, power, voltage
 and current, as well as coolant temperature. Also available through debugfs are
 the serial number, firmware version and power-on count. Attaching a fan to it is
@@ -107,9 +111,9 @@ Sysfs entries
 -------------
 
 =========================== ==============================================================
-temp[1-20]_input            Physical/virtual temperature sensors (in millidegrees Celsius)
+temp[1-40]_input            Physical/virtual temperature sensors (in millidegrees Celsius)
 temp[1-4]_offset            Temperature sensor correction offset (in millidegrees Celsius)
-fan[1-8]_input              Pump/fan speed (in RPM) / Flow speed (in dL/h)
+fan[1-20]_input             Pump/fan speed (in RPM) / Flow speed (in dL/h)
 fan5_pulses                 Quadro flow sensor pulses
 power[1-8]_input            Pump/fan power (in micro Watts)
 in[0-7]_input               Pump/fan voltage (in milli Volts)
