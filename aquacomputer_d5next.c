@@ -134,6 +134,7 @@ static u8 aquastreamxt_secondary_ctrl_report[] = {
 #define AQUAERO_NUM_VIRTUAL_SENSORS		8
 #define AQUAERO_NUM_CALC_VIRTUAL_SENSORS	4
 #define AQUAERO_NUM_FLOW_SENSORS		2
+#define AQUAERO_NUM_AQUABUS_FLOW_SENSORS	12
 #define AQUAERO_CTRL_REPORT_SIZE		0xa93
 #define AQUAERO_CTRL_PRESET_ID			0x5c
 #define AQUAERO_CTRL_PRESET_SIZE		0x02
@@ -147,6 +148,7 @@ static u8 aquastreamxt_secondary_ctrl_report[] = {
 #define AQUAERO_CALC_VIRTUAL_SENSOR_START	0x95
 #define AQUAERO_AQUABUS_SENSOR_START		0x9D
 #define AQUAERO_FLOW_SENSORS_START		0xF9
+#define AQUAERO_AQUABUS_FLOW_SENSORS_START	0xFD
 #define AQUAERO_FAN_VOLTAGE_OFFSET		0x04
 #define AQUAERO_FAN_CURRENT_OFFSET		0x06
 #define AQUAERO_FAN_POWER_OFFSET		0x08
@@ -483,7 +485,19 @@ static const char *const label_aquaero_speeds[] = {
 	"Fan 3 speed",
 	"Fan 4 speed",
 	"Flow sensor 1 [dL/h]",
-	"Flow sensor 2 [dL/h]"
+	"Flow sensor 2 [dL/h]",
+	"Aquabus flow 1 [dL/h]",
+	"Aquabus flow 2 [dL/h]",
+	"Aquabus flow 3 [dL/h]",
+	"Aquabus flow 4 [dL/h]",
+	"Aquabus flow 5 [dL/h]",
+	"Aquabus flow 6 [dL/h]",
+	"Aquabus flow 7 [dL/h]",
+	"Aquabus flow 8 [dL/h]",
+	"Aquabus flow 9 [dL/h]",
+	"Aquabus flow 10 [dL/h]",
+	"Aquabus flow 11 [dL/h]",
+	"Aquabus flow 12 [dL/h]"
 };
 
 /* Labels for High Flow Next */
@@ -631,6 +645,8 @@ struct aqc_data {
 	u16 power_cycle_count_offset;
 	int num_flow_sensors;
 	u8 flow_sensors_start_offset;
+	int num_aquabus_flow_sensors;
+	u8 aquabus_flow_sensors_start_offset;
 	u8 flow_pulses_ctrl_offset;
 	struct aqc_fan_structure_offsets *fan_structure;
 
@@ -653,10 +669,10 @@ struct aqc_data {
 	 * or 8 physical + 12 virtual + 20 aquabus, depending on the device
 	 */
 	s32 temp_input[40];
-	s32 speed_input[8];
-	u32 speed_input_min[8];
+	s32 speed_input[20];	/* Max 8 physical + 12 aquabus */
+	u32 speed_input_min[20];
 	u32 speed_input_target[8];
-	u32 speed_input_max[8];
+	u32 speed_input_max[20];
 	u32 power_input[8];
 	u16 voltage_input[8];
 	u16 current_input[8];
@@ -947,7 +963,9 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 			case aquaero:
 			case quadro:
 				/* Special case to support flow sensors */
-				if (channel < priv->num_fans + priv->num_flow_sensors)
+				if (channel < priv->num_fans +
+				    priv->num_flow_sensors +
+				    priv->num_aquabus_flow_sensors)
 					return 0444;
 				break;
 			default:
@@ -1686,6 +1704,18 @@ static const struct hwmon_channel_info *aqc_info[] = {
 			   HWMON_F_INPUT | HWMON_F_LABEL | HWMON_F_PULSES,
 			   HWMON_F_INPUT | HWMON_F_LABEL,
 			   HWMON_F_INPUT | HWMON_F_LABEL,
+			   HWMON_F_INPUT | HWMON_F_LABEL,
+			   HWMON_F_INPUT | HWMON_F_LABEL,
+			   HWMON_F_INPUT | HWMON_F_LABEL,
+			   HWMON_F_INPUT | HWMON_F_LABEL,
+			   HWMON_F_INPUT | HWMON_F_LABEL,
+			   HWMON_F_INPUT | HWMON_F_LABEL,
+			   HWMON_F_INPUT | HWMON_F_LABEL,
+			   HWMON_F_INPUT | HWMON_F_LABEL,
+			   HWMON_F_INPUT | HWMON_F_LABEL,
+			   HWMON_F_INPUT | HWMON_F_LABEL,
+			   HWMON_F_INPUT | HWMON_F_LABEL,
+			   HWMON_F_INPUT | HWMON_F_LABEL,
 			   HWMON_F_INPUT | HWMON_F_LABEL),
 	HWMON_CHANNEL_INFO(power,
 			   HWMON_P_INPUT | HWMON_P_LABEL,
@@ -1815,6 +1845,19 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 		default:
 			priv->aquaero_hw_kind = unknown;
 			break;
+		}
+
+		/* Read Aquabus flow sensors */
+		for (j = 0; j < priv->num_aquabus_flow_sensors; j++) {
+			sensor_value = get_unaligned_be16(data +
+							  priv->aquabus_flow_sensors_start_offset +
+							  j * AQC_SENSOR_SIZE);
+
+			if (sensor_value == AQC_SENSOR_NA)
+				priv->speed_input[i] = -ENODATA;
+			else
+				priv->speed_input[i] = sensor_value;
+			i++;
 		}
 
 		/* Read calculated virtual temp sensors */
@@ -2039,6 +2082,8 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->aquabus_temp_sensor_start_offset = AQUAERO_AQUABUS_SENSOR_START;
 		priv->num_flow_sensors = AQUAERO_NUM_FLOW_SENSORS;
 		priv->flow_sensors_start_offset = AQUAERO_FLOW_SENSORS_START;
+		priv->num_aquabus_flow_sensors = AQUAERO_NUM_AQUABUS_FLOW_SENSORS;
+		priv->aquabus_flow_sensors_start_offset = AQUAERO_AQUABUS_FLOW_SENSORS_START;
 
 		priv->buffer_size = AQUAERO_CTRL_REPORT_SIZE;
 		priv->temp_ctrl_offset = AQUAERO_TEMP_CTRL_OFFSET;
