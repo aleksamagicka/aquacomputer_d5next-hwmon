@@ -130,9 +130,11 @@ static u8 aquastreamxt_secondary_ctrl_report[] = {
 #define AQUAERO_HARDWARE_VERSION		0x0F
 #define AQUAERO_NUM_FANS			4
 #define AQUAERO_NUM_SENSORS			8
+#define AQUAERO_NUM_AQUABUS_SENSORS		20
 #define AQUAERO_NUM_VIRTUAL_SENSORS		8
 #define AQUAERO_NUM_CALC_VIRTUAL_SENSORS	4
 #define AQUAERO_NUM_FLOW_SENSORS		2
+#define AQUAERO_NUM_AQUABUS_FLOW_SENSORS	12
 #define AQUAERO_CTRL_REPORT_SIZE		0xa93
 #define AQUAERO_CTRL_PRESET_ID			0x5c
 #define AQUAERO_CTRL_PRESET_SIZE		0x02
@@ -144,7 +146,9 @@ static u8 aquastreamxt_secondary_ctrl_report[] = {
 #define AQUAERO_SENSOR_START			0x65
 #define AQUAERO_VIRTUAL_SENSOR_START		0x85
 #define AQUAERO_CALC_VIRTUAL_SENSOR_START	0x95
+#define AQUAERO_AQUABUS_SENSOR_START		0x9D
 #define AQUAERO_FLOW_SENSORS_START		0xF9
+#define AQUAERO_AQUABUS_FLOW_SENSORS_START	0xFD
 #define AQUAERO_FAN_VOLTAGE_OFFSET		0x04
 #define AQUAERO_FAN_CURRENT_OFFSET		0x06
 #define AQUAERO_FAN_POWER_OFFSET		0x08
@@ -397,6 +401,29 @@ static const char *const label_aquaero_calc_temp_sensors[] = {
 	"Calc. virtual sensor 4"
 };
 
+static const char *const label_aquaero_aquabus_temp_sensors[] = {
+	"Aquabus sensor 1",
+	"Aquabus sensor 2",
+	"Aquabus sensor 3",
+	"Aquabus sensor 4",
+	"Aquabus sensor 5",
+	"Aquabus sensor 6",
+	"Aquabus sensor 7",
+	"Aquabus sensor 8",
+	"Aquabus sensor 9",
+	"Aquabus sensor 10",
+	"Aquabus sensor 11",
+	"Aquabus sensor 12",
+	"Aquabus sensor 13",
+	"Aquabus sensor 14",
+	"Aquabus sensor 15",
+	"Aquabus sensor 16",
+	"Aquabus sensor 17",
+	"Aquabus sensor 18",
+	"Aquabus sensor 19",
+	"Aquabus sensor 20"
+};
+
 /* Labels for Octo and Quadro (except speed) */
 static const char *const label_fan_speed[] = {
 	"Fan 1 speed",
@@ -458,7 +485,19 @@ static const char *const label_aquaero_speeds[] = {
 	"Fan 3 speed",
 	"Fan 4 speed",
 	"Flow sensor 1 [dL/h]",
-	"Flow sensor 2 [dL/h]"
+	"Flow sensor 2 [dL/h]",
+	"Aquabus flow 1 [dL/h]",
+	"Aquabus flow 2 [dL/h]",
+	"Aquabus flow 3 [dL/h]",
+	"Aquabus flow 4 [dL/h]",
+	"Aquabus flow 5 [dL/h]",
+	"Aquabus flow 6 [dL/h]",
+	"Aquabus flow 7 [dL/h]",
+	"Aquabus flow 8 [dL/h]",
+	"Aquabus flow 9 [dL/h]",
+	"Aquabus flow 10 [dL/h]",
+	"Aquabus flow 11 [dL/h]",
+	"Aquabus flow 12 [dL/h]"
 };
 
 /* Labels for High Flow Next */
@@ -600,10 +639,14 @@ struct aqc_data {
 	int virtual_temp_sensor_start_offset;
 	int num_calc_virt_temp_sensors;
 	int calc_virt_temp_sensor_start_offset;
+	int num_aquabus_temp_sensors;
+	int aquabus_temp_sensor_start_offset;
 	u16 temp_ctrl_offset;
 	u16 power_cycle_count_offset;
 	int num_flow_sensors;
 	u8 flow_sensors_start_offset;
+	int num_aquabus_flow_sensors;
+	u8 aquabus_flow_sensors_start_offset;
 	u8 flow_pulses_ctrl_offset;
 	struct aqc_fan_structure_offsets *fan_structure;
 
@@ -620,12 +663,16 @@ struct aqc_data {
 	/* How many times the device was powered on */
 	u32 power_cycles;
 
-	/* Sensor values */
-	s32 temp_input[20];	/* Max 4 physical and 16 virtual or 8 physical and 12 virtual */
-	s32 speed_input[8];
-	u32 speed_input_min[8];
+	/*
+	 * Sensor values
+	 * temp_input has a maximum of 4 physical + 16 virtual + 20 aquabus,
+	 * or 8 physical + 12 virtual + 20 aquabus, depending on the device
+	 */
+	s32 temp_input[40];
+	s32 speed_input[20];	/* Max 8 physical + 12 aquabus */
+	u32 speed_input_min[20];
 	u32 speed_input_target[8];
-	u32 speed_input_max[8];
+	u32 speed_input_max[20];
 	u32 power_input[8];
 	u16 voltage_input[8];
 	u16 current_input[8];
@@ -634,6 +681,7 @@ struct aqc_data {
 	const char *const *temp_label;
 	const char *const *virtual_temp_label;
 	const char *const *calc_virtual_temp_label;	/* For Aquaero */
+	const char *const *aquabus_temp_label;		/* For Aquaero */
 	const char *const *speed_label;
 	const char *const *power_label;
 	const char *const *voltage_label;
@@ -827,7 +875,7 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 
 		if (channel <
 		    priv->num_temp_sensors + priv->num_virtual_temp_sensors +
-		    priv->num_calc_virt_temp_sensors)
+		    priv->num_calc_virt_temp_sensors + priv->num_aquabus_temp_sensors)
 			switch (attr) {
 			case hwmon_temp_label:
 			case hwmon_temp_input:
@@ -915,7 +963,9 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 			case aquaero:
 			case quadro:
 				/* Special case to support flow sensors */
-				if (channel < priv->num_fans + priv->num_flow_sensors)
+				if (channel < priv->num_fans +
+				    priv->num_flow_sensors +
+				    priv->num_aquabus_flow_sensors)
 					return 0444;
 				break;
 			default:
@@ -1261,12 +1311,18 @@ static int aqc_read_string(struct device *dev, enum hwmon_sensor_types type, u32
 	/* Number of sensors that are not calculated */
 	int num_non_calc_sensors = priv->num_temp_sensors + priv->num_virtual_temp_sensors;
 
+	/* Number of sensors that are native */
+	int num_native_sensors = priv->num_calc_virt_temp_sensors + num_non_calc_sensors;
+
 	switch (type) {
 	case hwmon_temp:
 		if (channel < priv->num_temp_sensors) {
 			*str = priv->temp_label[channel];
 		} else {
-			if (priv->kind == aquaero && channel >= num_non_calc_sensors)
+			if (priv->kind == aquaero && channel >= num_native_sensors)
+				*str =
+				    priv->aquabus_temp_label[channel - num_native_sensors];
+			else if (priv->kind == aquaero && channel >= num_non_calc_sensors)
 				*str =
 				    priv->calc_virtual_temp_label[channel - num_non_calc_sensors];
 			else
@@ -1618,6 +1674,26 @@ static const struct hwmon_channel_info *aqc_info[] = {
 			   HWMON_T_INPUT | HWMON_T_LABEL,
 			   HWMON_T_INPUT | HWMON_T_LABEL,
 			   HWMON_T_INPUT | HWMON_T_LABEL,
+			   HWMON_T_INPUT | HWMON_T_LABEL,
+			   HWMON_T_INPUT | HWMON_T_LABEL,
+			   HWMON_T_INPUT | HWMON_T_LABEL,
+			   HWMON_T_INPUT | HWMON_T_LABEL,
+			   HWMON_T_INPUT | HWMON_T_LABEL,
+			   HWMON_T_INPUT | HWMON_T_LABEL,
+			   HWMON_T_INPUT | HWMON_T_LABEL,
+			   HWMON_T_INPUT | HWMON_T_LABEL,
+			   HWMON_T_INPUT | HWMON_T_LABEL,
+			   HWMON_T_INPUT | HWMON_T_LABEL,
+			   HWMON_T_INPUT | HWMON_T_LABEL,
+			   HWMON_T_INPUT | HWMON_T_LABEL,
+			   HWMON_T_INPUT | HWMON_T_LABEL,
+			   HWMON_T_INPUT | HWMON_T_LABEL,
+			   HWMON_T_INPUT | HWMON_T_LABEL,
+			   HWMON_T_INPUT | HWMON_T_LABEL,
+			   HWMON_T_INPUT | HWMON_T_LABEL,
+			   HWMON_T_INPUT | HWMON_T_LABEL,
+			   HWMON_T_INPUT | HWMON_T_LABEL,
+			   HWMON_T_INPUT | HWMON_T_LABEL,
 			   HWMON_T_INPUT | HWMON_T_LABEL),
 	HWMON_CHANNEL_INFO(fan,
 			   HWMON_F_INPUT | HWMON_F_LABEL | HWMON_F_MIN | HWMON_F_MAX |
@@ -1626,6 +1702,18 @@ static const struct hwmon_channel_info *aqc_info[] = {
 			   HWMON_F_INPUT | HWMON_F_LABEL | HWMON_F_MIN | HWMON_F_MAX,
 			   HWMON_F_INPUT | HWMON_F_LABEL | HWMON_F_MIN | HWMON_F_MAX,
 			   HWMON_F_INPUT | HWMON_F_LABEL | HWMON_F_PULSES,
+			   HWMON_F_INPUT | HWMON_F_LABEL,
+			   HWMON_F_INPUT | HWMON_F_LABEL,
+			   HWMON_F_INPUT | HWMON_F_LABEL,
+			   HWMON_F_INPUT | HWMON_F_LABEL,
+			   HWMON_F_INPUT | HWMON_F_LABEL,
+			   HWMON_F_INPUT | HWMON_F_LABEL,
+			   HWMON_F_INPUT | HWMON_F_LABEL,
+			   HWMON_F_INPUT | HWMON_F_LABEL,
+			   HWMON_F_INPUT | HWMON_F_LABEL,
+			   HWMON_F_INPUT | HWMON_F_LABEL,
+			   HWMON_F_INPUT | HWMON_F_LABEL,
+			   HWMON_F_INPUT | HWMON_F_LABEL,
 			   HWMON_F_INPUT | HWMON_F_LABEL,
 			   HWMON_F_INPUT | HWMON_F_LABEL,
 			   HWMON_F_INPUT | HWMON_F_LABEL),
@@ -1759,11 +1847,36 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 			break;
 		}
 
+		/* Read Aquabus flow sensors */
+		for (j = 0; j < priv->num_aquabus_flow_sensors; j++) {
+			sensor_value = get_unaligned_be16(data +
+							  priv->aquabus_flow_sensors_start_offset +
+							  j * AQC_SENSOR_SIZE);
+
+			if (sensor_value == AQC_SENSOR_NA)
+				priv->speed_input[i] = -ENODATA;
+			else
+				priv->speed_input[i] = sensor_value;
+			i++;
+		}
+
 		/* Read calculated virtual temp sensors */
 		i = priv->num_temp_sensors + priv->num_virtual_temp_sensors;
 		for (j = 0; j < priv->num_calc_virt_temp_sensors; j++) {
 			sensor_value = get_unaligned_be16(data +
 							  priv->calc_virt_temp_sensor_start_offset
+							  + j * AQC_SENSOR_SIZE);
+			if (sensor_value == AQC_SENSOR_NA)
+				priv->temp_input[i] = -ENODATA;
+			else
+				priv->temp_input[i] = sensor_value * 10;
+			i++;
+		}
+
+		/* Read Aquabus temp sensors */
+		for (j = 0; j < priv->num_aquabus_temp_sensors; j++) {
+			sensor_value = get_unaligned_be16(data +
+							  priv->aquabus_temp_sensor_start_offset
 							  + j * AQC_SENSOR_SIZE);
 			if (sensor_value == AQC_SENSOR_NA)
 				priv->temp_input[i] = -ENODATA;
@@ -1965,8 +2078,12 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->virtual_temp_sensor_start_offset = AQUAERO_VIRTUAL_SENSOR_START;
 		priv->num_calc_virt_temp_sensors = AQUAERO_NUM_CALC_VIRTUAL_SENSORS;
 		priv->calc_virt_temp_sensor_start_offset = AQUAERO_CALC_VIRTUAL_SENSOR_START;
+		priv->num_aquabus_temp_sensors = AQUAERO_NUM_AQUABUS_SENSORS;
+		priv->aquabus_temp_sensor_start_offset = AQUAERO_AQUABUS_SENSOR_START;
 		priv->num_flow_sensors = AQUAERO_NUM_FLOW_SENSORS;
 		priv->flow_sensors_start_offset = AQUAERO_FLOW_SENSORS_START;
+		priv->num_aquabus_flow_sensors = AQUAERO_NUM_AQUABUS_FLOW_SENSORS;
+		priv->aquabus_flow_sensors_start_offset = AQUAERO_AQUABUS_FLOW_SENSORS_START;
 
 		priv->buffer_size = AQUAERO_CTRL_REPORT_SIZE;
 		priv->temp_ctrl_offset = AQUAERO_TEMP_CTRL_OFFSET;
@@ -1974,6 +2091,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->temp_label = label_temp_sensors;
 		priv->virtual_temp_label = label_virtual_temp_sensors;
 		priv->calc_virtual_temp_label = label_aquaero_calc_temp_sensors;
+		priv->aquabus_temp_label = label_aquaero_aquabus_temp_sensors;
 		priv->speed_label = label_aquaero_speeds;
 		priv->power_label = label_fan_power;
 		priv->voltage_label = label_fan_voltage;
