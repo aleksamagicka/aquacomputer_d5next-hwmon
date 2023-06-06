@@ -671,7 +671,7 @@ struct aqc_data {
 	s32 temp_input[40];
 	s32 speed_input[20];	/* Max 8 physical + 12 aquabus */
 	u32 speed_input_min[20];
-	u32 speed_input_target[8];
+	u32 speed_input_target[1];
 	u32 speed_input_max[20];
 	u32 power_input[8];
 	u16 voltage_input[8];
