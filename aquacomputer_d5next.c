@@ -664,9 +664,8 @@ struct aqc_data {
 	u32 power_cycles;
 
 	/*
-	 * Sensor values
-	 * temp_input has a maximum of 4 physical + 16 virtual + 20 aquabus,
-	 * or 8 physical + 12 virtual + 20 aquabus, depending on the device
+	 * Sensor values. temp_input has a maximum of 4 physical + 16 virtual + 20 aquabus,
+	 * or 8 physical + 12 virtual + 20 aquabus sensors, depending on the device
 	 */
 	s32 temp_input[40];
 	s32 speed_input[20];	/* Max 8 physical + 12 aquabus */
