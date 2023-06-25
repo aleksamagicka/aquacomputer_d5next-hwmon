@@ -1834,6 +1834,8 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 	switch (priv->kind) {
 	case aquaero:
 		/* Read hardware version (for v5: 5600, for v6: 6000) */
+		priv->aquaero_hw_version = get_unaligned_be16(data + AQUAERO_HARDWARE_VERSION);
+
 		switch (priv->aquaero_hw_version) {
 		case AQUAERO_5_HW_VERSION:
 			priv->aquaero_hw_kind = aquaero5;
