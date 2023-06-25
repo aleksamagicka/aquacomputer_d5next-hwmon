@@ -154,6 +154,8 @@ static u8 aquastreamxt_secondary_ctrl_report[] = {
 #define AQUAERO_FAN_POWER_OFFSET		0x08
 #define AQUAERO_FAN_SPEED_OFFSET		0x00
 static u16 aquaero_sensor_fan_offsets[] = { 0x167, 0x173, 0x17f, 0x18B };
+#define AQUAERO_CURRENT_UPTIME_OFFSET		0x11
+#define AQUAERO_TOTAL_UPTIME_OFFSET		0x15
 
 /* Control report offsets for the Aquaero fan controllers */
 #define AQUAERO_TEMP_CTRL_OFFSET	0xdb
@@ -662,6 +664,10 @@ struct aqc_data {
 
 	/* How many times the device was powered on */
 	u32 power_cycles;
+
+	/* Aquaero only, in seconds */
+	u32 current_uptime;
+	u32 total_uptime;
 
 	/*
 	 * Sensor values. temp_input has a maximum of 4 physical + 16 virtual + 20 aquabus,
@@ -1848,6 +1854,9 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 			break;
 		}
 
+		priv->current_uptime = get_unaligned_be32(data + AQUAERO_CURRENT_UPTIME_OFFSET);
+		priv->total_uptime = get_unaligned_be32(data + AQUAERO_TOTAL_UPTIME_OFFSET);
+
 		/* Read Aquabus flow sensors */
 		for (j = 0; j < priv->num_aquabus_flow_sensors; j++) {
 			sensor_value = get_unaligned_be16(data +
@@ -1994,6 +2003,30 @@ static int hw_version_show(struct seq_file *seqf, void *unused)
 }
 DEFINE_SHOW_ATTRIBUTE(hw_version);
 
+static int current_uptime_show(struct seq_file *seqf, void *unused)
+{
+	struct aqc_data *priv = seqf->private;
+
+	wait_for_completion(&aquaero_sensor_report_received);
+
+	seq_printf(seqf, "%u\n", priv->current_uptime);
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(current_uptime);
+
+static int total_uptime_show(struct seq_file *seqf, void *unused)
+{
+	struct aqc_data *priv = seqf->private;
+
+	wait_for_completion(&aquaero_sensor_report_received);
+
+	seq_printf(seqf, "%u\n", priv->total_uptime);
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(total_uptime);
+
 static void aqc_debugfs_init(struct aqc_data *priv)
 {
 	char name[64];
@@ -2011,8 +2044,13 @@ static void aqc_debugfs_init(struct aqc_data *priv)
 				    &firmware_version_fops);
 	if (priv->power_cycle_count_offset != 0)
 		debugfs_create_file("power_cycles", 0444, priv->debugfs, priv, &power_cycles_fops);
-	if (priv->kind == aquaero)
+
+	if (priv->kind == aquaero) {
 		debugfs_create_file("hw_version", 0444, priv->debugfs, priv, &hw_version_fops);
+		debugfs_create_file("current_uptime", 0444, priv->debugfs, priv,
+				    &current_uptime_fops);
+		debugfs_create_file("total_uptime", 0444, priv->debugfs, priv, &total_uptime_fops);
+	}
 }
 
 #else
