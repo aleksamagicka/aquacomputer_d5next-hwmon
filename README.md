@@ -104,7 +104,8 @@ The following devices are supported by this driver, and from which kernel versio
 | Aquastream Ultimate |                     6.3                     | Temperature sensors, pump and fan sensors, pressure and flow |        ?        |
 |    Poweradjust 3    |                     6.3                     |                 External temperature sensor                  |        ?        |
 
-Microcontrollers are noted for general reference, as this driver only communicates through HID reports and does not interact with the device CPU & electronics directly.
+Microcontrollers are noted for general reference, as this driver only communicates through HID reports and does not interact
+with the device CPU & electronics directly.
 
 Being a standard `hwmon` driver, it provides readings via `sysfs`, which are easily accessible through `lm-sensors` as usual.
 
@@ -113,9 +114,7 @@ Being a standard `hwmon` driver, it provides readings via `sysfs`, which are eas
 Only notable parts are listed:
 
 * _aquacomputer_d5next.c_ - the driver itself
-* [Reverse engineering docs](re-docs) - WIP, documents explaining how the devices communicate to help understand what
-  the driver does
-
+* [Reverse engineering docs](re-docs) - documents explaining how the devices communicate to help understand what the driver does
 * [Kernel docs](docs) - driver documentation for the kernel
 
 ## Installation and usage
@@ -123,8 +122,18 @@ Only notable parts are listed:
 Ideally, you are on a recent kernel and your distro includes it. If that's the case, you should already have this driver
 available! Refer to the table in the overview above to check.
 
-If you're not, or your kernel does not have the driver support for your particular device, you can clone this repository
-and compile the driver yourself.
+If you're not, or your kernel does not have the driver support for your particular device, you can compile it yourself.
+
+### Kernel 5.18 and later
+
+The driver uses some features only available in kernel 5.18 and later. You can check your kernel version by running:
+
+```commandline
+uname -r
+```
+
+If you're on an older version, you'll have to do some additional steps, outlined in the next section. Whether any of
+the supported or unsupported devices are currently plugged in do not have an effect on the outcome of compilation.
 
 First, clone the repository by running:
 
@@ -138,12 +147,29 @@ Then, compile it and insert it into the running kernel, replacing the existing i
 make dev
 ```
 
-You can then try running `sensors` and your devices should be listed there. If the compilation fails, you probably have
-an older, possibly LTS kernel that does not have the functionality that this driver uses. In that case, you can modify the driver, following what the compiler says, or upgrade to a newer kernel (see [#28][#28] for an example).
+You can then try running `sensors` and your devices should be listed there.
 
+If you are sure that you're on a recent kernel and are still getting errors, please open an issue so we can track it down.
+
+### Kernel 5.17 and earlier
+
+These kernels do not have `hwmon_pwm_auto_channels_temp`, so compilation fails. In that case, you can modify
+the driver, following what the compiler says, or upgrade to a newer kernel (see [#28][#28] for an example).
 
 [#28]: https://github.com/aleksamagicka/aquacomputer_d5next-hwmon/issues/28
 
 ## Contributing
 
-Contributions in form of reporting issues and sending bug fixes and new functionality are very welcome! Without contributors, this driver would never be as feature rich as it is today. Please use the issue tracker and PR functionality for any feedback and patches. Code contributions must follow the [Linux code style rules](https://www.kernel.org/doc/html/v4.10/process/coding-style.html).
+Contributions in form of reporting issues, sending bug fixes and new functionality are very welcome! Without
+contributors, this driver would never be as feature rich as it is today. Please use the issue tracker and PR
+functionality for any feedback and patches. Code contributions must follow the [Linux code style rules](https://www.kernel.org/doc/html/latest/process/coding-style.html).
+
+### Submitting changes
+
+Pull requests have CI workflows to check if the driver compiles and if the code is following the code style.
+If you're sure that a checkpatch warning should not be fixed, please be prepared to elaborate. There's a quick
+way to run checkpatch yourself, without bothering with the exact command:
+
+```commandline
+make checkpatch
+```
