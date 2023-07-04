@@ -90,19 +90,19 @@ Fan 4 current:     22.00 mA
 
 The following devices are supported by this driver, and from which kernel version (if applicable):
 
-|     Device     | Supported since kernel |                        Functionality                         | Microcontroller |
-| :------------: | :--------------------: | :----------------------------------------------------------: | :-------------: |
-|    D5 Next     |          5.15          |        Various sensors, direct fan PWM control (6.0+)        |        ?        |
-|  Farbwerk 360  |          5.18          |                     Temperature sensors                      |  MCF51JU128VHS  |
-|    Farbwerk    |          5.19          |                     Temperature sensors                      |        ?        |
-|      Octo      |          5.19          |     Temperature and fan sensors, direct fan PWM control      |  MCF51JU128VLH  |
-|     Quadro     |          6.0           | Temperature, flow and fan sensors, direct fan PWM control, flow sensor pulses |  MCF51JU128VHS  |
-| High Flow Next |          6.1           |                       Various sensors                        |        ?        |
-|  Aquaero 5/6   |     6.3 (sensors), 6.4 (fan control), rest here     | Temperature sensors, fan sensors, direct fan PWM control, DC/PWM mode setting, flow sensors | MCF51JM128EVLK  |
-|   Leakshield   |     6.5 (sensors), rest here     |  Various sensors and setting parameters for higher accuracy  |        ?        |
-| Aquastream XT  |     6.4 (sensors), rest here     | Temperature sensors, voltage sensors, pump and fan speed control | ATMEGA8-16MU |
-| Aquastream Ultimate  |     6.3     | Temperature sensors, pump and fan sensors, pressure and flow | ? |
-| Poweradjust 3  |     6.3    | External temperature sensor | ? |
+|       Device        |           Supported since kernel            |                        Functionality                         | Microcontroller |
+| :-----------------: | :-----------------------------------------: | :----------------------------------------------------------: | :-------------: |
+|       D5 Next       |                    5.15                     |        Various sensors, direct fan PWM control (6.0+)        |        ?        |
+|    Farbwerk 360     |                    5.18                     |                     Temperature sensors                      |  MCF51JU128VHS  |
+|      Farbwerk       |                    5.19                     |                     Temperature sensors                      |        ?        |
+|        Octo         |                    5.19                     |     Temperature and fan sensors, direct fan PWM control      |  MCF51JU128VLH  |
+|       Quadro        |                     6.0                     | Temperature, flow and fan sensors, direct fan PWM control, flow sensor pulses |  MCF51JU128VHS  |
+|   High Flow Next    |                     6.1                     |                       Various sensors                        |        ?        |
+|     Aquaero 5/6     | 6.3 (sensors), 6.4 (fan control), rest here | Temperature sensors, fan sensors, direct fan PWM control, DC/PWM mode setting, flow sensors | MCF51JM128EVLK  |
+|     Leakshield      |          6.5 (sensors), rest here           |  Various sensors and setting parameters for higher accuracy  |        ?        |
+|    Aquastream XT    |          6.4 (sensors), rest here           | Temperature sensors, voltage sensors, pump and fan speed control |  ATMEGA8-16MU   |
+| Aquastream Ultimate |                     6.3                     | Temperature sensors, pump and fan sensors, pressure and flow |        ?        |
+|    Poweradjust 3    |                     6.3                     |                 External temperature sensor                  |        ?        |
 
 Microcontrollers are noted for general reference, as this driver only communicates through HID reports and does not interact with the device CPU & electronics directly.
 
