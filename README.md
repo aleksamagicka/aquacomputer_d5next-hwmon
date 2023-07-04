@@ -117,7 +117,13 @@ Only notable parts are listed:
 * [Reverse engineering docs](re-docs) - documents explaining how the devices communicate to help understand what the driver does
 * [Kernel docs](docs) - driver documentation for the kernel
 
-## Installation and usage
+It may happen that at times, this repo will be ahead of the kernel in terms of bug fixes or features, as evidenced in the table
+in the previous section. Upstreaming progress is tracked in [#81][#81] and the state of the driver in the kernel is tracked in the
+[hwmon-state](https://github.com/aleksamagicka/aquacomputer_d5next-hwmon/tree/hwmon-state) branch.
+
+[#81]: https://github.com/aleksamagicka/aquacomputer_d5next-hwmon/issues/81
+
+## Compiling and installation
 
 Ideally, you are on a recent kernel and your distro includes it. If that's the case, you should already have this driver
 available! Refer to the table in the overview above to check.
@@ -147,7 +153,7 @@ Then, compile it and insert it into the running kernel, replacing the existing i
 make dev
 ```
 
-You can then try running `sensors` and your devices should be listed there.
+If all went well, you can skip ahead to see how to use it.
 
 If you are sure that you're on a recent kernel and are still getting errors, please open an issue so we can track it down.
 
@@ -155,8 +161,19 @@ If you are sure that you're on a recent kernel and are still getting errors, ple
 
 These kernels do not have `hwmon_pwm_auto_channels_temp`, so compilation fails. In that case, you can modify
 the driver, following what the compiler says, or upgrade to a newer kernel (see [#28][#28] for an example).
+That functionality is not needed for basic usage.
 
 [#28]: https://github.com/aleksamagicka/aquacomputer_d5next-hwmon/issues/28
+
+## Usage
+
+If the driver is inserted, try running `sensors` and your devices should be listed there, if plugged in and supported.
+
+Some devices have controllable fans, pumps or curves; to control them, you can access their sysfs entries under
+`/sys/class/hwmon/hwmonX`, where `hwmonX` is the directory of the device that you wish to control. Every `hwmonX`
+instance has a `name` entry, so you can be sure what its referring to. For explanation of entries, look up the
+[kernel docs](https://github.com/aleksamagicka/aquacomputer_d5next-hwmon/blob/main/docs/aquacomputer_d5next.rst).
+
 
 ## Contributing
 
@@ -173,3 +190,5 @@ way to run checkpatch yourself, without bothering with the exact command:
 ```commandline
 make checkpatch
 ```
+
+All commits must be signed off.
