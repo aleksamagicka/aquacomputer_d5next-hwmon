@@ -98,7 +98,6 @@ pwm_enable values are:
 Sysfs entries
 -------------
 
-
 =============================== ==============================================================
 temp[1-40]_input                Physical/virtual temperature sensors (in millidegrees Celsius)
 temp[1-4]_offset                Temperature sensor correction offset (in millidegrees Celsius)
