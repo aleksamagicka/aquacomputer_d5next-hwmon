@@ -121,9 +121,11 @@ temp[1-8]_auto_point[1-16]_pwm  PWM value of point on curve for given fan
 Debugfs entries
 ---------------
 
-================ ==================================================
+================ =========================================================
 serial_number    Serial number of the device
 firmware_version Version of installed firmware
 power_cycles     Count of how many times the device was powered on
 hw_version       Hardware version/revision of device (Aquaero only)
-================ ==================================================
+current_uptime   Current power on device uptime (in seconds, Aquaero only)
+total_uptime     Total device uptime (in seconds, Aquaero only)
+================ =========================================================
