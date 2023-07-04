@@ -29,6 +29,7 @@ The Aquaero devices expose eight physical, eight virtual and four calculated
 virtual temperature sensors, as well as two flow sensors. The fans expose their
 speed (in RPM), power, voltage and current. The four fans can also be
 controlled directly, as well as configured as DC or PWM using pwm[1-4]_mode.
+Temperature offsets can also be controlled.
 
 Additionally, Aquaero devices also expose twenty temperature sensors and twelve flow
 sensors from devices connected via Aquabus. The assigned sensor number is
@@ -63,7 +64,7 @@ filled with coolant. Pump RPM and flow can be set to enhance on-device calculati
 
 The Aquastream XT pump exposes temperature readings for the coolant, external sensor
 and fan IC. It also exposes pump and fan speeds (in RPM), voltages, as well as pump
-current.
+current. Pump and fan speed can be controlled using PWM.
 
 The Aquastream Ultimate pump exposes coolant temp and an external temp sensor, along
 with speed, power, voltage and current of both the pump and optionally connected fan.
@@ -72,7 +73,7 @@ It also exposes pressure and flow speed readings.
 The Poweradjust 3 controller exposes a single external temperature sensor.
 
 Configuring listed devices through this driver is not implemented completely, as
-it often includes addressable RGB LEDs, for which there is no standard sysfs interface.
+some features include addressable RGB LEDs, for which there is no standard sysfs interface.
 Thus, some tasks are better suited for userspace tools.
 
 Depending on the device, not all sysfs and debugfs entries will be available.
