@@ -2219,7 +2219,7 @@ SENSOR_TEMPLATE(curve_power_fallback, "curve%d_power_fallback",
 		0644, show_curve_power_fallback, store_curve_power_fallback, 0);
 SENSOR_TEMPLATE(curve_start_boost, "curve%d_start_boost",
 		0644, show_curve_start_boost, store_curve_start_boost, 0);
-SENSOR_TEMPLATE(curve_power_hold_min, "curve%d_power_min_hold",
+SENSOR_TEMPLATE(curve_power_hold_min, "curve%d_power_hold_min",
 		0644, show_curve_power_hold_min, store_curve_power_hold_min, 0);
 
 static umode_t aqc_params_is_visible(struct kobject *kobj, struct attribute *attr, int index)
