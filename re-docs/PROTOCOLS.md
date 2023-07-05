@@ -7,7 +7,7 @@ Aquacomputer devices (usually) share the same HID report philosophy:
 * A control/configuration report that can be requested and sent back to the device, controlling its settings and mode of operation. Contains a CRC-16/USB checksum in the last two bytes
 * A save report, which is always constant and is sent after a configuration report (the devices seem to work fine without it, but the official software always sends it)
 
-These devices also share some substructures in their reports. All listed values are two bytes long and in big endian, unless noted otherwise.
+These devices also share some substructures in their reports. All listed values are two bytes long and in big endian, unless noted otherwise. If something is unclear, refer to the code.
 
 ### Legacy devices?
 
@@ -38,7 +38,7 @@ beginning and the (existing) checksum at the end.
 Fan speed control subgroups can be found in the control report, and it's currently known that they look like this:
 
 | What             | Where (relative offset) |
-|------------------|-------------------------|
+| ---------------- | ----------------------- |
 | Speed curve type | 0x00                    |
 | Speed (0-100%)   | 0x01                    |
 
@@ -52,6 +52,8 @@ The `Speed curve type` above understands these values (list may be incomplete):
 | [3-10] | Follow behavior of fan [1-8], depending of its configured and device supports it |
 
 ## D5 Next pump
+
+`0x0c70:0xf00e`
 
 The D5 Next pump can, aside from itself, control and monitor an optionally connected fan.
 
@@ -68,7 +70,7 @@ Its ID is `0x01` and its length is `0x9e`.
 Here is what it's currently known to contain:
 
 | What                               | Where/starts at (offset) |
-|------------------------------------|--------------------------|
+| ---------------------------------- | ------------------------ |
 | Serial number (first part)         | 0x03                     |
 | Serial number (second part)        | 0x05                     |
 | Firmware version                   | 0xD                      |
@@ -99,12 +101,22 @@ Its ID is `0x03` and its length is `0x329`.
 
 Here is what it's currently known to contain:
 
-| What                               | Where/starts at (offset) |
-|------------------------------------|--------------------------|
-| Pump speed control subgroup        | 0x96                     |
-| Fan speed control subgroup         | 0x41                     |
+| What                                                | Where/starts at (offset) |
+| --------------------------------------------------- | ------------------------ |
+| Pump speed control subgroup                         | 0x96                     |
+| Fan speed control subgroup                          | 0x41                     |
+| Fan curve "hold min power" and "start boost" - pump | Unused                   |
+| Fan curve "hold min power" and "start boost" - fan  | 0x2F                     |
+| Fan curve min power subgroup - pump                 | 0x39                     |
+| Fan curve min power subgroup - fan                  | 0x30                     |
+| Fan curve max power subgroup - pump                 | 0x3B                     |
+| Fan curve max power subgroup - fan                  | 0x32                     |
+| Fan curve fallback power subgroup - pump            | 0x3D                     |
+| Fan curve fallback power subgroup - fan             | 0x34                     |
 
 ## Farbwerk 360 RGB controller
+
+`0x0c70:0f010`
 
 The Farbwerk 360 exposes four temperature sensors through its sensor report.
 
@@ -121,7 +133,7 @@ Its ID is `0x01` and its length is `0xb6`.
 Here is what it's currently known to contain:
 
 | What                   | Where/starts at (offset) |
-|------------------------|--------------------------|
+| ---------------------- | ------------------------ |
 | Temp sensor 1          | 0x32                     |
 | Temp sensor 2          | 0x34                     |
 | Temp sensor 3          | 0x36                     |
@@ -145,6 +157,8 @@ Here is what it's currently known to contain:
 
 ## Octo
 
+`0x0c70:0xf011`
+
 The Octo exposes four physical and sixteen virtual temperature sensors and eight groups of fan sensor data (outlined in the preamble) through its sensor report.
 
 ### Sensor report
@@ -160,7 +174,7 @@ Its ID is `0x01` and its length is `0x147`.
 Here is what it's currently known to contain:
 
 | What                               | Where/starts at (offset) |
-|------------------------------------|--------------------------|
+| ---------------------------------- | ------------------------ |
 | Serial number (first part)         | 0x03                     |
 | Serial number (second part)        | 0x05                     |
 | Firmware version                   | 0xD                      |
@@ -206,20 +220,25 @@ Its ID is `0x03` and its length is `0x65F`.
 
 Here is what it's currently known to contain:
 
-| What                    | Where/starts at (offset) |
-|-------------------------|--------------------------|
-| Fan 1 ctrl substructure | 0x5A                     |
-| Fan 2 ctrl substructure | 0xAF                     |
-| Fan 3 ctrl substructure | 0x104                    |
-| Fan 4 ctrl substructure | 0x159                    |
-| Fan 5 ctrl substructure | 0x1AE                    |
-| Fan 6 ctrl substructure | 0x203                    |
-| Fan 7 ctrl substructure | 0x258                    |
-| Fan 8 ctrl substructure | 0x2AD                    |
+| What                                         | Where/starts at (offset)                         |
+| -------------------------------------------- | ------------------------------------------------ |
+| Fan 1 ctrl substructure                      | 0x5A                                             |
+| Fan 2 ctrl substructure                      | 0xAF                                             |
+| Fan 3 ctrl substructure                      | 0x104                                            |
+| Fan 4 ctrl substructure                      | 0x159                                            |
+| Fan 5 ctrl substructure                      | 0x1AE                                            |
+| Fan 6 ctrl substructure                      | 0x203                                            |
+| Fan 7 ctrl substructure                      | 0x258                                            |
+| Fan 8 ctrl substructure                      | 0x2AD                                            |
+| Temp offset ctrl substructure                | 0xA                                              |
+| Fan curve "hold min power" and "start boost" | {0x12, 0x1B, 0x24, 0x2D, 0x36, 0x3F, 0x48, 0x51} |
+| Fan curve min power subgroup                 | {0x13, 0x1C, 0x25, 0x2E, 0x37, 0x40, 0x49, 0x52} |
+| Fan curve max power subgroup                 | {0x15, 0x1E, 0x27, 0x30, 0x39, 0x42, 0x4B, 0x54} |
+| Fan curve fallback power subgroup            | {0x17, 0x20, 0x29, 0x32, 0x3B, 0x44, 0x4D, 0x56} |
 
 ## Quadro
 
-The Quadro exposes four physical and sixteen virtual temperature sensors, and four groups of fan sensor data (outlined in the preamble) through its sensor report.
+The Quadro exposes four physical and sixteen virtual temperature sensors, and four groups of fan sensor data (outlined in the preamble) through its sensor report. It also exposes a flow sensor.
 
 ### Sensor report
 
@@ -234,7 +253,7 @@ Its ID is `0x01` and its length is `0xDC`.
 Here is what it's currently known to contain:
 
 | What                               | Where/starts at (offset) |
-|------------------------------------|--------------------------|
+| ---------------------------------- | ------------------------ |
 | Serial number (first part)         | 0x03                     |
 | Serial number (second part)        | 0x05                     |
 | Firmware version                   | 0xD                      |
@@ -277,9 +296,184 @@ Its ID is `0x03` and its length is `0x3C1`.
 
 Here is what it's currently known to contain:
 
+| What                                         | Where/starts at (offset) |
+| -------------------------------------------- | ------------------------ |
+| Fan 1 ctrl substructure                      | 0x36                     |
+| Fan 2 ctrl substructure                      | 0x8B                     |
+| Fan 3 ctrl substructure                      | 0xE0                     |
+| Fan 4 ctrl substructure                      | 0x135                    |
+| Temp offset ctrl substructure                | 0xA                      |
+| Flow sensors pulses                          | 0x6                      |
+| Fan curve "hold min power" and "start boost" | {0x12, 0x1B, 0x24, 0x2D} |
+| Fan curve min power subgroup                 | {0x13, 0x1C, 0x25, 0x2E} |
+| Fan curve max power subgroup                 | {0x15, 0x1E, 0x27, 0x30} |
+| Fan curve fallback power subgroup            | {0x17, 0x20, 0x29, 0x32} |
+
+## Highflow Next
+
+`0x0c70:0xf012`
+
+The High Flow Next exposes +5V voltages, water quality, conductivity and flow readings.
+A temperature sensor can be connected to it, in which case it provides its reading
+and an estimation of the dissipated/absorbed power in the liquid cooling loop.
+
+### Sensor report
+
+Here is what it's currently known to contain:
+
+| What                 | Where/starts at (offset) |
+| -------------------- | ------------------------ |
+| Coolant temp         | 85                       |
+| External sensor      | 87                       |
+| Flow sensor          | 81                       |
+| Water quality sensor | 89                       |
+| Dissipated power     | 91                       |
+| Conductivity         | 95                       |
+| +5V voltage          | 97                       |
+| +5V USB voltage      | 99                       |
+
+## Leakshield
+
+`0x0c70:0xf014`
+
+The Leakshield exposes two temperature sensors and coolant pressure (current, min, max and
+target readings). It also exposes the estimated reservoir volume and how much of it is
+filled with coolant. Pump RPM and flow can be set to enhance on-device calculations.
+
+### Sensor report
+
+Here is what it's currently known to contain:
+
+| What                     | Where/starts at (offset) |
+| ------------------------ | ------------------------ |
+| Pressure                 | 285                      |
+| Temp sensor 1            | 265                      |
+| Temp sensor 2            | 287                      |
+| Pressure (min)           | 291                      |
+| Pressure (target)        | 293                      |
+| Pressure (max)           | 295                      |
+| User-provided pump speed | 101                      |
+| User-provided flow       | 111                      |
+| Reservoir volume         | 313                      |
+| Reservoir filled         | 311                      |
+
+### Control report
+
+Leakshield is unusual as it receives control data through pure USB, not HID. Consult the code for offsets regarding this one.
+
+## Aquastream XT
+
+`0x0c70:0xf0b6`
+
+The Aquastream XT pump exposes temperature readings for the coolant, external sensor
+and fan IC. It also exposes pump and fan speeds (in RPM), voltages, as well as pump
+current. Pump and fan speed can be controlled using PWM.
+
+### Sensor report
+
+Size of this report is `0x42`.
+
+Here is what it's currently known to contain:
+
+| What               | Where/starts at (offset) |
+| ------------------ | ------------------------ |
+| Serial number      | 0x3a                     |
+| Firmware version   | 0x32                     |
+| Fan IC temp        | 0xD                      |
+| External sensor    | 0xF                      |
+| Coolant temp       | 0x11                     |
+| Fan voltage        | 0x7                      |
+| Fan status         | 0x1d                     |
+| Pump voltage       | 0x9                      |
+| Pump current       | 0xb                      |
+| Fan 1 substructure | 0x13                     |
+| Fan 2 substructure | 0x1B                     |
+
+
+### Control report
+
+Size of this report is `0x34`.
+
 | What                    | Where/starts at (offset) |
-|-------------------------|--------------------------|
-| Fan 1 ctrl substructure | 0x36                     |
-| Fan 2 ctrl substructure | 0x8B                     |
-| Fan 3 ctrl substructure | 0xE0                     |
-| Fan 4 ctrl substructure | 0x135                    |
+| ----------------------- | ------------------------ |
+| Pump mode ctrl offset   | 0x3                      |
+| Fan mode ctrl offset    | 0x1a                     |
+| Fan 1 ctrl substructure | 0x8                      |
+| Fan 2 ctrl substructure | 0x1B                     |
+
+## Aquastream Ultimate
+
+`0x0c70:0xf00b`
+
+The Aquastream Ultimate pump exposes coolant temp and an external temp sensor, along
+with speed, power, voltage and current of both the pump and optionally connected fan.
+It also exposes pressure and flow speed readings.
+
+### Sensor report
+
+Here is what it's currently known to contain:
+
+| What             | Where/starts at (offset) |
+| ---------------- | ------------------------ |
+| Pump speed       | 0x51                     |
+| Pump voltage     | 0x3D                     |
+| Pump current     | 0x53                     |
+| Pump power       | 0x55                     |
+| Fan substructure | 0x41                     |
+| Pressure         | 0x57                     |
+
+Refer to the code for the pump and fan structures.
+
+## Farbwerk
+
+`0x0c70:0xf00a`
+
+The Farbwerk exposes four temperature sensors.
+
+### Sensor report
+
+Here is what it's currently known to contain:
+
+| What          | Where/starts at (offset) |
+| ------------- | ------------------------ |
+| Temp sensor 1 | 0x2F                     |
+| Temp sensor 2 | 0x31                     |
+| Temp sensor 3 | 0x33                     |
+| Temp sensor 4 | 0x35                     |
+
+## Poweradjust 3
+
+`0x0c70:0xf0bd`
+
+The Farbwerk exposes a temperature sensor.
+
+### Sensor report
+
+Here is what it's currently known to contain:
+
+| What            | Where/starts at (offset) |
+| --------------- | ------------------------ |
+| External sensor | 0x3                      |
+
+
+## Aquaero 5/6
+
+`0x0c70:0xf001`
+
+The Aquaero devices expose eight physical, eight virtual and four calculated
+virtual temperature sensors, as well as two flow sensors. The fans expose their
+speed (in RPM), power, voltage and current. The four fans can also be
+controlled directly, as well as configured as DC or PWM using pwm[1-4]_mode.
+Temperature offsets can also be controlled.
+
+Additionally, Aquaero devices also expose twenty temperature sensors and twelve flow
+sensors from devices connected via Aquabus. The assigned sensor number is
+predetermined by the Aquabus address of the device.
+
+## Sensor report
+
+Complex and still in R&D mode. Refer to the code.
+
+## Control report
+
+Complex and still in R&D mode. Refer to the code.
