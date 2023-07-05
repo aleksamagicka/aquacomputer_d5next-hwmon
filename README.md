@@ -161,7 +161,8 @@ If you are sure that you're on a recent kernel and are still getting errors, ple
 
 These kernels do not have `hwmon_pwm_auto_channels_temp`, so compilation fails. In that case, you can modify
 the driver, following what the compiler says, or upgrade to a newer kernel (see [#28][#28] for an example).
-That functionality is not needed for basic usage.
+That functionality is not needed for basic usage. These kernels are old by now and no extra support will be
+provided.
 
 [#28]: https://github.com/aleksamagicka/aquacomputer_d5next-hwmon/issues/28
 
@@ -174,12 +175,33 @@ Some devices have controllable fans, pumps or curves; to control them, you can a
 instance has a `name` entry, so you can be sure what its referring to. For explanation of entries, look up the
 [kernel docs](https://github.com/aleksamagicka/aquacomputer_d5next-hwmon/blob/main/docs/aquacomputer_d5next.rst).
 
+### lm-sensors device naming convention
+
+The driver does not control the full name that lm-sensors generates. For example, if you have an Octo, lm-sensors
+may name it `octo-hid-3-11`. Only the `octo` part comes from the driver as it detected the device as such. This may
+present a problem for users who try to scrape the data from the output of `sensors`, which is a tedious way to go about
+that. It's much easier (and more reliable) to read the data from hwmon directly. Related issues: [#40][#40], [#66][#66].
+
+The numbers after the device name may depend on the order in which the driver (or the devices) are loaded by the kernel.
+The driver can not control when it gets loaded, only that it's loaded after the HID subsystem.
+
+[#40]: https://github.com/aleksamagicka/aquacomputer_d5next-hwmon/issues/40#issuecomment-1250233049
+[#66]: https://github.com/aleksamagicka/aquacomputer_d5next-hwmon/issues/66
+
+### Sensor flapping?
+
+If a fan header is set to a certain speed, but is not physically connected, its values may flap from 0 to around 12V.
+This happens because the device repeatedly tries to establish PWM signal and is not a bug in the driver. See [#7][#7]
+for a case in point.
+
+[#7]: https://github.com/aleksamagicka/aquacomputer_d5next-hwmon/issues/7
 
 ## Contributing
 
 Contributions in form of reporting issues, sending bug fixes and new functionality are very welcome! Without
 contributors, this driver would never be as feature rich as it is today. Please use the issue tracker and PR
-functionality for any feedback and patches. Code contributions must follow the [Linux code style rules](https://www.kernel.org/doc/html/latest/process/coding-style.html).
+functionality for any feedback and patches. Code contributions must follow the
+[Linux code style rules](https://www.kernel.org/doc/html/latest/process/coding-style.html).
 
 ### Submitting changes
 
