@@ -99,7 +99,7 @@ pwm_enable values are:
 Sysfs entries
 -------------
 
-=============================== ==============================================================
+=============================== ====================================================================
 temp[1-40]_input                Physical/virtual temperature sensors (in millidegrees Celsius)
 temp[1-4]_offset                Temperature sensor correction offset (in millidegrees Celsius)
 fan[1-20]_input                 Pump/fan speed (in RPM) / Flow speed (in dL/h)
@@ -116,7 +116,12 @@ pwm[1-8]_auto_channels_temp     Fan control temperature sensors select
 pwm[1-4]_mode                   Fan mode (DC or PWM)
 temp[1-8]_auto_point[1-16]_temp Temperature value of point on curve for given fan
 temp[1-8]_auto_point[1-16]_pwm  PWM value of point on curve for given fan
-=============================== ==============================================================
+curve[1-8]_power_min            Minimum curve power (curve scales to this)
+curve[1-8]_power_max            Maximum curve power (curve scales to this)
+curve[1-8]_power_fallback       Fallback power (if sensor/data is unavailable)
+curve[1-8]_start_boost          Shortly run fan at 100% until firmware loads curve (0 - no, 1 - yes)
+curve[1-8]_power_hold_min       Hold minimum power (0 - no, 1 - yes)
+=============================== ====================================================================
 
 Debugfs entries
 ---------------
