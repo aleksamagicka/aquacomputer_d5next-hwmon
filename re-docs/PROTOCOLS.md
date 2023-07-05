@@ -1,6 +1,6 @@
 # Aquacomputer protocols
 
-Aquacomputer devices share the same HID report philosophy:
+Aquacomputer devices (usually) share the same HID report philosophy:
 
 * A sensor report with ID `0x01` is sent every second to the host, detailing current sensor readings
 * A HID feature report with ID `0x03` contains the device settings which can be requested, modified and written back to the device
@@ -9,9 +9,15 @@ Aquacomputer devices share the same HID report philosophy:
 
 These devices also share some substructures in their reports. All listed values are two bytes long and in big endian, unless noted otherwise.
 
+### Legacy devices?
+
+Aquastream XT and Poweradjust 3 fall in this category. They are not _actually legacy_ (as in - obsolete and not being sold), they don't send the sensor report themselves and therefore
+don't fully conform to the list of points above.
+
 ### Sensor report details & substructures
 
-There's one important substructure that keeps recurring in sensor reports, and it concerns fan info. The definition of fan here also includes pumps, not only 3/4 pin fans in the literal sense. Here's what it's known to contain:
+There's one important substructure that keeps recurring in sensor reports, and it concerns fan info. The definition of fan here also includes pumps, not only DC/PWM fans in the literal
+sense. Here's what it's known to contain:
 
 | What               | Where (relative offset) |
 | ------------------ | ----------------------- |
@@ -21,11 +27,13 @@ There's one important substructure that keeps recurring in sensor reports, and i
 | Fan power          | 0x06                    |
 | Fan speed (RPM)    | 0x08                    |
 
-Temperature sensors, if not connected, will report `0x7FFF` as their value.
+Temperature sensors, if not connected, will report `0x7FFF` as their value and are two bytes long.
 
 ### Control report details & substructures
 
-The control report can be requested from and sent to the device using `GET_FEATURE_REPORT` and `SET_FEATURE_REPORT`, respectively. What it contains depends on the device, but it always carries a two byte CRC-16/USB checksum in the last two places. The checksum is calculated from the data between the starting `0x03` report ID at the very beginning and the (existing) checksum at the end.
+The control report can be requested from and sent to the device using `GET_FEATURE_REPORT` and `SET_FEATURE_REPORT`, respectively. What it contains depends on the device, but it always
+carries a two byte CRC-16/USB checksum in the last two places (unless it's an Aquaero). The checksum is calculated from the data between the starting `0x03` report ID at the very
+beginning and the (existing) checksum at the end.
 
 Fan speed control subgroups can be found in the control report, and it's currently known that they look like this:
 
