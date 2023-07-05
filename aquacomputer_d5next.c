@@ -102,8 +102,8 @@ static u8 aquastreamxt_secondary_ctrl_report[] = {
 #define AQC_BE16	1
 #define AQC_LE16	2
 
-#define FAN_CURVE_HOLD_MIN_POWER_POS	1
-#define FAN_CURVE_START_BOOST_POS	2
+#define FAN_CURVE_HOLD_MIN_POWER_BIT_POS	1
+#define FAN_CURVE_START_BOOST_BIT_POS		2
 
 /* Report IDs for legacy devices */
 #define AQUASTREAMXT_STATUS_REPORT_ID	0x04
