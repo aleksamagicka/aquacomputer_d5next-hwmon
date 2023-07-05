@@ -90,21 +90,22 @@ Fan 4 current:     22.00 mA
 
 The following devices are supported by this driver, and from which kernel version (if applicable):
 
-|     Device     | Supported since kernel |                        Functionality                         | Microcontroller |
-| :------------: | :--------------------: | :----------------------------------------------------------: | :-------------: |
-|    D5 Next     |          5.15          |        Various sensors, direct fan PWM control (6.0+)        |        ?        |
-|  Farbwerk 360  |          5.18          |                     Temperature sensors                      |  MCF51JU128VHS  |
-|    Farbwerk    |          5.19          |                     Temperature sensors                      |        ?        |
-|      Octo      |          5.19          |     Temperature and fan sensors, direct fan PWM control      |  MCF51JU128VLH  |
-|     Quadro     |          6.0           | Temperature, flow and fan sensors, direct fan PWM control, flow sensor pulses |  MCF51JU128VHS  |
-| High Flow Next |          6.1           |                       Various sensors                        |        ?        |
-|  Aquaero 5/6   |     6.3 (sensors), 6.4 (fan control), rest here     | Temperature sensors, fan sensors, direct fan PWM control, DC/PWM mode setting, flow sensors | MCF51JM128EVLK  |
-|   Leakshield   |     6.5 (sensors), rest here     |  Various sensors and setting parameters for higher accuracy  |        ?        |
-| Aquastream XT  |     6.4 (sensors), rest here     | Temperature sensors, voltage sensors, pump and fan speed control | ATMEGA8-16MU |
-| Aquastream Ultimate  |     6.3     | Temperature sensors, pump and fan sensors, pressure and flow | ? |
-| Poweradjust 3  |     6.3    | External temperature sensor | ? |
+|       Device        |           Supported since kernel            |                        Functionality                         | Microcontroller |
+| :-----------------: | :-----------------------------------------: | :----------------------------------------------------------: | :-------------: |
+|       D5 Next       |                    5.15                     |        Various sensors, direct fan PWM control (6.0+)        |        ?        |
+|    Farbwerk 360     |                    5.18                     |                     Temperature sensors                      |  MCF51JU128VHS  |
+|      Farbwerk       |                    5.19                     |                     Temperature sensors                      |        ?        |
+|        Octo         |                    5.19                     |     Temperature and fan sensors, direct fan PWM control      |  MCF51JU128VLH  |
+|       Quadro        |                     6.0                     | Temperature, flow and fan sensors, direct fan PWM control, flow sensor pulses |  MCF51JU128VHS  |
+|   High Flow Next    |                     6.1                     |                       Various sensors                        |        ?        |
+|     Aquaero 5/6     | 6.3 (sensors), 6.4 (fan control), rest here | Temperature sensors, fan sensors, direct fan PWM control, DC/PWM mode setting, flow sensors | MCF51JM128EVLK  |
+|     Leakshield      |          6.5 (sensors), rest here           |  Various sensors and setting parameters for higher accuracy  |        ?        |
+|    Aquastream XT    |          6.4 (sensors), rest here           | Temperature sensors, voltage sensors, pump and fan speed control |  ATMEGA8-16MU   |
+| Aquastream Ultimate |                     6.3                     | Temperature sensors, pump and fan sensors, pressure and flow |        ?        |
+|    Poweradjust 3    |                     6.3                     |                 External temperature sensor                  |        ?        |
 
-Microcontrollers are noted for general reference, as this driver only communicates through HID reports and does not interact with the device CPU & electronics directly.
+Microcontrollers are noted for general reference, as this driver only communicates through HID reports and does not interact
+with the device CPU & electronics directly.
 
 Being a standard `hwmon` driver, it provides readings via `sysfs`, which are easily accessible through `lm-sensors` as usual.
 
@@ -113,18 +114,32 @@ Being a standard `hwmon` driver, it provides readings via `sysfs`, which are eas
 Only notable parts are listed:
 
 * _aquacomputer_d5next.c_ - the driver itself
-* [Reverse engineering docs](re-docs) - WIP, documents explaining how the devices communicate to help understand what
-  the driver does
-
+* [Reverse engineering docs](re-docs) - documents explaining how the devices communicate to help understand what the driver does
 * [Kernel docs](docs) - driver documentation for the kernel
 
-## Installation and usage
+It may happen that at times, this repo will be ahead of the kernel in terms of bug fixes or features, as evidenced in the table
+in the previous section. Upstreaming progress is tracked in [#81][#81] and the state of the driver in the kernel is tracked in the
+[hwmon-state](https://github.com/aleksamagicka/aquacomputer_d5next-hwmon/tree/hwmon-state) branch.
+
+[#81]: https://github.com/aleksamagicka/aquacomputer_d5next-hwmon/issues/81
+
+## Compiling and installation
 
 Ideally, you are on a recent kernel and your distro includes it. If that's the case, you should already have this driver
 available! Refer to the table in the overview above to check.
 
-If you're not, or your kernel does not have the driver support for your particular device, you can clone this repository
-and compile the driver yourself.
+If you're not, or your kernel does not have the driver support for your particular device, you can compile it yourself.
+
+### Kernel 5.18 and later
+
+The driver uses some features only available in kernel 5.18 and later. You can check your kernel version by running:
+
+```commandline
+uname -r
+```
+
+If you're on an older version, you'll have to do some additional steps, outlined in the next section. Whether any of
+the supported or unsupported devices are currently plugged in do not have an effect on the outcome of compilation.
 
 First, clone the repository by running:
 
@@ -138,12 +153,64 @@ Then, compile it and insert it into the running kernel, replacing the existing i
 make dev
 ```
 
-You can then try running `sensors` and your devices should be listed there. If the compilation fails, you probably have
-an older, possibly LTS kernel that does not have the functionality that this driver uses. In that case, you can modify the driver, following what the compiler says, or upgrade to a newer kernel (see [#28][#28] for an example).
+If all went well, you can skip ahead to see how to use it.
 
+If you are sure that you're on a recent kernel and are still getting errors, please open an issue so we can track it down.
+
+### Kernel 5.17 and earlier
+
+These kernels do not have `hwmon_pwm_auto_channels_temp`, so compilation fails. In that case, you can modify
+the driver, following what the compiler says, or upgrade to a newer kernel (see [#28][#28] for an example).
+That functionality is not needed for basic usage. These kernels are old by now and no extra support will be
+provided.
 
 [#28]: https://github.com/aleksamagicka/aquacomputer_d5next-hwmon/issues/28
 
+## Usage
+
+If the driver is inserted, try running `sensors` and your devices should be listed there, if plugged in and supported.
+
+Some devices have controllable fans, pumps or curves; to control them, you can access their sysfs entries under
+`/sys/class/hwmon/hwmonX`, where `hwmonX` is the directory of the device that you wish to control. Every `hwmonX`
+instance has a `name` entry, so you can be sure what its referring to. For explanation of entries, look up the
+[kernel docs](https://github.com/aleksamagicka/aquacomputer_d5next-hwmon/blob/main/docs/aquacomputer_d5next.rst).
+
+### lm-sensors device naming convention
+
+The driver does not control the full name that lm-sensors generates. For example, if you have an Octo, lm-sensors
+may name it `octo-hid-3-11`. Only the `octo` part comes from the driver as it detected the device as such. This may
+present a problem for users who try to scrape the data from the output of `sensors`, which is a tedious way to go about
+that. It's much easier (and more reliable) to read the data from hwmon directly. Related issues: [#40][#40], [#66][#66].
+
+The numbers after the device name may depend on the order in which the driver (or the devices) are loaded by the kernel.
+The driver can not control when it gets loaded, only that it's loaded after the HID subsystem.
+
+[#40]: https://github.com/aleksamagicka/aquacomputer_d5next-hwmon/issues/40#issuecomment-1250233049
+[#66]: https://github.com/aleksamagicka/aquacomputer_d5next-hwmon/issues/66
+
+### Sensor flapping?
+
+If a fan header is set to a certain speed, but is not physically connected, its values may flap from 0 to around 12V.
+This happens because the device repeatedly tries to establish PWM signal and is not a bug in the driver. See [#7][#7]
+for a case in point.
+
+[#7]: https://github.com/aleksamagicka/aquacomputer_d5next-hwmon/issues/7
+
 ## Contributing
 
-Contributions in form of reporting issues and sending bug fixes and new functionality are very welcome! Without contributors, this driver would never be as feature rich as it is today. Please use the issue tracker and PR functionality for any feedback and patches. Code contributions must follow the [Linux code style rules](https://www.kernel.org/doc/html/v4.10/process/coding-style.html).
+Contributions in form of reporting issues, sending bug fixes and new functionality are very welcome! Without
+contributors, this driver would never be as feature rich as it is today. Please use the issue tracker and PR
+functionality for any feedback and patches. Code contributions must follow the
+[Linux code style rules](https://www.kernel.org/doc/html/latest/process/coding-style.html).
+
+### Submitting changes
+
+Pull requests have CI workflows to check if the driver compiles and if the code is following the code style.
+If you're sure that a checkpatch warning should not be fixed, please be prepared to elaborate. There's a quick
+way to run checkpatch yourself, without bothering with the exact command:
+
+```commandline
+make checkpatch
+```
+
+All commits must be signed off.
