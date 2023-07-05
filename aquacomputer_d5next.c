@@ -252,17 +252,14 @@ static u8 octo_ctrl_fan_curve_hold_start_offsets[] = {
 	0x12, 0x1B, 0x24, 0x2D, 0x36, 0x3F, 0x48, 0x51
 };
 
-/* Fan curve min power */
 static u8 octo_ctrl_fan_curve_min_power_offsets[] = {
 	0x13, 0x1C, 0x25, 0x2E, 0x37, 0x40, 0x49, 0x52
 };
 
-/* Fan curve max power */
 static u8 octo_ctrl_fan_curve_max_power_offsets[] = {
 	0x15, 0x1E, 0x27, 0x30, 0x39, 0x42, 0x4B, 0x54
 };
 
-/* Fan curve fallback power */
 static u8 octo_ctrl_fan_curve_fallback_power_offsets[] = {
 	0x17, 0x20, 0x29, 0x32, 0x3B, 0x44, 0x4D, 0x56
 };
@@ -287,11 +284,8 @@ static u16 quadro_sensor_fan_offsets[] = { 0x70, 0x7D, 0x8A, 0x97 };
 static u16 quadro_ctrl_fan_offsets[] = { 0x36, 0x8b, 0xe0, 0x135 };
 /* Fan curve "hold min power" and "start boost" offsets */
 static u8 quadro_ctrl_fan_curve_hold_start_offsets[] = { 0x12, 0x1B, 0x24, 0x2D };
-/* Fan curve min power */
 static u8 quadro_ctrl_fan_curve_min_power_offsets[] = { 0x13, 0x1C, 0x25, 0x2E };
-/* Fan curve max power */
 static u8 quadro_ctrl_fan_curve_max_power_offsets[] = { 0x15, 0x1E, 0x27, 0x30 };
-/* Fan curve fallback power */
 static u8 quadro_ctrl_fan_curve_fallback_power_offsets[] = { 0x17, 0x20, 0x29, 0x32 };
 
 /* Specs of High Flow Next flow sensor */
@@ -2142,7 +2136,7 @@ static ssize_t show_curve_start_boost(struct device *dev, struct device_attribut
 	if (ret < 0)
 		return -ENODATA;
 
-	return sprintf(buf, "%d\n", aqc_get_bit_at_pos(val, FAN_CURVE_START_BOOST_POS));
+	return sprintf(buf, "%d\n", aqc_get_bit_at_pos(val, FAN_CURVE_START_BOOST_BIT_POS));
 }
 
 static ssize_t
@@ -2164,7 +2158,7 @@ store_curve_start_boost(struct device *dev, struct device_attribute *attr, const
 	if (ret < 0)
 		return ret;
 
-	new_val = aqc_set_bit_at_pos(new_val, FAN_CURVE_START_BOOST_POS, val);
+	new_val = aqc_set_bit_at_pos(new_val, FAN_CURVE_START_BOOST_BIT_POS, val);
 
 	ret = aqc_set_ctrl_val(priv, priv->fan_curve_hold_start_offsets[index], new_val, AQC_8);
 	if (ret < 0)
@@ -2186,7 +2180,7 @@ static ssize_t show_curve_power_hold_min(struct device *dev, struct device_attri
 	if (ret < 0)
 		return -ENODATA;
 
-	return sprintf(buf, "%d\n", aqc_get_bit_at_pos(val, FAN_CURVE_HOLD_MIN_POWER_POS));
+	return sprintf(buf, "%d\n", aqc_get_bit_at_pos(val, FAN_CURVE_HOLD_MIN_POWER_BIT_POS));
 }
 
 static ssize_t
@@ -2208,7 +2202,7 @@ store_curve_power_hold_min(struct device *dev, struct device_attribute *attr, co
 	if (ret < 0)
 		return ret;
 
-	new_val = aqc_set_bit_at_pos(new_val, FAN_CURVE_HOLD_MIN_POWER_POS, val);
+	new_val = aqc_set_bit_at_pos(new_val, FAN_CURVE_HOLD_MIN_POWER_BIT_POS, val);
 
 	ret = aqc_set_ctrl_val(priv, priv->fan_curve_hold_start_offsets[index], new_val, AQC_8);
 	if (ret < 0)
