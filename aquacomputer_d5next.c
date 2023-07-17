@@ -14,6 +14,7 @@
 
 #include <linux/crc16.h>
 #include <linux/debugfs.h>
+#include <linux/delay.h>
 #include <linux/hid.h>
 #include <linux/hwmon.h>
 #include <linux/hwmon-sysfs.h>
@@ -833,6 +834,22 @@ static int aqc_send_ctrl_data(struct aqc_data *priv)
 	    hid_hw_raw_request(priv->hdev, priv->secondary_ctrl_report_id,
 			       priv->secondary_ctrl_report, priv->secondary_ctrl_report_size,
 			       HID_FEATURE_REPORT, HID_REQ_SET_REPORT);
+	if (ret < 0)
+		return ret;
+
+	/*
+	 * Wait 200ms before returning to make sure that the device actually processed both reports
+	 * and saved ctrl data to memory. Otherwise, an aqc_get_ctrl_data() call made shortly after
+	 * may fail with -EPIPE because the device is still busy and can't provide data. This can
+	 * happen when userspace tools, such as fancontrol or liquidctl, write to sysfs entries in
+	 * quick succession (for example, setting pwmX_enable and pwmX attributes at once).
+	 *
+	 * 200ms was found to be the sweet spot between fixing the issue and not significantly
+	 * prolonging the call. Quadro, Octo and Aquaero are currently known to be affected.
+	 */
+	if (priv->kind == quadro || priv->kind == octo || priv->kind == aquaero)
+		msleep(200);
+
 	return ret;
 }
 
