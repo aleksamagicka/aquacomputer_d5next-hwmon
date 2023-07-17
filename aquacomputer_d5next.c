@@ -845,10 +845,19 @@ static int aqc_send_ctrl_data(struct aqc_data *priv)
 	 * quick succession (for example, setting pwmX_enable and pwmX attributes at once).
 	 *
 	 * 200ms was found to be the sweet spot between fixing the issue and not significantly
-	 * prolonging the call. Quadro, Octo and Aquaero are currently known to be affected.
+	 * prolonging the call. Quadro, Octo, D5 Next and Aquaero are currently known to be
+	 * affected.
 	 */
-	if (priv->kind == quadro || priv->kind == octo || priv->kind == aquaero)
+	switch (priv->kind) {
+	case quadro:
+	case octo:
+	case d5next:
+	case aquaero:
 		msleep(200);
+		break;
+	default:
+		break;
+	}
 
 	return ret;
 }
