@@ -568,7 +568,7 @@ static const char *const label_leakshield_temp_sensors[] = {
 };
 
 static const char *const label_leakshield_fan_speed[] = {
-	"Pressure [µbar]",
+	"Pressure [ubar]",
 	"User-Provided Pump Speed",
 	"User-Provided Flow [dL/h]",
 	"Reservoir Volume [ml]",
