@@ -1735,11 +1735,13 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			default:
 				return -EINVAL;
 			}
+
 			ret = aqc_set_ctrl_val(priv,
 					       priv->fan_ctrl_offsets[channel] +
 					       AQUAERO_FAN_CTRL_MODE_OFFSET, ctrl_mode, AQC_8);
 			if (ret < 0)
 				return ret;
+			break;
 		default:
 			break;
 		}
