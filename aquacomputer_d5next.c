@@ -19,6 +19,7 @@
 #include <linux/hwmon.h>
 #include <linux/hwmon-sysfs.h>
 #include <linux/jiffies.h>
+#include <linux/ktime.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/seq_file.h>
@@ -70,6 +71,8 @@ static const char *const aqc_device_names[] = {
 
 #define CTRL_REPORT_ID			0x03
 #define AQUAERO_CTRL_REPORT_ID		0x0b
+
+#define CTRL_REPORT_DELAY		200	/* ms */
 
 /*
  * The HID report that the official software always sends
@@ -661,6 +664,9 @@ struct aqc_data {
 	int secondary_ctrl_report_size;
 	u8 *secondary_ctrl_report;
 
+	ktime_t last_ctrl_report_op;
+	int ctrl_report_delay;	/* Delay between two ctrl report operations, in ms */
+
 	int buffer_size;
 	/*
 	 * Used for writing reports (where supported) and reading
@@ -792,16 +798,34 @@ static int aqc_aquastreamxt_convert_fan_rpm(u16 val)
 	return 0;
 }
 
+static void aqc_delay_ctrl_report(struct aqc_data *priv)
+{
+	/*
+	 * If previous read or write is too close to this one, delay the current operation
+	 * to give the device enough time to process the previous one.
+	 */
+	if (priv->ctrl_report_delay) {
+		s64 delta = ktime_ms_delta(ktime_get(), priv->last_ctrl_report_op);
+
+		if (delta < priv->ctrl_report_delay)
+			msleep(priv->ctrl_report_delay - delta);
+	}
+}
+
 /* Expects the mutex to be locked */
 static int aqc_get_ctrl_data(struct aqc_data *priv)
 {
 	int ret;
+
+	aqc_delay_ctrl_report(priv);
 
 	memset(priv->buffer, 0x00, priv->buffer_size);
 	ret = hid_hw_raw_request(priv->hdev, priv->ctrl_report_id, priv->buffer, priv->buffer_size,
 				 HID_FEATURE_REPORT, HID_REQ_GET_REPORT);
 	if (ret < 0)
 		ret = -ENODATA;
+
+	priv->last_ctrl_report_op = ktime_get();
 
 	return ret;
 }
@@ -811,6 +835,8 @@ static int aqc_send_ctrl_data(struct aqc_data *priv)
 {
 	int ret;
 	u16 checksum;
+
+	aqc_delay_ctrl_report(priv);
 
 	/* Checksum is not needed for Aquaero and Aquastream XT */
 	if (priv->kind != aquaero && priv->kind != aquastreamxt) {
@@ -827,37 +853,15 @@ static int aqc_send_ctrl_data(struct aqc_data *priv)
 	ret = hid_hw_raw_request(priv->hdev, priv->ctrl_report_id, priv->buffer, priv->buffer_size,
 				 HID_FEATURE_REPORT, HID_REQ_SET_REPORT);
 	if (ret < 0)
-		return ret;
+		goto record_access_and_ret;
 
 	/* The official software sends this report after every change, so do it here as well */
 	ret =
 	    hid_hw_raw_request(priv->hdev, priv->secondary_ctrl_report_id,
 			       priv->secondary_ctrl_report, priv->secondary_ctrl_report_size,
 			       HID_FEATURE_REPORT, HID_REQ_SET_REPORT);
-	if (ret < 0)
-		return ret;
-
-	/*
-	 * Wait 200ms before returning to make sure that the device actually processed both reports
-	 * and saved ctrl data to memory. Otherwise, an aqc_get_ctrl_data() call made shortly after
-	 * may fail with -EPIPE because the device is still busy and can't provide data. This can
-	 * happen when userspace tools, such as fancontrol or liquidctl, write to sysfs entries in
-	 * quick succession (for example, setting pwmX_enable and pwmX attributes at once).
-	 *
-	 * 200ms was found to be the sweet spot between fixing the issue and not significantly
-	 * prolonging the call. Quadro, Octo, D5 Next and Aquaero are currently known to be
-	 * affected.
-	 */
-	switch (priv->kind) {
-	case quadro:
-	case octo:
-	case d5next:
-	case aquaero:
-		msleep(200);
-		break;
-	default:
-		break;
-	}
+record_access_and_ret:
+	priv->last_ctrl_report_op = ktime_get();
 
 	return ret;
 }
@@ -2817,6 +2821,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 		priv->buffer_size = AQUAERO_CTRL_REPORT_SIZE;
 		priv->temp_ctrl_offset = AQUAERO_TEMP_CTRL_OFFSET;
+		priv->ctrl_report_delay = CTRL_REPORT_DELAY;
 
 		priv->temp_label = label_temp_sensors;
 		priv->virtual_temp_label = label_virtual_temp_sensors;
@@ -2847,6 +2852,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->power_cycle_count_offset = AQC_POWER_CYCLES;
 		priv->buffer_size = D5NEXT_CTRL_REPORT_SIZE;
 		priv->temp_ctrl_offset = D5NEXT_TEMP_CTRL_OFFSET;
+		priv->ctrl_report_delay = CTRL_REPORT_DELAY;
 
 		priv->temp_label = label_d5next_temp;
 		priv->virtual_temp_label = label_virtual_temp_sensors;
@@ -2902,6 +2908,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->power_cycle_count_offset = AQC_POWER_CYCLES;
 		priv->buffer_size = OCTO_CTRL_REPORT_SIZE;
 		priv->temp_ctrl_offset = OCTO_TEMP_CTRL_OFFSET;
+		priv->ctrl_report_delay = CTRL_REPORT_DELAY;
 
 		priv->temp_label = label_temp_sensors;
 		priv->virtual_temp_label = label_virtual_temp_sensors;
@@ -2931,6 +2938,7 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 		priv->power_cycle_count_offset = AQC_POWER_CYCLES;
 		priv->buffer_size = QUADRO_CTRL_REPORT_SIZE;
+		priv->ctrl_report_delay = CTRL_REPORT_DELAY;
 		priv->temp_ctrl_offset = QUADRO_TEMP_CTRL_OFFSET;
 		priv->flow_pulses_ctrl_offset = QUADRO_FLOW_PULSES_CTRL_OFFSET;
 
