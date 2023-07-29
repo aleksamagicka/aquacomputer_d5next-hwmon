@@ -40,6 +40,8 @@ enum kinds {
 	aquastreamxt, leakshield
 };
 
+enum aquaero_hw_kinds { unknown, aquaero5, aquaero6 };
+
 static const char *const aqc_device_names[] = {
 	[d5next] = "d5next",
 	[farbwerk] = "farbwerk",
@@ -115,6 +117,8 @@ static u8 aquaero_secondary_ctrl_report[] = {
 #define AQUAERO_CTRL_PRESET_ID			0x5c
 #define AQUAERO_CTRL_PRESET_SIZE		0x02
 #define AQUAERO_CTRL_PRESET_START		0x55c
+#define AQUAERO_5_HW_VERSION			5600
+#define AQUAERO_6_HW_VERSION			6000
 
 /* Sensor report offsets for Aquaero fan controllers */
 #define AQUAERO_SENSOR_START			0x65
@@ -550,6 +554,8 @@ struct aqc_data {
 	u8 flow_pulses_ctrl_offset;
 	struct aqc_fan_structure_offsets *fan_structure;
 
+	/* For differentiating between Aquaero 5 and 6 */
+	enum aquaero_hw_kinds aquaero_hw_kind;
 	int aquaero_hw_version;
 	/* Completion for tracking if hardware version was received */
 	struct completion aquaero_sensor_report_received;
@@ -1336,6 +1342,18 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 	switch (priv->kind) {
 	case aquaero:
 		priv->aquaero_hw_version = get_unaligned_be16(data + AQUAERO_HARDWARE_VERSION);
+
+		switch (priv->aquaero_hw_version) {
+		case AQUAERO_5_HW_VERSION:
+			priv->aquaero_hw_kind = aquaero5;
+			break;
+		case AQUAERO_6_HW_VERSION:
+			priv->aquaero_hw_kind = aquaero6;
+			break;
+		default:
+			priv->aquaero_hw_kind = unknown;
+			break;
+		}
 
 		/* Read calculated virtual temp sensors */
 		i = priv->num_temp_sensors + priv->num_virtual_temp_sensors;
