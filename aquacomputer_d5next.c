@@ -135,6 +135,7 @@ static u16 aquaero_sensor_fan_offsets[] = { 0x167, 0x173, 0x17f, 0x18B };
 #define AQUAERO_TEMP_CTRL_OFFSET	0xdb
 #define AQUAERO_FAN_CTRL_MIN_PWR_OFFSET	0x04
 #define AQUAERO_FAN_CTRL_MAX_PWR_OFFSET	0x06
+#define AQUAERO_FAN_CTRL_MODE_OFFSET	0x0f
 #define AQUAERO_FAN_CTRL_SRC_OFFSET	0x10
 static u16 aquaero_ctrl_fan_offsets[] = { 0x20c, 0x220, 0x234, 0x248 };
 
@@ -764,10 +765,27 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 		break;
 	case hwmon_pwm:
 		if (priv->fan_ctrl_offsets && channel < priv->num_fans) {
-			switch (attr) {
-			case hwmon_pwm_input:
-				return 0644;
+			switch (priv->kind) {
+			case aquaero:
+				switch (attr) {
+				case hwmon_pwm_input:
+					return 0644;
+				case hwmon_pwm_mode:
+					if ((priv->aquaero_hw_kind == aquaero5 && channel == 3) ||
+					    priv->aquaero_hw_kind == aquaero6)
+						return 0644;
+					break;
+				default:
+					break;
+				}
+				break;
 			default:
+				switch (attr) {
+				case hwmon_pwm_input:
+					return 0644;
+				default:
+					break;
+				}
 				break;
 			}
 		}
@@ -1023,22 +1041,45 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		*val = priv->power_input[channel];
 		break;
 	case hwmon_pwm:
-		switch (priv->kind) {
-		case aquaero:
-			ret = aqc_get_ctrl_val(priv,
-					       AQUAERO_CTRL_PRESET_START +
-					       channel * AQUAERO_CTRL_PRESET_SIZE, val, AQC_BE16);
-			if (ret < 0)
-				return ret;
-			*val = aqc_percent_to_pwm(*val);
+		switch (attr) {
+		case hwmon_pwm_input:
+			switch (priv->kind) {
+			case aquaero:
+				ret = aqc_get_ctrl_val(priv,
+						       AQUAERO_CTRL_PRESET_START +
+						       channel * AQUAERO_CTRL_PRESET_SIZE, val,
+						       AQC_BE16);
+				if (ret < 0)
+					return ret;
+
+				*val = aqc_percent_to_pwm(*val);
+				break;
+			default:
+				ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel],
+						       val, AQC_BE16);
+				if (ret < 0)
+					return ret;
+
+				*val = aqc_percent_to_pwm(*val);
+				break;
+			}
 			break;
-		default:
-			ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel],
-					       val, AQC_BE16);
+		case hwmon_pwm_mode:
+			ret = aqc_get_ctrl_val(priv,
+					       priv->fan_ctrl_offsets[channel] +
+					       AQUAERO_FAN_CTRL_MODE_OFFSET, val, AQC_8);
 			if (ret < 0)
 				return ret;
 
-			*val = aqc_percent_to_pwm(*val);
+			switch (*val) {
+			case 0:	/* DC mode */
+				break;
+			case 2:	/* PWM mode */
+				*val = 1;
+				break;
+			default:
+				break;
+			}
 			break;
 		}
 		break;
@@ -1098,6 +1139,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		     long val)
 {
 	int ret, pwm_value;
+	long ctrl_mode;
 	/* Arrays for setting multiple values at once in the control report */
 	int ctrl_values_offsets[4];
 	long ctrl_values[4];
@@ -1179,6 +1221,24 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				break;
 			}
 			break;
+		case hwmon_pwm_mode:
+			switch (val) {
+			case 0:	/* DC mode */
+				ctrl_mode = 0;
+				break;
+			case 1:	/* PWM mode */
+				ctrl_mode = 2;
+				break;
+			default:
+				return -EINVAL;
+			}
+
+			ret = aqc_set_ctrl_val(priv,
+					       priv->fan_ctrl_offsets[channel] +
+					       AQUAERO_FAN_CTRL_MODE_OFFSET, ctrl_mode, AQC_8);
+			if (ret < 0)
+				return ret;
+			break;
 		default:
 			break;
 		}
@@ -1239,10 +1299,10 @@ static const struct hwmon_channel_info *aqc_info[] = {
 			   HWMON_P_INPUT | HWMON_P_LABEL,
 			   HWMON_P_INPUT | HWMON_P_LABEL),
 	HWMON_CHANNEL_INFO(pwm,
-			   HWMON_PWM_INPUT,
-			   HWMON_PWM_INPUT,
-			   HWMON_PWM_INPUT,
-			   HWMON_PWM_INPUT,
+			   HWMON_PWM_INPUT | HWMON_PWM_MODE,
+			   HWMON_PWM_INPUT | HWMON_PWM_MODE,
+			   HWMON_PWM_INPUT | HWMON_PWM_MODE,
+			   HWMON_PWM_INPUT | HWMON_PWM_MODE,
 			   HWMON_PWM_INPUT,
 			   HWMON_PWM_INPUT,
 			   HWMON_PWM_INPUT,
