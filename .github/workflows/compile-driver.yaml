@@ -1,10 +1,6 @@
    name: compile-driver
 
-   on:
-     push:
-       branches: [ main, hwmon-state, gh-actions-test ]
-     pull_request:
-       branches: [ main, hwmon-state, gh-actions-test ]
+   on: [push, pull_request]
 
    jobs:
     build:
@@ -17,7 +13,7 @@
         with:
           repository: torvalds/linux
           path: ./linux
-          ref:  v5.18
+          ref:  v6.2
       - name: install libelf-dev
         run: |
           sudo apt update
