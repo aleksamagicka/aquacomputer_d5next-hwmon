@@ -27,8 +27,9 @@ communicate through proprietary USB HID protocols.
 
 The Aquaero devices expose eight physical, eight virtual and four calculated
 virtual temperature sensors, as well as two flow sensors. The fans expose their
-speed (in RPM), power, voltage and current. The four fans can also be
-controlled directly, as well as configured as DC or PWM using pwm[1-4]_mode.
+speed (in RPM), power, voltage and current. The four fans can also be controlled
+directly, as well as configured as DC or PWM using pwm[1-4]_mode. Aquaero 6 supports
+PWM for all four fans, while the Aquaero 5 supports it only for the fourth fan.
 Temperature offsets can also be controlled.
 
 Additionally, Aquaero devices also expose twenty temperature sensors and twelve flow
