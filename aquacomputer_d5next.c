@@ -106,6 +106,22 @@ static u8 aquastreamxt_secondary_ctrl_report[] = {
 #define FAN_CURVE_HOLD_MIN_POWER_BIT_POS	1
 #define FAN_CURVE_START_BOOST_BIT_POS		2
 
+#define ALARM_FLAG_VCC12_BIT_POS		0
+#define ALARM_FLAG_VCC5_BIT_POS			1
+#define ALARM_FLAG_FAN_SHORT_CIRCUIT_BIT_POS	2
+#define ALARM_FLAG_FAN_OVER_CURRENT_BIT_POS	3
+#define ALARM_FLAG_PUMP_SPEED_BIT_POS		4
+#define ALARM_FLAG_FLOW_BIT_POS			8
+#define ALARM_FLAG_WATER_TEMPERATURE_BIT_POS	9
+#define ALARM_FLAG_FAN_SPEED_BIT_POS		10
+
+#define ALARM_CFG_FLOW_0_BIT_POS	0
+#define ALARM_CFG_FLOW_1_BIT_POS	1
+#define ALARM_CFG_WATER_TEMP_BIT_POS	2
+#define ALARM_CFG_FAN_RPM_BIT_POS	3
+#define ALARM_CFG_BLINK_LED_BIT_POS	14
+#define ALARM_CFG_BUZZER_BIT_POS	15
+
 /* Report IDs for legacy devices */
 #define AQUASTREAMXT_STATUS_REPORT_ID	0x04
 #define AQUASTREAMXT_CTRL_REPORT_ID	0x06
@@ -188,11 +204,13 @@ static u16 aquaero_ctrl_fan_offsets[] = { 0x20c, 0x220, 0x234, 0x248 };
 #define D5NEXT_5V_VOLTAGE		0x39
 #define D5NEXT_12V_VOLTAGE		0x37
 #define D5NEXT_VIRTUAL_SENSORS_START	0x3f
+#define D5NEXT_ALARM_EVENT_OFFSET	0x8b
 static u16 d5next_sensor_fan_offsets[] = { D5NEXT_PUMP_OFFSET, D5NEXT_FAN_OFFSET };
 
 /* Control report offsets for the D5 Next pump */
 #define D5NEXT_TEMP_CTRL_OFFSET		0x2D	/* Temperature sensor offsets location */
 #define D5NEXT_TEMP_CTRL_ALARM_OFFSET	0x324	/* location of overtemp alarm setpoint */
+#define D5NEXT_ALARM_CTRL_OFFSET	0x320	/* location of alarm enable bitfield */
 static u16 d5next_ctrl_fan_offsets[] = { 0x96, 0x41 };	/* Pump and fan speed (from 0-100%) */
 /* Fan curve "hold min power" and "start boost" offsets, only for the fan, first value is unused */
 static u8 d5next_ctrl_fan_curve_hold_start_offsets[] = { 0x00, 0x2F };
@@ -647,6 +665,17 @@ static struct aqc_fan_structure_offsets aqc_general_fan_structure = {
 	.speed = AQC_FAN_SPEED_OFFSET
 };
 
+struct aqc_alarms {
+	bool vcc12; //(alarms & 1L)
+	bool vcc5; //(alarms & 2L)
+	bool fan_short_circuit; //(alarms & 4L)
+	bool fan_over_current; //(alarms & 8L)
+	bool pump_speed; //(alarms & 0x10L)
+	bool flow_rate; //(alarms & 0x100L)
+	bool water_temperature; //(alarms & 0x200L)
+	bool fan_speed; //(alarms & 0x400L)
+};
+
 struct aqc_data {
 	struct hid_device *hdev;
 	struct device *hwmon_dev;
@@ -654,7 +683,7 @@ struct aqc_data {
 	struct mutex mutex;	/* Used for locking access when reading and writing PWM values */
 	enum kinds kind;
 	const char *name;
-	const struct attribute_group *groups[8];	/* For max 8 fans */
+	const struct attribute_group *groups[9];	/* For max 8 fans + 1 alarm config */
 
 	int status_report_id;	/* Used for legacy devices, report is stored in buffer */
 	int ctrl_report_id;
@@ -697,6 +726,9 @@ struct aqc_data {
 	/* Used for both "hold min power" and "start boost" parameters */
 	u8 *fan_curve_hold_start_offsets;
 	u8 *fan_curve_fallback_power_offsets;
+	struct aqc_alarms active_alarms;
+	u16 alarm_event_offset;
+	u16 alarm_ctrl_offset;
 
 	/* For differentiating between Aquaero 5 and 6 */
 	enum aquaero_hw_kinds aquaero_hw_kind;
@@ -956,6 +988,10 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 			case hwmon_temp_offset:
 				if (priv->temp_ctrl_offset != 0)
 					return 0644;
+				break;
+			case hwmon_temp_max_alarm:
+				if (priv->alarm_event_offset != 0)
+					return 0444;
 				break;
 			case hwmon_temp_max:
 				if (priv->temp_ctrl_alarm_offset != 0)
@@ -1254,6 +1290,9 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			if (ret < 0)
 				return ret;
 			*val *= 10;
+			break;
+		case hwmon_temp_max_alarm:
+			*val = priv->active_alarms.water_temperature;
 			break;
 		case hwmon_temp_max:
 			ret =
@@ -1779,7 +1818,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 	return 0;
 }
 
-/* Curve templates and atribute generation function, remixed from nct6683.c */
+/* Curve templates and attribute generation function, remixed from nct6683.c */
 struct sensor_device_template {
 	struct device_attribute dev_attr;
 	union {
@@ -2323,6 +2362,48 @@ store_curve_power_hold_min(struct device *dev, struct device_attribute *attr, co
 	if (ret < 0)
 		return ret;
 
+	return (ssize_t) count;
+}
+
+static ssize_t show_temp_beep_enable(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct aqc_data *priv = dev_get_drvdata(dev);
+	struct sensor_device_attribute *sattr = to_sensor_dev_attr(attr);
+	int index = sattr->index;
+
+	unsigned long val;
+	int ret = aqc_get_ctrl_val(priv, priv->alarm_ctrl_offset, &val, AQC_BE16);
+	if (ret < 0)
+		return -ENODATA;
+
+	return sprintf(buf, "%d\n", aqc_get_bit_at_pos((u16)val, index));
+}
+
+static ssize_t
+store_temp_beep_enable(struct device *dev, struct device_attribute *attr, const char *buf,
+                       size_t count)
+{
+	struct aqc_data *priv = dev_get_drvdata(dev);
+	struct sensor_device_attribute *sattr = to_sensor_dev_attr(attr);
+	int index = sattr->index;
+	unsigned long val, new_val;
+	int ret = kstrtoul(buf, 10, &val);
+
+	if (ret < 0)
+		return ret;
+	if (val > 2) /* only allow 1 or 0 */
+		return -EINVAL;
+
+	ret = aqc_get_ctrl_val(priv, priv->alarm_ctrl_offset, &new_val, AQC_BE16);
+	if (ret < 0)
+		return ret;
+
+	new_val = aqc_set_bit_at_pos(new_val, index, val);
+
+	ret = aqc_set_ctrl_val(priv, priv->alarm_ctrl_offset, new_val, AQC_BE16);
+	if (ret < 0)
+		return ret;
+
 	return count;
 }
 
@@ -2336,6 +2417,8 @@ SENSOR_TEMPLATE(curve_start_boost, "curve%d_start_boost",
 		0644, show_curve_start_boost, store_curve_start_boost, 0);
 SENSOR_TEMPLATE(curve_power_hold_min, "curve%d_power_hold_min",
 		0644, show_curve_power_hold_min, store_curve_power_hold_min, 0);
+SENSOR_TEMPLATE(water_temp_beep_enable, "temp%d_beep_enable",
+		0644, show_temp_beep_enable, store_temp_beep_enable, ALARM_CFG_WATER_TEMP_BIT_POS);
 
 static umode_t aqc_params_is_visible(struct kobject *kobj, struct attribute *attr, int index)
 {
@@ -2369,6 +2452,22 @@ static const struct sensor_template_group aqc_curve_params_template_group = {
 	.base = 1,
 };
 
+static umode_t aqc_alarm_params_is_visible(struct kobject *kobj, struct attribute *attr, int index)
+{
+	return attr->mode;
+}
+
+static struct sensor_device_template *aqc_alarm_params_template[] = {
+	&sensor_dev_template_water_temp_beep_enable,
+	NULL
+};
+
+static const struct sensor_template_group aqc_alarm_params_template_group = {
+	.templates = aqc_alarm_params_template,
+	.is_visible = aqc_alarm_params_is_visible,
+	.base = 1,
+};
+
 static const struct hwmon_ops aqc_hwmon_ops = {
 	.is_visible = aqc_is_visible,
 	.read = aqc_read,
@@ -2378,7 +2477,7 @@ static const struct hwmon_ops aqc_hwmon_ops = {
 
 static const struct hwmon_channel_info *aqc_info[] = {
 	HWMON_CHANNEL_INFO(temp,
-			   HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_OFFSET | HWMON_T_MAX,
+			   HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_OFFSET | HWMON_T_MAX | HWMON_T_MAX_ALARM,
 			   HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_OFFSET,
 			   HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_OFFSET,
 			   HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_OFFSET,
@@ -2554,6 +2653,24 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 	if (priv->power_cycle_count_offset != 0)
 		priv->power_cycles = get_unaligned_be32(data + priv->power_cycle_count_offset);
 
+	/* Active alarms */
+	if (priv->alarm_event_offset != 0) {
+		u32 alarm_vals = get_unaligned_be32(data + priv->alarm_event_offset);
+		priv->active_alarms.vcc12 = (alarm_vals & BIT(ALARM_FLAG_VCC12_BIT_POS)) != 0;
+		priv->active_alarms.vcc5 = (alarm_vals & BIT(ALARM_FLAG_VCC5_BIT_POS)) != 0;
+		priv->active_alarms.fan_short_circuit =
+			(alarm_vals & BIT(ALARM_FLAG_FAN_SHORT_CIRCUIT_BIT_POS)) != 0;
+		priv->active_alarms.fan_over_current =
+			(alarm_vals & BIT(ALARM_FLAG_FAN_OVER_CURRENT_BIT_POS)) != 0;
+		priv->active_alarms.pump_speed =
+			(alarm_vals & BIT(ALARM_FLAG_PUMP_SPEED_BIT_POS)) != 0;
+		priv->active_alarms.flow_rate = (alarm_vals & BIT(ALARM_FLAG_FLOW_BIT_POS)) != 0;
+		priv->active_alarms.water_temperature =
+			(alarm_vals & BIT(ALARM_FLAG_WATER_TEMPERATURE_BIT_POS)) != 0;
+		priv->active_alarms.fan_speed =
+			(alarm_vals & BIT(ALARM_FLAG_FAN_SPEED_BIT_POS)) != 0;
+	}
+	
 	/* Special-case sensor readings */
 	switch (priv->kind) {
 	case aquaero:
@@ -2783,7 +2900,8 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 {
 	struct aqc_data *priv;
 	struct attribute_group *group;
-	int ret, groups;
+	int ret;
+	int groups = 0;
 
 	priv = devm_kzalloc(&hdev->dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
@@ -2871,6 +2989,8 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->temp_sensor_start_offset = D5NEXT_COOLANT_TEMP;
 		priv->num_virtual_temp_sensors = D5NEXT_NUM_VIRTUAL_SENSORS;
 		priv->virtual_temp_sensor_start_offset = D5NEXT_VIRTUAL_SENSORS_START;
+		priv->alarm_ctrl_offset = D5NEXT_ALARM_CTRL_OFFSET;
+		priv->alarm_event_offset = D5NEXT_ALARM_EVENT_OFFSET;
 
 		priv->power_cycle_count_offset = AQC_POWER_CYCLES;
 		priv->buffer_size = D5NEXT_CTRL_REPORT_SIZE;
@@ -3128,6 +3248,15 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 			break;
 		}
 	}
+
+	/* Set up alarm controls for devices that support them */
+	if (priv->alarm_ctrl_offset) {
+		group = aqc_create_attr_group(&hdev->dev, &aqc_alarm_params_template_group, 1);
+		if (IS_ERR(group))
+			return PTR_ERR(group);
+		priv->groups[groups++] = group;
+	}
+
 
 	if (priv->buffer_size != 0) {
 		priv->checksum_start = 0x01;
