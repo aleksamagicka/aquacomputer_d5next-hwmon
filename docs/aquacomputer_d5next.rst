@@ -103,6 +103,8 @@ Sysfs entries
 =============================== ====================================================================
 temp[1-40]_input                Physical/virtual temperature sensors (in millidegrees Celsius)
 temp[1-4]_offset                Temperature sensor correction offset (in millidegrees Celsius)
+temp[1-4]_max                   Temperature sensor alarm setpoint (in millidegrees Celsius)
+temp[1-4]_beep_enable           Beep when a temperature alarm threshold is exceeded
 fan[1-20]_input                 Pump/fan speed (in RPM) / Flow speed (in dL/h)
 fan[1-4]_min                    Minimal fan speed (in RPM)
 fan[1-4]_max                    Maximal fan speed (in RPM)
