@@ -2362,7 +2362,7 @@ store_curve_power_hold_min(struct device *dev, struct device_attribute *attr, co
 	if (ret < 0)
 		return ret;
 
-	return (ssize_t) count;
+	return (ssize_t)count;
 }
 
 static ssize_t show_temp_beep_enable(struct device *dev, struct device_attribute *attr, char *buf)
@@ -2373,6 +2373,7 @@ static ssize_t show_temp_beep_enable(struct device *dev, struct device_attribute
 
 	unsigned long val;
 	int ret = aqc_get_ctrl_val(priv, priv->alarm_ctrl_offset, &val, AQC_BE16);
+
 	if (ret < 0)
 		return -ENODATA;
 
@@ -2381,7 +2382,7 @@ static ssize_t show_temp_beep_enable(struct device *dev, struct device_attribute
 
 static ssize_t
 store_temp_beep_enable(struct device *dev, struct device_attribute *attr, const char *buf,
-                       size_t count)
+		       size_t count)
 {
 	struct aqc_data *priv = dev_get_drvdata(dev);
 	struct sensor_device_attribute *sattr = to_sensor_dev_attr(attr);
@@ -2477,7 +2478,8 @@ static const struct hwmon_ops aqc_hwmon_ops = {
 
 static const struct hwmon_channel_info *aqc_info[] = {
 	HWMON_CHANNEL_INFO(temp,
-			   HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_OFFSET | HWMON_T_MAX | HWMON_T_MAX_ALARM,
+			   HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_OFFSET
+			   | HWMON_T_MAX | HWMON_T_MAX_ALARM,
 			   HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_OFFSET,
 			   HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_OFFSET,
 			   HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_OFFSET,
@@ -2591,6 +2593,7 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 {
 	int i, j;
 	s16 sensor_value;
+	u32 alarm_vals;
 	struct aqc_data *priv;
 
 	if (report->id != STATUS_REPORT_ID)
@@ -2655,7 +2658,8 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 
 	/* Active alarms */
 	if (priv->alarm_event_offset != 0) {
-		u32 alarm_vals = get_unaligned_be32(data + priv->alarm_event_offset);
+		alarm_vals = get_unaligned_be32(data + priv->alarm_event_offset);
+
 		priv->active_alarms.vcc12 = (alarm_vals & BIT(ALARM_FLAG_VCC12_BIT_POS)) != 0;
 		priv->active_alarms.vcc5 = (alarm_vals & BIT(ALARM_FLAG_VCC5_BIT_POS)) != 0;
 		priv->active_alarms.fan_short_circuit =
@@ -2670,7 +2674,7 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 		priv->active_alarms.fan_speed =
 			(alarm_vals & BIT(ALARM_FLAG_FAN_SPEED_BIT_POS)) != 0;
 	}
-	
+
 	/* Special-case sensor readings */
 	switch (priv->kind) {
 	case aquaero:
@@ -3256,7 +3260,6 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 			return PTR_ERR(group);
 		priv->groups[groups++] = group;
 	}
-
 
 	if (priv->buffer_size != 0) {
 		priv->checksum_start = 0x01;
