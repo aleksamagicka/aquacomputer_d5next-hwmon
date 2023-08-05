@@ -1,10 +1,6 @@
    name: compile-driver
 
-   on:
-     push:
-       branches: [ main, gh-actions-test ]
-     pull_request:
-       branches: [ main, gh-actions-test ]
+   on: [push, pull_request]
 
    jobs:
     build:
