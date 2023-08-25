@@ -104,7 +104,7 @@ The following devices are supported by this driver, and from which kernel versio
 | Aquastream Ultimate |                     6.3                     | Temperature sensors, pump and fan sensors, pressure and flow |        ?        |
 |    Poweradjust 3    |                     6.3                     |                 External temperature sensor                  |        ?        |
 
-Microcontrollers are noted for general reference, as this driver only communicates through HID reports and does not interact
+Microcontrollers are noted for general reference, as this driver **only** communicates through HID reports and does not interact
 with the device CPU & electronics directly.
 
 Being a standard `hwmon` driver, it provides readings via `sysfs`, which are easily accessible through `lm-sensors` as usual.
