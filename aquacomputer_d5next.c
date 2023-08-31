@@ -2,7 +2,7 @@
 /*
  * hwmon driver for Aquacomputer devices (D5 Next, Farbwerk, Farbwerk 360, Octo,
  * Quadro, High Flow Next, Aquaero, Leakshield, Aquastream XT, Aquastream Ultimate,
- * Poweradjust 3)
+ * Poweradjust 3, High Flow USB)
  *
  * Aquacomputer devices send HID reports (with ID 0x01) every second to report
  * sensor values, except for devices that communicate through the
@@ -38,11 +38,12 @@
 #define USB_PRODUCT_ID_AQUASTREAMXT	0xf0b6
 #define USB_PRODUCT_ID_AQUASTREAMULT	0xf00b
 #define USB_PRODUCT_ID_POWERADJUST3	0xf0bd
+#define USB_PRODUCT_ID_HIGHFLOW		0xf003
 
 enum kinds {
 	aquaero, d5next, farbwerk, farbwerk360, octo,
 	quadro, highflownext, leakshield, aquastreamxt,
-	aquastreamult, poweradjust3
+	aquastreamult, poweradjust3, highflow
 };
 
 enum aquaero_hw_kinds { unknown, aquaero5, aquaero6 };
@@ -60,7 +61,8 @@ static const char *const aqc_device_names[] = {
 	[leakshield] = "leakshield",
 	[aquastreamxt] = "aquastreamxt",
 	[aquastreamult] = "aquastreamultimate",
-	[poweradjust3] = "poweradjust3"
+	[poweradjust3] = "poweradjust3",
+	[highflow] = "highflow"
 };
 
 #define DRIVER_NAME			"aquacomputer_d5next"
@@ -114,6 +116,8 @@ static u8 aquastreamxt_secondary_ctrl_report[] = {
 #define AQUASTREAMXT_CTRL_REPORT_ID	0x06
 
 #define POWERADJUST3_STATUS_REPORT_ID	0x03
+
+#define HIGHFLOW_STATUS_REPORT_ID	0x02
 
 /* Info, sensor sizes and offsets for most Aquacomputer devices */
 #define AQC_SERIAL_START		0x03
@@ -379,6 +383,15 @@ static u16 aquastreamxt_ctrl_fan_offsets[] = { 0x8, 0x1b };
 /* Sensor report offsets for the Poweradjust 3 */
 #define POWERADJUST3_SENSOR_START	0x03
 
+/* Specs of the High Flow USB */
+#define HIGHFLOW_NUM_SENSORS		2
+#define HIGHFLOW_SENSOR_REPORT_SIZE	0x76
+
+/* Sensor report offsets for the High Flow USB */
+#define HIGHFLOW_FIRMWARE_VERSION	0x3
+#define HIGHFLOW_SERIAL_START		0x9
+#define HIGHFLOW_SENSOR_START		0x2b
+
 /* Labels for D5 Next */
 static const char *const label_d5next_temp[] = {
 	"Coolant temp"
@@ -616,6 +629,12 @@ static const char *const label_aquastreamult_current[] = {
 /* Labels for Poweradjust 3 */
 static const char *const label_poweradjust3_temp_sensors[] = {
 	"External sensor"
+};
+
+/* Labels for Highflow */
+static const char *const label_highflow_temp[] = {
+	"External temp",
+	"Internal temp"
 };
 
 struct aqc_fan_structure_offsets {
@@ -1208,6 +1227,13 @@ static int aqc_legacy_read(struct aqc_data *priv)
 
 		sensor_value = get_unaligned_le16(priv->buffer + AQUASTREAMXT_FAN_VOLTAGE_OFFSET);
 		priv->voltage_input[1] = DIV_ROUND_CLOSEST(sensor_value * 1000, 63);
+		break;
+	case highflow:
+		/* Info provided with every report */
+		priv->serial_number[0] = get_unaligned_le16(priv->buffer +
+							    priv->serial_number_start_offset);
+		priv->firmware_version =
+		    get_unaligned_le16(priv->buffer + priv->firmware_version_offset);
 		break;
 	default:
 		break;
@@ -3040,6 +3066,17 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 		priv->temp_label = label_poweradjust3_temp_sensors;
 		break;
+	case USB_PRODUCT_ID_HIGHFLOW:
+		priv->kind = highflow;
+
+		priv->num_fans = 0;
+
+		priv->num_temp_sensors = HIGHFLOW_NUM_SENSORS;
+		priv->temp_sensor_start_offset = HIGHFLOW_SENSOR_START;
+		priv->buffer_size = HIGHFLOW_SENSOR_REPORT_SIZE;
+
+		priv->temp_label = label_highflow_temp;
+		break;
 	default:
 		break;
 	}
@@ -3068,6 +3105,12 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		break;
 	case poweradjust3:
 		priv->status_report_id = POWERADJUST3_STATUS_REPORT_ID;
+		break;
+	case highflow:
+		priv->serial_number_start_offset = HIGHFLOW_SERIAL_START;
+		priv->firmware_version_offset = HIGHFLOW_FIRMWARE_VERSION;
+
+		priv->status_report_id = HIGHFLOW_STATUS_REPORT_ID;
 		break;
 	default:
 		priv->serial_number_start_offset = AQC_SERIAL_START;
@@ -3175,6 +3218,7 @@ static const struct hid_device_id aqc_table[] = {
 	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_AQUASTREAMXT) },
 	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_AQUASTREAMULT) },
 	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_POWERADJUST3) },
+	{ HID_USB_DEVICE(USB_VENDOR_ID_AQUACOMPUTER, USB_PRODUCT_ID_HIGHFLOW) },
 	{ }
 };
 
