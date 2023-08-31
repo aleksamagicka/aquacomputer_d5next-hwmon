@@ -3,7 +3,7 @@
 # external KDIR specification is supported
 KDIR ?= /lib/modules/$(shell uname -r)/build
 
-SOURCES := aquacomputer_d5next.c
+SOURCES := aquacomputer_d5next.c docs/aquacomputer_d5next.rst
 
 all: modules
 
