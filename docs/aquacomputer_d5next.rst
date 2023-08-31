@@ -74,7 +74,7 @@ It also exposes pressure and flow speed readings.
 
 The Poweradjust 3 controller exposes a single external temperature sensor.
 
-The High Flow USB exposes an internal and external temperature sensor.
+The High Flow USB exposes an internal and external temperature sensor and a flow meter.
 
 Configuring listed devices through this driver is not implemented completely, as
 some features include addressable RGB LEDs, for which there is no standard sysfs interface.
