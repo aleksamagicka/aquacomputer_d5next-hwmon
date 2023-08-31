@@ -103,6 +103,7 @@ The following devices are supported by this driver, and from which kernel versio
 |    Aquastream XT    |          6.4 (sensors), rest here           | Temperature sensors, voltage sensors, pump and fan speed control |  ATMEGA8-16MU   |
 | Aquastream Ultimate |                     6.3                     | Temperature sensors, pump and fan sensors, pressure and flow |        ?        |
 |    Poweradjust 3    |                     6.3                     |                 External temperature sensor                  |        ?        |
+|    High Flow USB    |			available here              | Temperature sensors				           |        ?        |
 
 Microcontrollers are noted for general reference, as this driver **only** communicates through HID reports and does not interact
 with the device CPU & electronics directly.
