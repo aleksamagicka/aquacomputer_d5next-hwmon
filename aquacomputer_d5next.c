@@ -385,11 +385,13 @@ static u16 aquastreamxt_ctrl_fan_offsets[] = { 0x8, 0x1b };
 
 /* Specs of the High Flow USB */
 #define HIGHFLOW_NUM_SENSORS		2
+#define HIGHFLOW_NUM_FLOW_SENSORS	1
 #define HIGHFLOW_SENSOR_REPORT_SIZE	0x76
 
 /* Sensor report offsets for the High Flow USB */
 #define HIGHFLOW_FIRMWARE_VERSION	0x3
 #define HIGHFLOW_SERIAL_START		0x9
+#define HIGHFLOW_FLOW_SENSOR_OFFSET	0x23
 #define HIGHFLOW_SENSOR_START		0x2b
 
 /* Labels for D5 Next */
@@ -635,6 +637,10 @@ static const char *const label_poweradjust3_temp_sensors[] = {
 static const char *const label_highflow_temp[] = {
 	"External temp",
 	"Internal temp"
+};
+
+static const char *const label_highflow_speeds[] = {
+	"Flow speed [dL/h]"
 };
 
 struct aqc_fan_structure_offsets {
@@ -1078,6 +1084,7 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 				break;
 			case aquaero:
 			case quadro:
+			case highflow:
 				/* Special case to support flow sensors */
 				if (channel < priv->num_fans +
 				    priv->num_flow_sensors +
@@ -1234,6 +1241,10 @@ static int aqc_legacy_read(struct aqc_data *priv)
 							    priv->serial_number_start_offset);
 		priv->firmware_version =
 		    get_unaligned_le16(priv->buffer + priv->firmware_version_offset);
+
+		/* Read flow speed */
+		priv->speed_input[0] = get_unaligned_le16(priv->buffer +
+							  priv->flow_sensors_start_offset);
 		break;
 	default:
 		break;
@@ -3073,9 +3084,12 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 		priv->num_temp_sensors = HIGHFLOW_NUM_SENSORS;
 		priv->temp_sensor_start_offset = HIGHFLOW_SENSOR_START;
+		priv->num_flow_sensors = HIGHFLOW_NUM_FLOW_SENSORS;
+		priv->flow_sensors_start_offset = HIGHFLOW_FLOW_SENSOR_OFFSET;
 		priv->buffer_size = HIGHFLOW_SENSOR_REPORT_SIZE;
 
 		priv->temp_label = label_highflow_temp;
+		priv->speed_label = label_highflow_speeds;
 		break;
 	default:
 		break;
