@@ -5,3 +5,4 @@
 - [ ] I have made corresponding changes to the documentation
 - [ ] My changes generate no new warnings
 - [ ] I have tested my changes on the affected device(s) - note on which
+- [ ] All exposed values are being read from the device
