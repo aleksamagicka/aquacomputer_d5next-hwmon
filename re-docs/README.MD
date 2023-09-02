@@ -11,7 +11,7 @@ and explainers of currently known offsets in them. If it looks similar to liquid
 
 The subdirectories in this directory contain captured examples of captured HID reports (and possibly other behavior) of some of the devices.
 
-Currently available:
+Currently available writeups which may have additional info:
 
 * [Quadro (HID reports and structures)](quadro/readme.md)
 * [Aquaero (HID reports and structures)](aquaero/readme.md)

@@ -445,7 +445,7 @@ Here is what it's currently known to contain:
 
 `0x0c70:0xf0bd`
 
-The Farbwerk exposes a temperature sensor.
+The Poweradjust 3 exposes a temperature sensor.
 
 ### Sensor report
 
