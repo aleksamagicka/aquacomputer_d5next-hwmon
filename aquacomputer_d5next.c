@@ -1603,7 +1603,7 @@ static int aqc_leakshield_send_report(struct aqc_data *priv, int channel, long v
 static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr, int channel,
 		     long val)
 {
-	int ret, pwm_value, temp_sensor;
+	int ret, pwm_value, temp_sensor, num_ctrl_values;
 	long ctrl_mode;
 	/* Arrays for setting multiple values at once in the control report */
 	int ctrl_values_offsets[4];
@@ -1665,7 +1665,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			case d5next:
 				if (val < 0 || val > 3)
 					return -EINVAL;
-				break;
+				fallthrough;
 			case octo:
 			case quadro:
 				if (val < 0 || val > priv->num_fans + 3)
@@ -1690,28 +1690,34 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 					if (ctrl_mode > 2)
 						return -EINVAL;
 				}
+
+				if (val == 0) {
+					/* Set the fan to 100% as we don't control it anymore */
+					ctrl_values_offsets[1] = priv->fan_ctrl_offsets[channel] +
+					    AQC_FAN_CTRL_PWM_OFFSET;
+					ctrl_values[1] = aqc_pwm_to_percent(255);
+					ctrl_values_types[1] = AQC_BE16;
+
+					num_ctrl_values = 2;
+				} else {
+					/* Decrement to convert from hwmon to aqc */
+					val--;
+
+					num_ctrl_values = 1;
+				}
+
+				ctrl_values_offsets[0] = priv->fan_ctrl_offsets[channel];
+				ctrl_values[0] = val;
+				ctrl_values_types[0] = AQC_8;
+
+				ret = aqc_set_ctrl_vals(priv, ctrl_values_offsets, ctrl_values,
+							ctrl_values_types, num_ctrl_values);
+				if (ret < 0)
+					return ret;
 				break;
 			default:
 				return -EOPNOTSUPP;
 			}
-
-			if (val == 0) {
-				/* Set the fan to 100% as we don't control it anymore */
-				ret =
-				    aqc_set_ctrl_val(priv,
-						     priv->fan_ctrl_offsets[channel] +
-						     AQC_FAN_CTRL_PWM_OFFSET,
-						     aqc_pwm_to_percent(255), AQC_BE16);
-				if (ret < 0)
-					return ret;
-			} else {
-				/* Decrement to convert from hwmon to aqc */
-				val--;
-			}
-
-			ret = aqc_set_ctrl_val(priv, priv->fan_ctrl_offsets[channel], val, AQC_8);
-			if (ret < 0)
-				return ret;
 			break;
 		case hwmon_pwm_input:
 			if (val < 0 || val > 255)
