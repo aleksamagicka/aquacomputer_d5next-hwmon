@@ -105,6 +105,16 @@ pwm_enable values are:
 [4-11] Follow fan[1-8], if available and device supports
 ====== ==========================================================
 
+Possible pwm_enable values on Aquaero are:
+
+====== ==========================================================
+0      Set fan to 100%
+1      Direct PWM mode (applies value in corresponding PWM entry)
+2      PID control mode
+3      Fan curve mode
+4      Two point control mode
+====== ==========================================================
+
 Sysfs entries
 -------------
 
