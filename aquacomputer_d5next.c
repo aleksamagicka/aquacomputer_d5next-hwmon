@@ -156,7 +156,7 @@ static u8 aquastreamxt_secondary_ctrl_report[] = {
 #define AQUAERO_NUM_FLOW_SENSORS		2
 #define AQUAERO_NUM_AQUABUS_FLOW_SENSORS	12
 #define AQUAERO_CTRL_REPORT_SIZE		0xa93
-#define AQUAERO_CTRL_PRESET_ID			0x5c
+#define AQUAERO_CTRL_PRESET_ID_PWM		0x5c
 #define AQUAERO_CTRL_PRESET_SIZE		0x02
 #define AQUAERO_CTRL_PRESET_START		0x55c
 #define AQUAERO_5_HW_VERSION			5600
@@ -1735,7 +1735,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				/* Write preset number in fan control source */
 				ctrl_values_offsets[1] = priv->fan_ctrl_offsets[channel] +
 				    AQUAERO_FAN_CTRL_SRC_OFFSET;
-				ctrl_values[1] = AQUAERO_CTRL_PRESET_ID + channel;
+				ctrl_values[1] = AQUAERO_CTRL_PRESET_ID_PWM + channel;
 				ctrl_values_types[1] = AQC_BE16;
 
 				/* Set minimum power to 0 to allow the fan to turn off */
