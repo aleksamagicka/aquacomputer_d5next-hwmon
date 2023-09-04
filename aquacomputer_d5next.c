@@ -149,6 +149,10 @@ static u8 aquastreamxt_secondary_ctrl_report[] = {
 #define AQUAERO_NUM_FLOW_SENSORS		2
 #define AQUAERO_NUM_AQUABUS_FLOW_SENSORS	12
 #define AQUAERO_CTRL_REPORT_SIZE		0xa93
+#define AQUAERO_CTRL_PRESET_ID_NO_CONTROL	0xffff
+#define AQUAERO_CTRL_PRESET_ID_CURVE		0x58
+#define AQUAERO_CTRL_PRESET_ID_PID		0x40
+#define AQUAERO_CTRL_PRESET_ID_TWO_POINT	0x48
 #define AQUAERO_CTRL_PRESET_ID_PWM		0x5c
 #define AQUAERO_CTRL_PRESET_SIZE		0x02
 #define AQUAERO_CTRL_PRESET_START		0x55c
@@ -1005,6 +1009,7 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 			switch (priv->kind) {
 			case aquaero:
 				switch (attr) {
+				case hwmon_pwm_enable:
 				case hwmon_pwm_input:
 					return 0644;
 				case hwmon_pwm_mode:
@@ -1340,12 +1345,50 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 	case hwmon_pwm:
 		switch (attr) {
 		case hwmon_pwm_enable:
-			ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel], val, AQC_8);
-			if (ret < 0)
-				return ret;
+			switch (priv->kind) {
+			case aquaero:
+				ret =
+				    aqc_get_ctrl_val(priv,
+						     priv->fan_ctrl_offsets[channel] +
+						     AQUAERO_FAN_CTRL_SRC_OFFSET,
+						     val, AQC_BE16);
+				if (ret < 0)
+					return ret;
 
-			/* Incrementing to satisfy hwmon rules */
-			*val = *val + 1;
+				if ((u16)*val == AQUAERO_CTRL_PRESET_ID_NO_CONTROL) {
+					*val = 0;
+					break;
+				}
+
+				*val = *val - channel;
+
+				switch (*val) {
+				case AQUAERO_CTRL_PRESET_ID_PWM:
+					*val = 1;
+					break;
+				case AQUAERO_CTRL_PRESET_ID_PID:
+					*val = 2;
+					break;
+				case AQUAERO_CTRL_PRESET_ID_CURVE:
+					*val = 3;
+					break;
+				case AQUAERO_CTRL_PRESET_ID_TWO_POINT:
+					*val = 4;
+					break;
+				default:
+					break;
+				}
+				break;
+			default:
+				ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel],
+						       val, AQC_8);
+				if (ret < 0)
+					return ret;
+
+				/* Incrementing to satisfy hwmon rules */
+				*val = *val + 1;
+				break;
+			}
 			break;
 		case hwmon_pwm_input:
 			switch (priv->kind) {
