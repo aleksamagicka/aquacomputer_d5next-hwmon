@@ -1711,6 +1711,32 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		switch (attr) {
 		case hwmon_pwm_enable:
 			switch (priv->kind) {
+			case aquaero:
+				switch (val) {
+				case 0:
+					ctrl_mode = AQUAERO_CTRL_PRESET_ID_NO_CONTROL;
+					break;
+				case 1:
+					ctrl_mode = AQUAERO_CTRL_PRESET_ID_PWM + channel;
+					break;
+				case 2:
+					ctrl_mode = AQUAERO_CTRL_PRESET_ID_PID + channel;
+					break;
+				case 3:
+					ctrl_mode = AQUAERO_CTRL_PRESET_ID_CURVE + channel;
+					break;
+				case 4:
+					ctrl_mode = AQUAERO_CTRL_PRESET_ID_TWO_POINT + channel;
+					break;
+				default:
+					return -EINVAL;
+				}
+
+				ret = aqc_set_ctrl_val(priv, priv->fan_ctrl_offsets[channel] +
+				    AQUAERO_FAN_CTRL_SRC_OFFSET, ctrl_mode, AQC_BE16);
+				if (ret < 0)
+					return ret;
+				break;
 			case d5next:
 				if (val < 0 || val > 3)
 					return -EINVAL;

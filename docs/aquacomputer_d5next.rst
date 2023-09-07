@@ -94,8 +94,11 @@ Usage notes
 The devices communicate via HID reports. The driver is loaded automatically by
 the kernel and supports hotswapping.
 
-Configuring fan curves is available on the D5 Next, Quadro and Octo. Possible
-pwm_enable values are:
+PWM control is available on D5 Next, Quadro, Octo and Aquaero.
+Configuring fan curves is only available on the D5 Next, Quadro and Octo.
+The modes PID control and two point control are not implemented.
+
+Possible pwm_enable values for D5 Next, Quadro and Octo are:
 
 ====== ==========================================================
 0      Set fan to 100%
