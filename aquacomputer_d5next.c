@@ -1807,29 +1807,23 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				ctrl_values[0] = pwm_value;
 				ctrl_values_types[0] = AQC_BE16;
 
-				/* Write preset number in fan control source */
-				ctrl_values_offsets[1] = priv->fan_ctrl_offsets[channel] +
-				    AQUAERO_FAN_CTRL_SRC_OFFSET;
-				ctrl_values[1] = AQUAERO_CTRL_PRESET_ID_PWM + channel;
-				ctrl_values_types[1] = AQC_BE16;
-
 				/* Set minimum power to 0 to allow the fan to turn off */
-				ctrl_values_offsets[2] = priv->fan_ctrl_offsets[channel] +
+				ctrl_values_offsets[1] = priv->fan_ctrl_offsets[channel] +
 				    AQUAERO_FAN_CTRL_MIN_PWR_OFFSET;
-				ctrl_values[2] = 0;
-				ctrl_values_types[2] = AQC_BE16;
+				ctrl_values[1] = 0;
+				ctrl_values_types[1] = AQC_BE16;
 
 				/*
 				 * Set maximum power to 100% to allow the fan to
 				 * reach maximum speed
 				 */
-				ctrl_values_offsets[3] = priv->fan_ctrl_offsets[channel] +
+				ctrl_values_offsets[2] = priv->fan_ctrl_offsets[channel] +
 				    AQUAERO_FAN_CTRL_MAX_PWR_OFFSET;
-				ctrl_values[3] = aqc_pwm_to_percent(255);
-				ctrl_values_types[3] = AQC_BE16;
+				ctrl_values[2] = aqc_pwm_to_percent(255);
+				ctrl_values_types[2] = AQC_BE16;
 
 				ret = aqc_set_ctrl_vals(priv, ctrl_values_offsets, ctrl_values,
-							ctrl_values_types, 4);
+							ctrl_values_types, 3);
 				if (ret < 0)
 					return ret;
 				break;
