@@ -2,7 +2,7 @@
 /*
  * hwmon driver for Aquacomputer devices (D5 Next, Farbwerk, Farbwerk 360, Octo,
  * Quadro, High Flow Next, Aquaero, Leakshield, Aquastream XT, Aquastream Ultimate,
- * Poweradjust 3, High Flow USB)
+ * Poweradjust 3, High Flow USB, MPS Flow family)
  *
  * Aquacomputer devices send HID reports (with ID 0x01) every second to report
  * sensor values, except for devices that communicate through the
@@ -62,7 +62,7 @@ static const char *const aqc_device_names[] = {
 	[aquastreamxt] = "aquastreamxt",
 	[aquastreamult] = "aquastreamultimate",
 	[poweradjust3] = "poweradjust3",
-	[highflow] = "highflow"
+	[highflow] = "highflow"	/* Covers MPS Flow devices */
 };
 
 #define DRIVER_NAME			"aquacomputer_d5next"

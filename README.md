@@ -104,6 +104,7 @@ The following devices are supported by this driver, and from which kernel versio
 | Aquastream Ultimate |                     6.3                     | Temperature sensors, pump and fan sensors, pressure and flow |        ?        |
 |    Poweradjust 3    |                     6.3                     |                 External temperature sensor                  |        ?        |
 |    High Flow USB    |			available here              | Temperature sensors, flow meter			           |        ?        |
+|    MPS Flow         |			available here              | Temperature sensors, flow meter			           |        ?        |
 
 Microcontrollers are noted for general reference, as this driver **only** communicates through HID reports and does not interact
 with the device CPU & electronics directly.
