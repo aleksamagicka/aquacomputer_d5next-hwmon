@@ -983,6 +983,7 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 			case hwmon_temp_offset:
 				if (priv->temp_ctrl_offset != 0)
 					return 0644;
+				break;
 			default:
 				break;
 			}
@@ -1108,9 +1109,10 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 				return 0444;
 			break;
 		case hwmon_fan_pulses:
-			/* Special case for flow sensor */
+			/* Special case for Quadro flow sensor */
 			if (priv->kind == quadro && channel == priv->num_fans)
 				return 0644;
+			break;
 		default:
 			break;
 		}
