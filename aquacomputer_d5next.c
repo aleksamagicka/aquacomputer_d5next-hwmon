@@ -728,6 +728,7 @@ struct aqc_data {
 	/* For differentiating between Aquaero 5 and 6 */
 	enum aquaero_hw_kinds aquaero_hw_kind;
 	int aquaero_hw_version;
+	/* Completion for tracking if hardware version was received */
 	struct completion aquaero_sensor_report_received;
 
 	/* General info, available across all devices */
