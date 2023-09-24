@@ -48,8 +48,6 @@ enum kinds {
 
 enum aquaero_hw_kinds { unknown, aquaero5, aquaero6 };
 
-DECLARE_COMPLETION(aquaero_sensor_report_received);
-
 static const char *const aqc_device_names[] = {
 	[aquaero] = "aquaero",
 	[d5next] = "d5next",
@@ -730,6 +728,8 @@ struct aqc_data {
 	/* For differentiating between Aquaero 5 and 6 */
 	enum aquaero_hw_kinds aquaero_hw_kind;
 	int aquaero_hw_version;
+	/* Completion for tracking if hardware version was received */
+	struct completion aquaero_sensor_report_received;
 
 	/* General info, available across all devices */
 	u8 serial_number_start_offset;
@@ -1008,21 +1008,10 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 				case hwmon_pwm_input:
 					return 0644;
 				case hwmon_pwm_mode:
-					/*
-					 * Wait until the first Aquaero sensor report is received,
-					 * to be able to differentiate between Aquaero 5 and 6
-					 * by looking at the hardware version. While the v6 supports
-					 * both DC and PWM mode for all four fans, v5 supports PWM
-					 * mode only for the fourth fan.
-					 */
-					if (!wait_for_completion_timeout
-					    (&aquaero_sensor_report_received,
-					     STATUS_UPDATE_INTERVAL))
-						return 0;
-
 					if ((priv->aquaero_hw_kind == aquaero5 && channel == 3) ||
 					    priv->aquaero_hw_kind == aquaero6)
 						return 0644;
+					break;
 				default:
 					break;
 				}
@@ -2633,8 +2622,8 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 			i++;
 		}
 
-		if (!completion_done(&aquaero_sensor_report_received))
-			complete_all(&aquaero_sensor_report_received);
+		if (!completion_done(&priv->aquaero_sensor_report_received))
+			complete_all(&priv->aquaero_sensor_report_received);
 		break;
 	case aquastreamult:
 		priv->speed_input[1] = get_unaligned_be16(data + AQUASTREAMULT_PUMP_OFFSET);
@@ -2733,7 +2722,7 @@ static int hw_version_show(struct seq_file *seqf, void *unused)
 {
 	struct aqc_data *priv = seqf->private;
 
-	wait_for_completion(&aquaero_sensor_report_received);
+	wait_for_completion(&priv->aquaero_sensor_report_received);
 
 	seq_printf(seqf, "%u\n", priv->aquaero_hw_version);
 
@@ -2745,7 +2734,7 @@ static int current_uptime_show(struct seq_file *seqf, void *unused)
 {
 	struct aqc_data *priv = seqf->private;
 
-	wait_for_completion(&aquaero_sensor_report_received);
+	wait_for_completion(&priv->aquaero_sensor_report_received);
 
 	seq_printf(seqf, "%u\n", priv->current_uptime);
 
@@ -2757,7 +2746,7 @@ static int total_uptime_show(struct seq_file *seqf, void *unused)
 {
 	struct aqc_data *priv = seqf->private;
 
-	wait_for_completion(&aquaero_sensor_report_received);
+	wait_for_completion(&priv->aquaero_sensor_report_received);
 
 	seq_printf(seqf, "%u\n", priv->total_uptime);
 
@@ -3099,6 +3088,8 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 	switch (priv->kind) {
 	case aquaero:
+		init_completion(&priv->aquaero_sensor_report_received);
+
 		priv->serial_number_start_offset = AQUAERO_SERIAL_START;
 		priv->firmware_version_offset = AQUAERO_FIRMWARE_VERSION;
 
@@ -3191,11 +3182,24 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 	mutex_init(&priv->mutex);
 
-	hid_device_io_start(hdev);
+	if (priv->kind == aquaero) {
+		hid_device_io_start(hdev);
+
+		/*
+		 * Wait until the first Aquaero sensor report is received,
+		 * to be able to differentiate between Aquaero 5 and 6
+		 * in aqc_is_visible() by looking at the hardware version.
+		 */
+		if (!wait_for_completion_timeout(&priv->aquaero_sensor_report_received,
+						 STATUS_UPDATE_INTERVAL))
+			hid_warn(priv->hdev,
+				 "didn't read aquaero hw version, some functionality won't be available\n");
+
+		hid_device_io_stop(hdev);
+	}
+
 	priv->hwmon_dev = hwmon_device_register_with_info(&hdev->dev, priv->name, priv,
 							  &aqc_chip_info, priv->groups);
-	hid_device_io_stop(hdev);
-
 	if (IS_ERR(priv->hwmon_dev)) {
 		ret = (int)PTR_ERR(priv->hwmon_dev);
 		goto fail_and_close;
