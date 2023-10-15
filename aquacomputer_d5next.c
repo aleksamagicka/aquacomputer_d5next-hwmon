@@ -42,6 +42,8 @@ enum kinds {
 	aquastreamxt, leakshield
 };
 
+enum aquaero_hw_kinds { unknown, aquaero5, aquaero6 };
+
 static const char *const aqc_device_names[] = {
 	[d5next] = "d5next",
 	[farbwerk] = "farbwerk",
@@ -109,6 +111,7 @@ static u8 aquaero_secondary_ctrl_report[] = {
 /* Specs of the Aquaero fan controllers */
 #define AQUAERO_SERIAL_START			0x07
 #define AQUAERO_FIRMWARE_VERSION		0x0B
+#define AQUAERO_HARDWARE_VERSION		0x0F
 #define AQUAERO_NUM_FANS			4
 #define AQUAERO_NUM_SENSORS			8
 #define AQUAERO_NUM_VIRTUAL_SENSORS		8
@@ -118,6 +121,8 @@ static u8 aquaero_secondary_ctrl_report[] = {
 #define AQUAERO_CTRL_PRESET_ID			0x5c
 #define AQUAERO_CTRL_PRESET_SIZE		0x02
 #define AQUAERO_CTRL_PRESET_START		0x55c
+#define AQUAERO_5_HW_VERSION			5600
+#define AQUAERO_6_HW_VERSION			6000
 
 /* Sensor report offsets for Aquaero fan controllers */
 #define AQUAERO_SENSOR_START			0x65
@@ -134,6 +139,7 @@ static u16 aquaero_sensor_fan_offsets[] = { 0x167, 0x173, 0x17f, 0x18B };
 #define AQUAERO_TEMP_CTRL_OFFSET	0xdb
 #define AQUAERO_FAN_CTRL_MIN_PWR_OFFSET	0x04
 #define AQUAERO_FAN_CTRL_MAX_PWR_OFFSET	0x06
+#define AQUAERO_FAN_CTRL_MODE_OFFSET	0x0f
 #define AQUAERO_FAN_CTRL_SRC_OFFSET	0x10
 static u16 aquaero_ctrl_fan_offsets[] = { 0x20c, 0x220, 0x234, 0x248 };
 
@@ -556,6 +562,12 @@ struct aqc_data {
 	u8 flow_pulses_ctrl_offset;
 	struct aqc_fan_structure_offsets *fan_structure;
 
+	/* For differentiating between Aquaero 5 and 6 */
+	enum aquaero_hw_kinds aquaero_hw_kind;
+	int aquaero_hw_version;
+	/* Completion for tracking if hardware version was received */
+	struct completion aquaero_sensor_report_received;
+
 	/* General info, same across all devices */
 	u8 serial_number_start_offset;
 	u32 serial_number[2];
@@ -784,10 +796,27 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 		break;
 	case hwmon_pwm:
 		if (priv->fan_ctrl_offsets && channel < priv->num_fans) {
-			switch (attr) {
-			case hwmon_pwm_input:
-				return 0644;
+			switch (priv->kind) {
+			case aquaero:
+				switch (attr) {
+				case hwmon_pwm_input:
+					return 0644;
+				case hwmon_pwm_mode:
+					if ((priv->aquaero_hw_kind == aquaero5 && channel == 3) ||
+					    priv->aquaero_hw_kind == aquaero6)
+						return 0644;
+					break;
+				default:
+					break;
+				}
+				break;
 			default:
+				switch (attr) {
+				case hwmon_pwm_input:
+					return 0644;
+				default:
+					break;
+				}
 				break;
 			}
 		}
@@ -1043,22 +1072,45 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		*val = priv->power_input[channel];
 		break;
 	case hwmon_pwm:
-		switch (priv->kind) {
-		case aquaero:
-			ret = aqc_get_ctrl_val(priv,
-					       AQUAERO_CTRL_PRESET_START +
-					       channel * AQUAERO_CTRL_PRESET_SIZE, val, AQC_BE16);
-			if (ret < 0)
-				return ret;
-			*val = aqc_percent_to_pwm(*val);
+		switch (attr) {
+		case hwmon_pwm_input:
+			switch (priv->kind) {
+			case aquaero:
+				ret = aqc_get_ctrl_val(priv,
+						       AQUAERO_CTRL_PRESET_START +
+						       channel * AQUAERO_CTRL_PRESET_SIZE, val,
+						       AQC_BE16);
+				if (ret < 0)
+					return ret;
+
+				*val = aqc_percent_to_pwm(*val);
+				break;
+			default:
+				ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel],
+						       val, AQC_BE16);
+				if (ret < 0)
+					return ret;
+
+				*val = aqc_percent_to_pwm(*val);
+				break;
+			}
 			break;
-		default:
-			ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel],
-					       val, AQC_BE16);
+		case hwmon_pwm_mode:
+			ret = aqc_get_ctrl_val(priv,
+					       priv->fan_ctrl_offsets[channel] +
+					       AQUAERO_FAN_CTRL_MODE_OFFSET, val, AQC_8);
 			if (ret < 0)
 				return ret;
 
-			*val = aqc_percent_to_pwm(*val);
+			switch (*val) {
+			case 0:	/* DC mode */
+				break;
+			case 2:	/* PWM mode */
+				*val = 1;
+				break;
+			default:
+				break;
+			}
 			break;
 		}
 		break;
@@ -1118,6 +1170,7 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		     long val)
 {
 	int ret, pwm_value;
+	long ctrl_mode;
 	/* Arrays for setting multiple values at once in the control report */
 	int ctrl_values_offsets[4];
 	long ctrl_values[4];
@@ -1199,6 +1252,24 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				break;
 			}
 			break;
+		case hwmon_pwm_mode:
+			switch (val) {
+			case 0:	/* DC mode */
+				ctrl_mode = 0;
+				break;
+			case 1:	/* PWM mode */
+				ctrl_mode = 2;
+				break;
+			default:
+				return -EINVAL;
+			}
+
+			ret = aqc_set_ctrl_val(priv,
+					       priv->fan_ctrl_offsets[channel] +
+					       AQUAERO_FAN_CTRL_MODE_OFFSET, ctrl_mode, AQC_8);
+			if (ret < 0)
+				return ret;
+			break;
 		default:
 			break;
 		}
@@ -1259,10 +1330,10 @@ static const struct hwmon_channel_info * const aqc_info[] = {
 			   HWMON_P_INPUT | HWMON_P_LABEL,
 			   HWMON_P_INPUT | HWMON_P_LABEL),
 	HWMON_CHANNEL_INFO(pwm,
-			   HWMON_PWM_INPUT,
-			   HWMON_PWM_INPUT,
-			   HWMON_PWM_INPUT,
-			   HWMON_PWM_INPUT,
+			   HWMON_PWM_INPUT | HWMON_PWM_MODE,
+			   HWMON_PWM_INPUT | HWMON_PWM_MODE,
+			   HWMON_PWM_INPUT | HWMON_PWM_MODE,
+			   HWMON_PWM_INPUT | HWMON_PWM_MODE,
 			   HWMON_PWM_INPUT,
 			   HWMON_PWM_INPUT,
 			   HWMON_PWM_INPUT,
@@ -1361,6 +1432,20 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 	/* Special-case sensor readings */
 	switch (priv->kind) {
 	case aquaero:
+		priv->aquaero_hw_version = get_unaligned_be16(data + AQUAERO_HARDWARE_VERSION);
+
+		switch (priv->aquaero_hw_version) {
+		case AQUAERO_5_HW_VERSION:
+			priv->aquaero_hw_kind = aquaero5;
+			break;
+		case AQUAERO_6_HW_VERSION:
+			priv->aquaero_hw_kind = aquaero6;
+			break;
+		default:
+			priv->aquaero_hw_kind = unknown;
+			break;
+		}
+
 		/* Read calculated virtual temp sensors */
 		i = priv->num_temp_sensors + priv->num_virtual_temp_sensors;
 		for (j = 0; j < priv->num_calc_virt_temp_sensors; j++) {
@@ -1373,6 +1458,9 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 				priv->temp_input[i] = sensor_value * 10;
 			i++;
 		}
+
+		if (!completion_done(&priv->aquaero_sensor_report_received))
+			complete_all(&priv->aquaero_sensor_report_received);
 		break;
 	case aquastreamult:
 		priv->speed_input[1] = get_unaligned_be16(data + AQUASTREAMULT_PUMP_OFFSET);
@@ -1467,6 +1555,20 @@ static int power_cycles_show(struct seq_file *seqf, void *unused)
 }
 DEFINE_SHOW_ATTRIBUTE(power_cycles);
 
+static int hw_version_show(struct seq_file *seqf, void *unused)
+{
+	struct aqc_data *priv = seqf->private;
+
+	if (wait_for_completion_interruptible_timeout
+	    (&priv->aquaero_sensor_report_received, STATUS_UPDATE_INTERVAL) <= 0)
+		return -ENODATA;
+
+	seq_printf(seqf, "%u\n", priv->aquaero_hw_version);
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(hw_version);
+
 static void aqc_debugfs_init(struct aqc_data *priv)
 {
 	char name[64];
@@ -1484,6 +1586,9 @@ static void aqc_debugfs_init(struct aqc_data *priv)
 				    &firmware_version_fops);
 	if (priv->power_cycle_count_offset != 0)
 		debugfs_create_file("power_cycles", 0444, priv->debugfs, priv, &power_cycles_fops);
+
+	if (priv->kind == aquaero)
+		debugfs_create_file("hw_version", 0444, priv->debugfs, priv, &hw_version_fops);
 }
 
 #else
@@ -1753,6 +1858,8 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 	switch (priv->kind) {
 	case aquaero:
+		init_completion(&priv->aquaero_sensor_report_received);
+
 		priv->serial_number_start_offset = AQUAERO_SERIAL_START;
 		priv->firmware_version_offset = AQUAERO_FIRMWARE_VERSION;
 
@@ -1803,6 +1910,22 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	}
 
 	mutex_init(&priv->mutex);
+
+	if (priv->kind == aquaero) {
+		hid_device_io_start(hdev);
+
+		/*
+		 * Wait until the first Aquaero sensor report is received,
+		 * to be able to differentiate between Aquaero 5 and 6
+		 * in aqc_is_visible() by looking at the hardware version.
+		 */
+		if (!wait_for_completion_timeout(&priv->aquaero_sensor_report_received,
+						 STATUS_UPDATE_INTERVAL))
+			hid_warn(priv->hdev,
+				 "didn't read aquaero hw version, some functionality won't be available\n");
+
+		hid_device_io_stop(hdev);
+	}
 
 	priv->hwmon_dev = hwmon_device_register_with_info(&hdev->dev, priv->name, priv,
 							  &aqc_chip_info, NULL);

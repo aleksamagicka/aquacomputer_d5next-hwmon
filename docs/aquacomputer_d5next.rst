@@ -27,8 +27,10 @@ communicate through proprietary USB HID protocols.
 
 The Aquaero devices expose eight physical, eight virtual and four calculated
 virtual temperature sensors, as well as two flow sensors. The fans expose their
-speed (in RPM), power, voltage and current. Temperature offsets and fan speeds
-can be controlled.
+speed (in RPM), power, voltage and current. The four fans can also be controlled
+directly, as well as configured as DC or PWM using pwm[1-4]_mode. Aquaero 6 supports
+PWM for all four fans, while the Aquaero 5 supports it only for the fourth fan.
+Temperature offsets can also be controlled.
 
 For the D5 Next pump, available sensors are pump and fan speed, power, voltage
 and current, as well as coolant temperature and eight virtual temp sensors. Also
@@ -97,13 +99,15 @@ power[1-8]_input Pump/fan power (in micro Watts)
 in[0-7]_input    Pump/fan voltage (in milli Volts)
 curr[1-8]_input  Pump/fan current (in milli Amperes)
 pwm[1-8]         Fan PWM (0 - 255)
+pwm[1-4]_mode    Fan mode (DC or PWM)
 ================ ==============================================================
 
 Debugfs entries
 ---------------
 
-================ =================================================
+================ ==================================================
 serial_number    Serial number of the device
 firmware_version Version of installed firmware
 power_cycles     Count of how many times the device was powered on
-================ =================================================
+hw_version       Hardware version/revision of device (Aquaero only)
+================ ==================================================
