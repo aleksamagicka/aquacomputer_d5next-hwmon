@@ -2722,7 +2722,9 @@ static int hw_version_show(struct seq_file *seqf, void *unused)
 {
 	struct aqc_data *priv = seqf->private;
 
-	wait_for_completion(&priv->aquaero_sensor_report_received);
+	if (wait_for_completion_interruptible_timeout
+	    (&priv->aquaero_sensor_report_received, STATUS_UPDATE_INTERVAL) <= 0)
+		return -ENODATA;
 
 	seq_printf(seqf, "%u\n", priv->aquaero_hw_version);
 
@@ -2734,7 +2736,9 @@ static int current_uptime_show(struct seq_file *seqf, void *unused)
 {
 	struct aqc_data *priv = seqf->private;
 
-	wait_for_completion(&priv->aquaero_sensor_report_received);
+	if (wait_for_completion_interruptible_timeout
+	    (&priv->aquaero_sensor_report_received, STATUS_UPDATE_INTERVAL) <= 0)
+		return -ENODATA;
 
 	seq_printf(seqf, "%u\n", priv->current_uptime);
 
@@ -2746,7 +2750,9 @@ static int total_uptime_show(struct seq_file *seqf, void *unused)
 {
 	struct aqc_data *priv = seqf->private;
 
-	wait_for_completion(&priv->aquaero_sensor_report_received);
+	if (wait_for_completion_interruptible_timeout
+	    (&priv->aquaero_sensor_report_received, STATUS_UPDATE_INTERVAL) <= 0)
+		return -ENODATA;
 
 	seq_printf(seqf, "%u\n", priv->total_uptime);
 
