@@ -3200,8 +3200,6 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 						 STATUS_UPDATE_INTERVAL))
 			hid_warn(priv->hdev,
 				 "didn't read aquaero hw version, some functionality won't be available\n");
-
-		hid_device_io_stop(hdev);
 	}
 
 	priv->hwmon_dev = hwmon_device_register_with_info(&hdev->dev, priv->name, priv,
