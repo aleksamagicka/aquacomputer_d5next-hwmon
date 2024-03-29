@@ -191,6 +191,7 @@ Here is what it's currently known to contain:
 | Fan 6 substructure                 | 0xBE                     |
 | Fan 7 substructure                 | 0xCB                     |
 | Fan 8 substructure                 | 0xD8                     |
+| Flow sensor                        | 0x7B                     |
 | Virtual temp sensor 1              | 0x45                     |
 | Virtual temp sensor 2              | 0x47                     |
 | Virtual temp sensor 3              | 0x49                     |
@@ -231,6 +232,7 @@ Here is what it's currently known to contain:
 | Fan 7 ctrl substructure                      | 0x258                                            |
 | Fan 8 ctrl substructure                      | 0x2AD                                            |
 | Temp offset ctrl substructure                | 0xA                                              |
+| Flow sensors pulses                          | 0x6                                              |
 | Fan curve "hold min power" and "start boost" | {0x12, 0x1B, 0x24, 0x2D, 0x36, 0x3F, 0x48, 0x51} |
 | Fan curve min power subgroup                 | {0x13, 0x1C, 0x25, 0x2E, 0x37, 0x40, 0x49, 0x52} |
 | Fan curve max power subgroup                 | {0x15, 0x1E, 0x27, 0x30, 0x39, 0x42, 0x4B, 0x54} |
