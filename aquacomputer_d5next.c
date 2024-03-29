@@ -854,8 +854,6 @@ static int aqc_get_ctrl_data(struct aqc_data *priv)
 	if (ret < 0)
 		ret = -ENODATA;
 
-	print_hex_dump_bytes("ctrl_report: ", DUMP_PREFIX_OFFSET, priv->buffer, priv->buffer_size);
-
 	priv->last_ctrl_report_op = ktime_get();
 
 	return ret;
@@ -1196,8 +1194,6 @@ static int aqc_legacy_read(struct aqc_data *priv)
 				 priv->buffer_size, HID_FEATURE_REPORT, HID_REQ_GET_REPORT);
 	if (ret < 0)
 		goto unlock_and_return;
-
-	print_hex_dump_bytes("ctrl_report: ", DUMP_PREFIX_OFFSET, priv->buffer, priv->buffer_size);
 
 	/* Temperature sensor readings */
 	for (i = 0; i < priv->num_temp_sensors; i++) {
@@ -2521,8 +2517,6 @@ static int aqc_raw_event(struct hid_device *hdev, struct hid_report *report, u8 
 
 	if (report->id != STATUS_REPORT_ID)
 		return 0;
-
-	print_hex_dump_bytes("status_report: ", DUMP_PREFIX_OFFSET, data, size);
 
 	priv = hid_get_drvdata(hdev);
 
