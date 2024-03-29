@@ -115,6 +115,7 @@ fan[1-4]_min                    Minimal fan speed (in RPM)
 fan[1-4]_max                    Maximal fan speed (in RPM)
 fan1_target                     Target fan speed (in RPM)
 fan5_pulses                     Quadro flow sensor pulses
+fan9_pulses                     Octo flow sensor pulses
 power[1-8]_input                Pump/fan power (in micro Watts)
 in[0-7]_input                   Pump/fan voltage (in milli Volts)
 curr[1-8]_input                 Pump/fan current (in milli Amperes)
