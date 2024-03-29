@@ -2,21 +2,24 @@
 
 # external KDIR specification is supported
 KDIR ?= /lib/modules/$(shell uname -r)/build
+PWD ?= $(shell pwd)
 
 SOURCES := aquacomputer_d5next.c docs/aquacomputer_d5next.rst
+
+.PHONY: all modules modules clean checkpatch dev
 
 all: modules
 
 install: modules_install
 
 modules modules_install clean:
-	make -C $(KDIR) M=$$PWD $@
+	$(MAKE) -C $(KDIR) M=$(PWD) $@
 
 checkpatch:
 	$(KDIR)/scripts/checkpatch.pl --strict --no-tree $(SOURCES)
 
 dev:
-	make clean
-	make
+	$(MAKE) clean
+	$(MAKE)
 	sudo rmmod aquacomputer_d5next || true
 	sudo insmod aquacomputer_d5next.ko

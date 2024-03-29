@@ -247,15 +247,18 @@ static u16 aquastreamult_sensor_fan_offsets[] = { AQUASTREAMULT_FAN_OFFSET };
 #define OCTO_NUM_FANS			8
 #define OCTO_NUM_SENSORS		4
 #define OCTO_NUM_VIRTUAL_SENSORS	16
+#define OCTO_NUM_FLOW_SENSORS		1
 #define OCTO_CTRL_REPORT_SIZE		0x65F
 
 /* Sensor report offsets for the Octo */
 #define OCTO_SENSOR_START		0x3D
 #define OCTO_VIRTUAL_SENSORS_START	0x45
+#define OCTO_FLOW_SENSOR_OFFSET		0x7B
 static u16 octo_sensor_fan_offsets[] = { 0x7D, 0x8A, 0x97, 0xA4, 0xB1, 0xBE, 0xCB, 0xD8 };
 
 /* Control report offsets for the Octo */
 #define OCTO_TEMP_CTRL_OFFSET		0xA
+#define OCTO_FLOW_PULSES_CTRL_OFFSET	0x6
 /* Fan speed offsets (0-100%) */
 static u16 octo_ctrl_fan_offsets[] = { 0x5A, 0xAF, 0x104, 0x159, 0x1AE, 0x203, 0x258, 0x2AD };
 
@@ -480,18 +483,6 @@ static const char *const label_aquaero_aquabus_temp_sensors[] = {
 	"Aquabus sensor 20"
 };
 
-/* Labels for Octo and Quadro (except speed) */
-static const char *const label_fan_speed[] = {
-	"Fan 1 speed",
-	"Fan 2 speed",
-	"Fan 3 speed",
-	"Fan 4 speed",
-	"Fan 5 speed",
-	"Fan 6 speed",
-	"Fan 7 speed",
-	"Fan 8 speed"
-};
-
 static const char *const label_fan_power[] = {
 	"Fan 1 power",
 	"Fan 2 power",
@@ -532,6 +523,19 @@ static const char *const label_quadro_speeds[] = {
 	"Fan 3 speed",
 	"Fan 4 speed",
 	"Flow speed [dL/h]"
+};
+
+/* Labels for Octo */
+static const char *const label_octo_speeds[] = {
+	"Fan 1 speed",
+	"Fan 2 speed",
+	"Fan 3 speed",
+	"Fan 4 speed",
+	"Fan 5 speed",
+	"Fan 6 speed",
+	"Fan 7 speed",
+	"Fan 8 speed",
+	"Flow speed [dL/h]",
 };
 
 /* Labels for Aquaero fan speeds */
@@ -1074,6 +1078,7 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 				break;
 			case aquaero:
 			case quadro:
+			case octo:
 			case highflow:
 				/* Special case to support flow sensors */
 				if (channel < priv->num_fans +
@@ -1098,9 +1103,16 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 				return 0444;
 			break;
 		case hwmon_fan_pulses:
-			/* Special case for Quadro flow sensor */
-			if (priv->kind == quadro && channel == priv->num_fans)
-				return 0644;
+			/* Special case for Quadro/Octo flow sensor */
+			if (channel == priv->num_fans) {
+				switch (priv->kind) {
+				case quadro:
+				case octo:
+					return 0644;
+				default:
+					break;
+				}
+			}
 			break;
 		default:
 			break;
@@ -2437,7 +2449,7 @@ static const struct hwmon_channel_info * const aqc_info[] = {
 			   HWMON_F_INPUT | HWMON_F_LABEL,
 			   HWMON_F_INPUT | HWMON_F_LABEL,
 			   HWMON_F_INPUT | HWMON_F_LABEL,
-			   HWMON_F_INPUT | HWMON_F_LABEL,
+			   HWMON_F_INPUT | HWMON_F_LABEL | HWMON_F_PULSES,
 			   HWMON_F_INPUT | HWMON_F_LABEL,
 			   HWMON_F_INPUT | HWMON_F_LABEL,
 			   HWMON_F_INPUT | HWMON_F_LABEL,
@@ -2943,15 +2955,18 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->temp_sensor_start_offset = OCTO_SENSOR_START;
 		priv->num_virtual_temp_sensors = OCTO_NUM_VIRTUAL_SENSORS;
 		priv->virtual_temp_sensor_start_offset = OCTO_VIRTUAL_SENSORS_START;
+		priv->num_flow_sensors = OCTO_NUM_FLOW_SENSORS;
+		priv->flow_sensors_start_offset = OCTO_FLOW_SENSOR_OFFSET;
 
 		priv->power_cycle_count_offset = AQC_POWER_CYCLES;
 		priv->buffer_size = OCTO_CTRL_REPORT_SIZE;
-		priv->temp_ctrl_offset = OCTO_TEMP_CTRL_OFFSET;
 		priv->ctrl_report_delay = CTRL_REPORT_DELAY;
+		priv->temp_ctrl_offset = OCTO_TEMP_CTRL_OFFSET;
+		priv->flow_pulses_ctrl_offset = OCTO_FLOW_PULSES_CTRL_OFFSET;
 
 		priv->temp_label = label_temp_sensors;
 		priv->virtual_temp_label = label_virtual_temp_sensors;
-		priv->speed_label = label_fan_speed;
+		priv->speed_label = label_octo_speeds;
 		priv->power_label = label_fan_power;
 		priv->voltage_label = label_fan_voltage;
 		priv->current_label = label_fan_current;
