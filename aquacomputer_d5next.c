@@ -1106,9 +1106,15 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 			break;
 		case hwmon_fan_pulses:
 			/* Special case for Quadro/Octo flow sensor */
-			if ((priv->kind == quadro || priv->kind == octo) &&
-			    channel == priv->num_fans)
-				return 0644;
+			if (channel == priv->num_fans) {
+				switch (priv->kind) {
+				case quadro:
+				case octo:
+					return 0644;
+				default:
+					break;
+				}
+			}
 			break;
 		default:
 			break;
