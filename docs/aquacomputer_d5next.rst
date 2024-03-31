@@ -46,9 +46,9 @@ temperature curves directly from the pump. If it's not connected, the fan-relate
 sensors will report zeroes. The pump can be configured either through software or
 via its physical interface.
 
-The Octo exposes four physical and sixteen virtual temperature sensors, as well as
-eight PWM controllable fans, along with their speed (in RPM), power, voltage and
-current. Flow sensor pulses are also available.
+The Octo exposes four physical and sixteen virtual temperature sensors, a flow sensor
+as well as eight PWM controllable fans, along with their speed (in RPM), power, voltage
+and current. Flow sensor pulses are also available.
 
 The Quadro exposes four physical and sixteen virtual temperature sensors, a flow
 sensor and four PWM controllable fans, along with their speed (in RPM), power,
