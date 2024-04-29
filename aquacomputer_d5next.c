@@ -380,11 +380,15 @@ static u16 aquastreamxt_ctrl_fan_offsets[] = { 0x8, 0x1b };
 /* Specs of the Poweradjust 3 */
 #define POWERADJUST3_SERIAL_START	0x27
 #define POWERADJUST3_FIRMWARE_VERSION	0x21
+#define POWERADJUST3_NUM_FANS		1
 #define POWERADJUST3_NUM_SENSORS	2
 #define POWERADJUST3_SENSOR_REPORT_SIZE	0x32
 
 /* Sensor report offsets for the Poweradjust 3 */
 #define POWERADJUST3_SENSOR_START	0x01
+#define POWERADJUST3_FAN_CURR_OFFSET	0x05
+#define POWERADJUST3_FAN_VOLTAGE_OFFSET	0x07
+#define POWERADJUST3_FAN_SPEED_OFFSET	0x0b
 
 /* Specs of the High Flow USB */
 #define HIGHFLOW_NUM_SENSORS		2
@@ -636,6 +640,18 @@ static const char *const label_aquastreamult_current[] = {
 static const char *const label_poweradjust3_temp_sensors[] = {
 	"Fan IC temp",
 	"External sensor"
+};
+
+static const char *const label_poweradjust3_speeds[] = {
+	"Fan speed"
+};
+
+static const char *const label_poweradjust3_voltages[] = {
+	"Fan voltage"
+};
+
+static const char *const label_poweradjust3_current[] = {
+	"Fan current"
 };
 
 /* Labels for Highflow */
@@ -1134,6 +1150,7 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 				return 0444;
 			break;
 		case aquastreamxt:
+		case poweradjust3:
 			break;
 		default:
 			if (channel < priv->num_fans)
@@ -1251,6 +1268,15 @@ static int aqc_legacy_read(struct aqc_data *priv)
 		/* Read flow speed */
 		priv->speed_input[0] = get_unaligned_le16(priv->buffer +
 							  priv->flow_sensors_start_offset);
+		break;
+	case poweradjust3:
+		/* Read fan RPM, voltage and current */
+		priv->speed_input[0] = get_unaligned_le16(priv->buffer +
+							  POWERADJUST3_FAN_SPEED_OFFSET);
+		sensor_value = get_unaligned_le16(priv->buffer + POWERADJUST3_FAN_VOLTAGE_OFFSET);
+		priv->voltage_input[0] = sensor_value * 10;
+		priv->current_input[0] = get_unaligned_le16(priv->buffer +
+							    POWERADJUST3_FAN_CURR_OFFSET);
 		break;
 	default:
 		break;
@@ -3084,13 +3110,16 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	case USB_PRODUCT_ID_POWERADJUST3:
 		priv->kind = poweradjust3;
 
-		priv->num_fans = 0;
+		priv->num_fans = POWERADJUST3_NUM_FANS;
 
 		priv->num_temp_sensors = POWERADJUST3_NUM_SENSORS;
 		priv->temp_sensor_start_offset = POWERADJUST3_SENSOR_START;
 		priv->buffer_size = POWERADJUST3_SENSOR_REPORT_SIZE;
 
 		priv->temp_label = label_poweradjust3_temp_sensors;
+		priv->speed_label = label_poweradjust3_speeds;
+		priv->voltage_label = label_poweradjust3_voltages;
+		priv->current_label = label_poweradjust3_current;
 		break;
 	case USB_PRODUCT_ID_HIGHFLOW:
 		priv->kind = highflow;
