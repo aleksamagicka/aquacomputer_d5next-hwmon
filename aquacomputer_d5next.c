@@ -382,12 +382,14 @@ static u16 aquastreamxt_ctrl_fan_offsets[] = { 0x8, 0x1b };
 #define POWERADJUST3_FIRMWARE_VERSION	0x21
 #define POWERADJUST3_NUM_FANS		1
 #define POWERADJUST3_NUM_SENSORS	2
+#define POWERADJUST3_NUM_FLOW_SENSORS	1
 #define POWERADJUST3_SENSOR_REPORT_SIZE	0x32
 
 /* Sensor report offsets for the Poweradjust 3 */
 #define POWERADJUST3_SENSOR_START	0x01
 #define POWERADJUST3_FAN_CURR_OFFSET	0x05
 #define POWERADJUST3_FAN_VOLTAGE_OFFSET	0x07
+#define POWERADJUST3_FLOW_SENSOR_OFFSET	0x09
 #define POWERADJUST3_FAN_SPEED_OFFSET	0x0b
 
 /* Specs of the High Flow USB */
@@ -643,7 +645,8 @@ static const char *const label_poweradjust3_temp_sensors[] = {
 };
 
 static const char *const label_poweradjust3_speeds[] = {
-	"Fan speed"
+	"Fan speed",
+	"Flow speed [dL/h]"
 };
 
 static const char *const label_poweradjust3_voltages[] = {
@@ -1099,6 +1102,7 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 			case quadro:
 			case octo:
 			case highflow:
+			case poweradjust3:
 				/* Special case to support flow sensors */
 				if (channel < priv->num_fans +
 				    priv->num_flow_sensors +
@@ -1277,6 +1281,10 @@ static int aqc_legacy_read(struct aqc_data *priv)
 		priv->voltage_input[0] = sensor_value * 10;
 		priv->current_input[0] = get_unaligned_le16(priv->buffer +
 							    POWERADJUST3_FAN_CURR_OFFSET);
+
+		/* Read flow speed */
+		sensor_value = get_unaligned_le16(priv->buffer + priv->flow_sensors_start_offset);
+		priv->speed_input[1] = DIV_ROUND_CLOSEST(sensor_value, 10);
 		break;
 	default:
 		break;
@@ -3114,6 +3122,8 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 		priv->num_temp_sensors = POWERADJUST3_NUM_SENSORS;
 		priv->temp_sensor_start_offset = POWERADJUST3_SENSOR_START;
+		priv->num_flow_sensors = POWERADJUST3_NUM_FLOW_SENSORS;
+		priv->flow_sensors_start_offset = POWERADJUST3_FLOW_SENSOR_OFFSET;
 		priv->buffer_size = POWERADJUST3_SENSOR_REPORT_SIZE;
 
 		priv->temp_label = label_poweradjust3_temp_sensors;

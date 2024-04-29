@@ -74,7 +74,7 @@ with speed, power, voltage and current of both the pump and optionally connected
 It also exposes pressure and flow speed readings.
 
 The Poweradjust 3 controller exposes an internal and an external temperature
-sensor. It also exposes RPM, voltage and current for one fan.
+sensor. It also exposes RPM, voltage and current for one fan and a flow meter.
 
 The High Flow USB exposes an internal and external temperature sensor and a flow meter.
 
