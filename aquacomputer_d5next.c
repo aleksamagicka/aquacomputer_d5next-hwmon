@@ -378,6 +378,8 @@ static u16 aquastreamxt_sensor_fan_offsets[] = { 0x13, 0x1b };
 static u16 aquastreamxt_ctrl_fan_offsets[] = { 0x8, 0x1b };
 
 /* Specs of the Poweradjust 3 */
+#define POWERADJUST3_SERIAL_START	0x27
+#define POWERADJUST3_FIRMWARE_VERSION	0x21
 #define POWERADJUST3_NUM_SENSORS	2
 #define POWERADJUST3_SENSOR_REPORT_SIZE	0x32
 
@@ -3133,6 +3135,9 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->secondary_ctrl_report = aquastreamxt_secondary_ctrl_report;
 		break;
 	case poweradjust3:
+		priv->serial_number_start_offset = POWERADJUST3_SERIAL_START;
+		priv->firmware_version_offset = POWERADJUST3_FIRMWARE_VERSION;
+
 		priv->status_report_id = POWERADJUST3_STATUS_REPORT_ID;
 		break;
 	case highflow:
