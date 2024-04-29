@@ -1206,15 +1206,21 @@ static int aqc_legacy_read(struct aqc_data *priv)
 			priv->temp_input[i] = sensor_value * 10;
 	}
 
+	/* Serial number */
+	if (priv->serial_number_start_offset) {
+		priv->serial_number[0] = get_unaligned_le16(priv->buffer +
+							    priv->serial_number_start_offset);
+	}
+
+	/* Firmware version */
+	if (priv->firmware_version_offset) {
+		priv->firmware_version =
+		    get_unaligned_le16(priv->buffer + priv->firmware_version_offset);
+	}
+
 	/* Special-case sensor readings */
 	switch (priv->kind) {
 	case aquastreamxt:
-		/* Info provided with every report */
-		priv->serial_number[0] = get_unaligned_le16(priv->buffer +
-							    priv->serial_number_start_offset);
-		priv->firmware_version =
-		    get_unaligned_le16(priv->buffer + priv->firmware_version_offset);
-
 		/* Read pump speed in RPM */
 		sensor_value = get_unaligned_le16(priv->buffer + priv->fan_sensor_offsets[0]);
 		priv->speed_input[0] = aqc_aquastreamxt_convert_pump_rpm(sensor_value);
@@ -1240,12 +1246,6 @@ static int aqc_legacy_read(struct aqc_data *priv)
 		priv->voltage_input[1] = DIV_ROUND_CLOSEST(sensor_value * 1000, 63);
 		break;
 	case highflow:
-		/* Info provided with every report */
-		priv->serial_number[0] = get_unaligned_le16(priv->buffer +
-							    priv->serial_number_start_offset);
-		priv->firmware_version =
-		    get_unaligned_le16(priv->buffer + priv->firmware_version_offset);
-
 		/* Read flow speed */
 		priv->speed_input[0] = get_unaligned_le16(priv->buffer +
 							  priv->flow_sensors_start_offset);
