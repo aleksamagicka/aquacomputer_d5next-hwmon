@@ -378,11 +378,11 @@ static u16 aquastreamxt_sensor_fan_offsets[] = { 0x13, 0x1b };
 static u16 aquastreamxt_ctrl_fan_offsets[] = { 0x8, 0x1b };
 
 /* Specs of the Poweradjust 3 */
-#define POWERADJUST3_NUM_SENSORS	1
+#define POWERADJUST3_NUM_SENSORS	2
 #define POWERADJUST3_SENSOR_REPORT_SIZE	0x32
 
 /* Sensor report offsets for the Poweradjust 3 */
-#define POWERADJUST3_SENSOR_START	0x03
+#define POWERADJUST3_SENSOR_START	0x01
 
 /* Specs of the High Flow USB */
 #define HIGHFLOW_NUM_SENSORS		2
@@ -632,6 +632,7 @@ static const char *const label_aquastreamult_current[] = {
 
 /* Labels for Poweradjust 3 */
 static const char *const label_poweradjust3_temp_sensors[] = {
+	"Fan IC temp",
 	"External sensor"
 };
 
