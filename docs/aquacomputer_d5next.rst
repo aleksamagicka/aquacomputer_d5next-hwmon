@@ -73,7 +73,7 @@ The Aquastream Ultimate pump exposes coolant temp and an external temp sensor, a
 with speed, power, voltage and current of both the pump and optionally connected fan.
 It also exposes pressure and flow speed readings.
 
-The Poweradjust 3 controller exposes a single external temperature sensor.
+The Poweradjust 3 controller exposes an internal and an external temperature sensor.
 
 The High Flow USB exposes an internal and external temperature sensor and a flow meter.
 
