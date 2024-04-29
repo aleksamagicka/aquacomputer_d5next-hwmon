@@ -95,7 +95,7 @@ The following devices are supported by this driver, and from which kernel versio
 |       D5 Next       |                    5.15                     |        Various sensors, direct fan PWM control (6.0+)        |        ?        |
 |    Farbwerk 360     |                    5.18                     |                     Temperature sensors                      |  MCF51JU128VHS  |
 |      Farbwerk       |                    5.19                     |                     Temperature sensors                      |        ?        |
-|        Octo         |                    5.19                     |     Temperature and fan sensors, direct fan PWM control      |  MCF51JU128VLH  |
+|        Octo         |          5.19, flow sensor (6.10)           | Temperature, flow and fan sensors, direct fan PWM control, flow sensor pulses |  MCF51JU128VLH  |
 |       Quadro        |                     6.0                     | Temperature, flow and fan sensors, direct fan PWM control, flow sensor pulses |  MCF51JU128VHS  |
 |   High Flow Next    |                     6.1                     |                       Various sensors                        |        ?        |
 |     Aquaero 5/6     | 6.3 (sensors), 6.4 (fan control), rest here | Temperature sensors, fan sensors, direct fan PWM control, DC/PWM mode setting, flow sensors | MCF51JM128EVLK  |
