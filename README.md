@@ -132,10 +132,6 @@ available! Refer to the table in the overview above to check.
 
 If you're not, or your kernel does not have the driver support for your particular device, you can compile it yourself.
 
-### Kernel 6.12 or later
-
-The `asm/unaligned.h` include is moved to `linux/unaligned.h`. Modify it to get it to compile on ealier versions.
-
 ### Kernel 5.18 and later
 
 The driver uses some features only available in kernel 5.18 and later. You can check your kernel version by running:

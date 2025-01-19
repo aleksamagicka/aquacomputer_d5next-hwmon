@@ -12,6 +12,14 @@
  * Copyright 2022 Jack Doan <me@jackdoan.com>
  */
 
+#include <generated/uapi/linux/version.h>
+
+#if KERNEL_VERSION(6, 12, 0) <= LINUX_VERSION_CODE
+#include <linux/unaligned.h>
+#else
+#include <asm/unaligned.h>
+#endif
+
 #include <linux/crc16.h>
 #include <linux/debugfs.h>
 #include <linux/delay.h>
@@ -24,7 +32,6 @@
 #include <linux/mutex.h>
 #include <linux/seq_file.h>
 #include <linux/usb.h>
-#include <linux/unaligned.h>
 
 #define USB_VENDOR_ID_AQUACOMPUTER	0x0c70
 #define USB_PRODUCT_ID_AQUAERO		0xf001
