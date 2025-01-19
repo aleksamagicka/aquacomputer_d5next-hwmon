@@ -16,7 +16,7 @@ modules modules_install clean:
 	$(MAKE) -C $(KDIR) M=$(PWD) $@
 
 checkpatch:
-	$(KDIR)/scripts/checkpatch.pl --strict --no-tree $(SOURCES)
+	$(KDIR)/scripts/checkpatch.pl --strict --no-tree --ignore LINUX_VERSION_CODE $(SOURCES)
 
 dev:
 	$(MAKE) clean
