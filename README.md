@@ -149,14 +149,27 @@ First, clone the repository by running:
 git clone https://github.com/aleksamagicka/aquacomputer_d5next-hwmon.git
 ```
 
-Then, compile it and insert it into the running kernel, replacing the existing instance (if needed):
+Then, You can run the followish script to create and install the dkms module:
 
 ```commandline
-make dev
+sudo ./dkms-install.sh
 ```
 
 If all went well, you can skip ahead to see how to use it.
 
+If you wish to uninstall the dkms module you can run the following script
+
+```commandline
+sudo ./dkms-remove.sh
+```
+
+To compile the module and temporarily insert the module into the running kernel you can run the following:
+(Note that this will not be permanent and the kernel module will revert to the default module upon reboot.)
+
+```commandline
+make dev
+```
+ 
 If you are sure that you're on a recent kernel and are still getting errors, please open an issue so we can track it down.
 
 ### Kernel 5.17 and earlier
