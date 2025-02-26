@@ -116,6 +116,7 @@ dkms_clean:
 #pulled from original makefile to support checkpatch option
 checkpatch:
 	$(KERNEL_BUILD)/scripts/checkpatch.pl --strict --no-tree --ignore LINUX_VERSION_CODE $(SOURCES)
+
 #pulled from original makefile to support dev option
 dev:
 	$(MAKE) clean
