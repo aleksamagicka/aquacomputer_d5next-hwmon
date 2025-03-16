@@ -76,6 +76,7 @@ Here is what it's currently known to contain:
 | Firmware version                   | 0xD                      |
 | Number of power cycles *[4 bytes]* | 0x18                     |
 | Liquid (water) temperature         | 0x57                     |
+| Flow sensor                        | 0x59                     |
 | Pump info substructure             | 0x74                     |
 | Fan info substructure              | 0x67                     |
 | +5V voltage                        | 0x39                     |
