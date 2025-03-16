@@ -191,10 +191,12 @@ static u16 aquaero_ctrl_fan_offsets[] = { 0x20c, 0x220, 0x234, 0x248 };
 #define D5NEXT_NUM_FANS			2
 #define D5NEXT_NUM_SENSORS		1
 #define D5NEXT_NUM_VIRTUAL_SENSORS	8
+#define D5NEXT_NUM_FLOW_SENSORS		1
 #define D5NEXT_CTRL_REPORT_SIZE		0x329
 
 /* Sensor report offsets for the D5 Next pump */
 #define D5NEXT_COOLANT_TEMP		0x57
+#define D5NEXT_FLOW_SENSOR_OFFSET	0x59
 #define D5NEXT_PUMP_OFFSET		0x6c
 #define D5NEXT_FAN_OFFSET		0x5f
 #define D5NEXT_5V_VOLTAGE		0x39
@@ -417,7 +419,8 @@ static const char *const label_d5next_temp[] = {
 
 static const char *const label_d5next_speeds[] = {
 	"Pump speed",
-	"Fan speed"
+	"Fan speed",
+	"Flow speed [dL/h]"
 };
 
 static const char *const label_d5next_power[] = {
@@ -1108,6 +1111,7 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 			case aquaero:
 			case quadro:
 			case octo:
+			case d5next:
 			case highflow:
 			case poweradjust3:
 				/* Special case to support flow sensors */
@@ -2943,6 +2947,8 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->temp_sensor_start_offset = D5NEXT_COOLANT_TEMP;
 		priv->num_virtual_temp_sensors = D5NEXT_NUM_VIRTUAL_SENSORS;
 		priv->virtual_temp_sensor_start_offset = D5NEXT_VIRTUAL_SENSORS_START;
+		priv->num_flow_sensors = D5NEXT_NUM_FLOW_SENSORS;
+		priv->flow_sensors_start_offset = D5NEXT_FLOW_SENSOR_OFFSET;
 
 		priv->power_cycle_count_offset = AQC_POWER_CYCLES;
 		priv->buffer_size = D5NEXT_CTRL_REPORT_SIZE;
