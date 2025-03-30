@@ -156,7 +156,11 @@ static u8 aquastreamxt_secondary_ctrl_report[] = {
 #define AQUAERO_NUM_FLOW_SENSORS		2
 #define AQUAERO_NUM_AQUABUS_FLOW_SENSORS	12
 #define AQUAERO_CTRL_REPORT_SIZE		0xa93
-#define AQUAERO_CTRL_PRESET_ID			0x5c
+#define AQUAERO_CTRL_PRESET_ID_NO_CONTROL	0xffff
+#define AQUAERO_CTRL_PRESET_ID_CURVE		0x58
+#define AQUAERO_CTRL_PRESET_ID_PID		0x40
+#define AQUAERO_CTRL_PRESET_ID_TWO_POINT	0x48
+#define AQUAERO_CTRL_PRESET_ID_PWM		0x5c
 #define AQUAERO_CTRL_PRESET_SIZE		0x02
 #define AQUAERO_CTRL_PRESET_START		0x55c
 #define AQUAERO_5_HW_VERSION			5600
@@ -1041,6 +1045,7 @@ static umode_t aqc_is_visible(const void *data, enum hwmon_sensor_types type, u3
 			switch (priv->kind) {
 			case aquaero:
 				switch (attr) {
+				case hwmon_pwm_enable:
 				case hwmon_pwm_input:
 					return 0644;
 				case hwmon_pwm_mode:
@@ -1400,12 +1405,56 @@ static int aqc_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 	case hwmon_pwm:
 		switch (attr) {
 		case hwmon_pwm_enable:
-			ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel], val, AQC_8);
-			if (ret < 0)
-				return ret;
+			switch (priv->kind) {
+			case aquaero:
+				ret =
+				    aqc_get_ctrl_val(priv,
+						     priv->fan_ctrl_offsets[channel] +
+						     AQUAERO_FAN_CTRL_SRC_OFFSET,
+						     val, AQC_BE16);
+				if (ret < 0)
+					return ret;
 
-			/* Incrementing to satisfy hwmon rules */
-			*val = *val + 1;
+				if ((u16)*val == AQUAERO_CTRL_PRESET_ID_NO_CONTROL) {
+					*val = 0;
+					break;
+				}
+
+				/* aquaero stores the control mode of each fan
+				 * as an index of all control sources. We
+				 * restrict every fan to the indices matching
+				 * PRESET_ID_* + channel to simplify control.
+				 */
+
+				*val = *val - channel;
+
+				switch (*val) {
+				case AQUAERO_CTRL_PRESET_ID_PWM:
+					*val = 1;
+					break;
+				case AQUAERO_CTRL_PRESET_ID_PID:
+					*val = 2;
+					break;
+				case AQUAERO_CTRL_PRESET_ID_CURVE:
+					*val = 3;
+					break;
+				case AQUAERO_CTRL_PRESET_ID_TWO_POINT:
+					*val = 4;
+					break;
+				default:
+					break;
+				}
+				break;
+			default:
+				ret = aqc_get_ctrl_val(priv, priv->fan_ctrl_offsets[channel],
+						       val, AQC_8);
+				if (ret < 0)
+					return ret;
+
+				/* Incrementing to satisfy hwmon rules */
+				*val = *val + 1;
+				break;
+			}
 			break;
 		case hwmon_pwm_input:
 			switch (priv->kind) {
@@ -1603,7 +1652,7 @@ static int aqc_leakshield_send_report(struct aqc_data *priv, int channel, long v
 static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr, int channel,
 		     long val)
 {
-	int ret, pwm_value, temp_sensor;
+	int ret, pwm_value, temp_sensor, num_ctrl_values;
 	long ctrl_mode;
 	/* Arrays for setting multiple values at once in the control report */
 	int ctrl_values_offsets[4];
@@ -1662,10 +1711,36 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		switch (attr) {
 		case hwmon_pwm_enable:
 			switch (priv->kind) {
+			case aquaero:
+				switch (val) {
+				case 0:
+					ctrl_mode = AQUAERO_CTRL_PRESET_ID_NO_CONTROL;
+					break;
+				case 1:
+					ctrl_mode = AQUAERO_CTRL_PRESET_ID_PWM + channel;
+					break;
+				case 2:
+					ctrl_mode = AQUAERO_CTRL_PRESET_ID_PID + channel;
+					break;
+				case 3:
+					ctrl_mode = AQUAERO_CTRL_PRESET_ID_CURVE + channel;
+					break;
+				case 4:
+					ctrl_mode = AQUAERO_CTRL_PRESET_ID_TWO_POINT + channel;
+					break;
+				default:
+					return -EINVAL;
+				}
+
+				ret = aqc_set_ctrl_val(priv, priv->fan_ctrl_offsets[channel] +
+				    AQUAERO_FAN_CTRL_SRC_OFFSET, ctrl_mode, AQC_BE16);
+				if (ret < 0)
+					return ret;
+				break;
 			case d5next:
 				if (val < 0 || val > 3)
 					return -EINVAL;
-				break;
+				fallthrough;
 			case octo:
 			case quadro:
 				if (val < 0 || val > priv->num_fans + 3)
@@ -1690,28 +1765,34 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 					if (ctrl_mode > 2)
 						return -EINVAL;
 				}
+
+				if (val == 0) {
+					/* Set the fan to 100% as we don't control it anymore */
+					ctrl_values_offsets[1] = priv->fan_ctrl_offsets[channel] +
+					    AQC_FAN_CTRL_PWM_OFFSET;
+					ctrl_values[1] = aqc_pwm_to_percent(255);
+					ctrl_values_types[1] = AQC_BE16;
+
+					num_ctrl_values = 2;
+				} else {
+					/* Decrement to convert from hwmon to aqc */
+					val--;
+
+					num_ctrl_values = 1;
+				}
+
+				ctrl_values_offsets[0] = priv->fan_ctrl_offsets[channel];
+				ctrl_values[0] = val;
+				ctrl_values_types[0] = AQC_8;
+
+				ret = aqc_set_ctrl_vals(priv, ctrl_values_offsets, ctrl_values,
+							ctrl_values_types, num_ctrl_values);
+				if (ret < 0)
+					return ret;
 				break;
 			default:
 				return -EOPNOTSUPP;
 			}
-
-			if (val == 0) {
-				/* Set the fan to 100% as we don't control it anymore */
-				ret =
-				    aqc_set_ctrl_val(priv,
-						     priv->fan_ctrl_offsets[channel] +
-						     AQC_FAN_CTRL_PWM_OFFSET,
-						     aqc_pwm_to_percent(255), AQC_BE16);
-				if (ret < 0)
-					return ret;
-			} else {
-				/* Decrement to convert from hwmon to aqc */
-				val--;
-			}
-
-			ret = aqc_set_ctrl_val(priv, priv->fan_ctrl_offsets[channel], val, AQC_8);
-			if (ret < 0)
-				return ret;
 			break;
 		case hwmon_pwm_input:
 			if (val < 0 || val > 255)
@@ -1726,29 +1807,23 @@ static int aqc_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 				ctrl_values[0] = pwm_value;
 				ctrl_values_types[0] = AQC_BE16;
 
-				/* Write preset number in fan control source */
-				ctrl_values_offsets[1] = priv->fan_ctrl_offsets[channel] +
-				    AQUAERO_FAN_CTRL_SRC_OFFSET;
-				ctrl_values[1] = AQUAERO_CTRL_PRESET_ID + channel;
-				ctrl_values_types[1] = AQC_BE16;
-
 				/* Set minimum power to 0 to allow the fan to turn off */
-				ctrl_values_offsets[2] = priv->fan_ctrl_offsets[channel] +
+				ctrl_values_offsets[1] = priv->fan_ctrl_offsets[channel] +
 				    AQUAERO_FAN_CTRL_MIN_PWR_OFFSET;
-				ctrl_values[2] = 0;
-				ctrl_values_types[2] = AQC_BE16;
+				ctrl_values[1] = 0;
+				ctrl_values_types[1] = AQC_BE16;
 
 				/*
 				 * Set maximum power to 100% to allow the fan to
 				 * reach maximum speed
 				 */
-				ctrl_values_offsets[3] = priv->fan_ctrl_offsets[channel] +
+				ctrl_values_offsets[2] = priv->fan_ctrl_offsets[channel] +
 				    AQUAERO_FAN_CTRL_MAX_PWR_OFFSET;
-				ctrl_values[3] = aqc_pwm_to_percent(255);
-				ctrl_values_types[3] = AQC_BE16;
+				ctrl_values[2] = aqc_pwm_to_percent(255);
+				ctrl_values_types[2] = AQC_BE16;
 
 				ret = aqc_set_ctrl_vals(priv, ctrl_values_offsets, ctrl_values,
-							ctrl_values_types, 4);
+							ctrl_values_types, 3);
 				if (ret < 0)
 					return ret;
 				break;
