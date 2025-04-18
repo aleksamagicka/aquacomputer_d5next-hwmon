@@ -243,6 +243,10 @@ static u16 aquastreamult_sensor_fan_offsets[] = { AQUASTREAMULT_FAN_OFFSET };
 /* Spec and sensor report offset for the Farbwerk RGB controller */
 #define FARBWERK_NUM_SENSORS		4
 #define FARBWERK_SENSOR_START		0x2f
+#define FARBWERK_CTRL_REPORT_SIZE	0xea
+
+/* Control report offsets for the Farbwerk */
+#define FARBWERK_TEMP_CTRL_OFFSET	9
 
 /* Specs of the Farbwerk 360 RGB controller */
 #define FARBWERK360_NUM_SENSORS			4
@@ -3045,7 +3049,8 @@ static int aqc_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		priv->num_temp_sensors = FARBWERK_NUM_SENSORS;
 		priv->temp_sensor_start_offset = FARBWERK_SENSOR_START;
 
-		priv->temp_ctrl_offset = 0;
+		priv->buffer_size = FARBWERK_CTRL_REPORT_SIZE;
+		priv->temp_ctrl_offset = FARBWERK_TEMP_CTRL_OFFSET;
 
 		priv->temp_label = label_temp_sensors;
 		break;
